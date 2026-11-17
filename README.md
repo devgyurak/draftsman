@@ -13,18 +13,18 @@
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
-[![Languages](https://img.shields.io/badge/languages-Java%20%C2%B7%20C%23%20%C2%B7%20Kotlin%20%C2%B7%20TS%20%C2%B7%20Python%20%C2%B7%20C%2B%2B-D96A00)](#status)
+[![Languages](https://img.shields.io/badge/languages-Java%20%C2%B7%20C%23%20%C2%B7%20Kotlin%20%C2%B7%20TS%20%C2%B7%20Python%20%C2%B7%20C%2B%2B-D96A00)](#languages-and-outputs)
 [![Agents: Claude Code · Codex](https://img.shields.io/badge/agents-Claude%20Code%20%C2%B7%20Codex-15181D)](#install)
 
-[Status](#status) · [Install](#install) · [Use](#use) · [What it doesn't do](#what-it-doesnt-do) ·
-[Development](#development) · [Documentation](#documentation) · [Korean](README-KO.md)
+[How it works](#how-it-works) · [Install](#install) · [Use](#use) ·
+[Tested on real projects](#tested-on-real-projects) · [What it doesn't do](#what-it-doesnt-do) ·
+[What's inside](#whats-inside) · [Korean](README-KO.md)
 
 </div>
 
 A **draftsman** takes measured figures and turns them into a drawing without changing a
-number. Draftsman splits the work the same way: a tree-sitter extractor measures the code
-and writes the facts to `ir.json`; the agent decides only *what to show* — scope, noise,
-grouping, commentary — in `view.json`; a renderer merges the two.
+number. Draftsman is a skill that splits the work the same way: a parser measures the code,
+the agent only decides what to show, and a renderer draws it.
 
 - **Facts from a parser** — classes, members, inheritance, field associations with
   multiplicity, and signature dependencies, each with a source location.
@@ -39,7 +39,122 @@ grouping, commentary — in `view.json`; a renderer merges the two.
   <img src="docs/images/example-shop.svg" alt="Example: the Java shop fixture rendered as SVG" width="760">
 </p>
 
-## Status
+## How it works
+
+```mermaid
+flowchart LR
+    S[Source code] --> E["extract.py<br/>tree-sitter"]
+    E --> IR[("ir.json<br/>facts")]
+    IR --> A["Agent<br/>surveys with summary.py"]
+    A --> V[("view.json<br/>scope · hidden · groups · notes")]
+    IR --> R[render.py]
+    V --> R
+    R --> O["Mermaid · SVG · HTML"]
+```
+
+The extractor writes what the code says to `ir.json`: types, members, relations, and the
+names it could not resolve. The agent never edits that file and never writes diagram text.
+It surveys the facts, then writes `view.json` — which class to centre on, how many hops,
+what to hide, how to group, what to point out. `render.py` merges the two and refuses any
+relation that is not in `ir.json`, unless the view marks it as inferred with a reason.
+
+A request goes through the same steps every time: extract, survey, choose the scope
+(everything up to ~30 types, otherwise a focus class and its neighbours), write the view,
+render, validate Mermaid, and answer with the diagram, the scope it chose, and the
+unresolved references.
+
+## Install
+
+The repository is a plugin and a marketplace for both agents.
+
+**Claude Code**
+
+```text
+/plugin marketplace add devgyurak/draftsman
+/plugin install draftsman@draftsman
+```
+
+**Codex** (the CLI, IDE extension and app share one plugin store)
+
+```bash
+codex plugin marketplace add devgyurak/draftsman
+codex plugin add draftsman@draftsman
+```
+
+Or run `/plugins` inside Codex and pick *Draftsman*.
+
+**The skill alone** — without the plugin's `/draftsman` command:
+
+| Agent | Install |
+|---|---|
+| Codex | `$skill-installer install https://github.com/devgyurak/draftsman/tree/main/skills/draftsman` |
+| Claude Code and other agents that read the Agent Skills format | copy `skills/draftsman/` into the agent's skills directory as is |
+
+**Requirements** — Python 3.10+ with three packages, which the skill installs on first use
+if they are missing:
+
+```bash
+pip install "tree-sitter>=0.25" tree-sitter-language-pack pyyaml
+```
+
+SVG output and the Mermaid syntax check also need Node.js:
+`npm ci --prefix skills/draftsman/scripts` (elkjs, mermaid and jsdom at the versions in
+`package-lock.json`). HTML output works without it; the viewer then loads the same elkjs
+version from a CDN.
+
+## Use
+
+Ask in plain words — the skill picks up requests for class diagrams, structure, inheritance
+or dependencies between classes:
+
+> *"Draw a class diagram of this repo."*
+> *"Show the classes around OrderService as an interactive diagram."*
+> *"클래스 다이어그램 그려줘"*
+
+Or call it directly:
+
+```text
+/draftsman [ClassName | path] [mermaid|svg|html] [members|public|no-members]   # Claude Code
+$draftsman:draftsman                # Codex (plugin); $draftsman for a skill-only install
+```
+
+The output follows the purpose unless you name it: Mermaid for documentation, PRs and chat
+answers; the HTML viewer to explore, or for more than about 50 classes; SVG for an image to
+embed or put on a slide. The diagram above is
+[`tests/fixtures/java/shop`](tests/fixtures/java/shop) rendered with
+[`docs/images/example-shop.view.json`](docs/images/example-shop.view.json).
+
+### The view
+
+A view selects and annotates; every key is optional
+([all keys](skills/draftsman/references/view-schema.md)):
+
+```json
+{
+  "focus": "OrderService",
+  "hops": 2,
+  "hidden": ["*#get*", "*#set*", "*#toString"],
+  "notes": [{"target": "Order", "text": "Bidirectional with Customer"}]
+}
+```
+
+Member detail can differ per class — `"members": {"*": "none", "OrderService": "all"}`
+draws the focus in full and only names around it; `--members all|public|none` overrides the
+view for one render.
+
+### The scripts on their own
+
+```bash
+cd skills/draftsman
+python3 scripts/extract.py path/to/src -o ir.json --exclude '**/test/**'   # *.gradle.kts are skipped
+python3 scripts/summary.py ir.json                  # sizes, hubs, unresolved references
+python3 scripts/summary.py ir.json --type Order     # one type in detail
+python3 scripts/render.py ir.json view.json -o diagram.mmd     # or --format svg | html
+python3 scripts/render.py ir.json view.json --format svg --members none -o bare.svg
+scripts/validate.sh diagram.mmd
+```
+
+## Languages and outputs
 
 | Works today | Not yet |
 |---|---|
@@ -47,6 +162,11 @@ grouping, commentary — in `view.json`; a renderer merges the two.
 | Mermaid (syntax-checked), static SVG (ELK layout), interactive HTML | PlantUML output, Graphviz layout |
 | Focus + hops, hidden patterns, groups, notes, highlights, inferred edges, cycles | An MCP server, an LSP-backed precise mode |
 | Claude Code plugin with `/draftsman`; Codex plugin with `$draftsman:draftsman` | Go and Rust (implicit interfaces and scattered `impl` blocks: out of scope by design) |
+
+Known gaps per language are listed in
+[`lang-notes.md`](skills/draftsman/references/lang-notes.md).
+
+## Tested on real projects
 
 Each language was run end to end — extract, then render a focused Mermaid diagram (syntax
 checked), an SVG and an HTML viewer — on real projects, tests and generated code excluded:
@@ -71,86 +191,7 @@ Unresolved references are split by reason: *ambiguous* (a project type shares th
 listed, not picked), *outside* (only something outside the sources could provide it: a
 wildcard or default import, a nested type of an external supertype), *unexplained* (neither).
 Each project has a page under [`docs/e2e/`](docs/e2e/README.md) with the pinned commit,
-the exact commands, and what every unresolved name and diagnostic is. Known gaps per
-language are listed in
-[`lang-notes.md`](skills/draftsman/references/lang-notes.md).
-
-## Install
-
-The repository is a plugin and a marketplace for both agents.
-
-**Claude Code**
-
-```text
-/plugin marketplace add devgyurak/draftsman
-/plugin install draftsman@draftsman
-```
-
-**Codex** (the CLI, IDE extension and app share one plugin store)
-
-```bash
-codex plugin marketplace add devgyurak/draftsman
-codex plugin add draftsman@draftsman
-```
-
-Or run `/plugins` inside Codex and pick *Draftsman*. To install only the skill:
-`$skill-installer install https://github.com/devgyurak/draftsman/tree/main/skills/draftsman`.
-Other agents that read the Agent Skills format can use `skills/draftsman/` as is.
-
-**Requirements** — Python 3.10+ with three packages, which the skill installs on first use
-if they are missing:
-
-```bash
-pip install "tree-sitter>=0.25" tree-sitter-language-pack pyyaml
-```
-
-SVG output and the Mermaid syntax check also need Node.js:
-`npm ci --prefix skills/draftsman/scripts` (elkjs, mermaid and jsdom at the versions in
-`package-lock.json`). HTML output works without it; the viewer then loads the same elkjs
-version from a CDN.
-
-## Use
-
-Ask in plain words — *"draw a class diagram of this repo"*, *"show the classes around
-OrderService as an interactive diagram"*, *"클래스 다이어그램 그려줘"* — or call it directly:
-
-```text
-/draftsman OrderService html        # Claude Code
-$draftsman:draftsman                # Codex (plugin); $draftsman for a skill-only install
-```
-
-The agent extracts, surveys the result, writes a view, renders, validates, and answers with
-the diagram, the scope it chose and the references it could not resolve.
-
-The scripts also work on their own:
-
-```bash
-cd skills/draftsman
-python3 scripts/extract.py path/to/src -o ir.json --exclude '**/test/**'   # *.gradle.kts are skipped
-python3 scripts/summary.py ir.json                  # sizes, hubs, unresolved references
-python3 scripts/summary.py ir.json --type Order     # one type in detail
-python3 scripts/render.py ir.json view.json -o diagram.mmd     # or --format svg | html
-python3 scripts/render.py ir.json view.json --format svg --members none -o bare.svg
-scripts/validate.sh diagram.mmd
-```
-
-A view selects and annotates; every key is optional:
-
-```json
-{
-  "focus": "OrderService",
-  "hops": 2,
-  "hidden": ["*#get*", "*#set*", "*#toString"],
-  "notes": [{"target": "Order", "text": "Bidirectional with Customer"}]
-}
-```
-
-Member detail can also differ per class — `"members": {"*": "none", "OrderService": "all"}`
-draws the focus in full and only names around it; `--members all|public|none` overrides the
-view for one render.
-
-The diagram above is [`tests/fixtures/java/shop`](tests/fixtures/java/shop) rendered with
-[`docs/images/example-shop.view.json`](docs/images/example-shop.view.json).
+the exact commands, and what every unresolved name and diagnostic is.
 
 ## What it doesn't do
 
@@ -163,41 +204,22 @@ The diagram above is [`tests/fixtures/java/shop`](tests/fixtures/java/shop) rend
 - **It doesn't run or upload your code.** Everything runs locally; the only network use is
   installing the dependencies above (and the CDN fallback of the HTML viewer).
 
-## Development
-
-**Prerequisites** — [uv](https://docs.astral.sh/uv/); Node.js for the SVG and Mermaid tests.
-
-```bash
-uv sync                                         # Python dependencies
-npm ci --prefix skills/draftsman/scripts   # optional: ELK layout + Mermaid check
-uv run pytest                                   # includes node tests of draw.js and the viewer;
-                                                # they skip without node
-```
-
-A language is a tree-sitter query plus a small spec. To add one, write
-`queries/<lang>.scm` following the
-[capture protocol](skills/draftsman/references/query-protocol.md), add a `LanguageSpec` in
-`scripts/draftsman/langs/`, and mirror the `shop` fixture under `tests/fixtures/<lang>/`.
-
-### Repository layout
+## What's inside
 
 ```text
-skills/draftsman/SKILL.md       workflow and rules for the agent
-skills/draftsman/queries/       one tree-sitter query per language: what to capture
-skills/draftsman/scripts/       extract.py · summary.py · render.py · validate.sh · layout.mjs
-  draftsman/                    the library: extractor, resolver, scene, renderers, langs/
-skills/draftsman/assets/        draw.js (shared by SVG and the viewer) · viewer.html
-skills/draftsman/config/        wrappers.yaml: containers to see through (List<T> → T, *)
-skills/draftsman/references/    schemas and language notes, loaded on demand
-.claude-plugin/                 Claude Code plugin and marketplace manifests
-.codex-plugin/ · .agents/       Codex plugin manifest and marketplace
-commands/                       the /draftsman slash command (Claude Code)
-assets/                         plugin icon; logo masters and guidelines in assets/logo/
-tests/                          pytest suite; the same shop fixture in all six languages
-docs/                           design notes, end-to-end runs (docs/e2e/), README images
+skills/draftsman/
+├── SKILL.md            workflow, hard rules, how scope and output are chosen
+├── agents/openai.yaml  Codex display name and default prompt
+├── queries/            one tree-sitter query per language: what to capture
+├── scripts/            extract.py · summary.py · render.py · validate.sh · layout.mjs
+│   └── draftsman/      the library: extractor, resolver, scene, renderers, langs/
+├── assets/             draw.js (shared by SVG and the viewer) · viewer.html
+├── config/             wrappers.yaml: containers to see through (List<T> → T, *)
+└── references/         schemas and language notes, loaded on demand
+.claude-plugin/         Claude Code plugin and marketplace manifests
+.codex-plugin/ · .agents/   Codex plugin manifest and marketplace
+commands/               the /draftsman slash command (Claude Code)
 ```
-
-## Documentation
 
 | Document | What is in it |
 |---|---|
@@ -208,11 +230,24 @@ docs/                           design notes, end-to-end runs (docs/e2e/), READM
 | [`query-protocol.md`](skills/draftsman/references/query-protocol.md) | The capture names a language query uses; adding a language |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | Design notes (Korean): background, principles, architecture, roadmap |
 | [`docs/e2e/`](docs/e2e/README.md) | One page per measured project: pinned commit, commands, results, every unresolved name and diagnostic explained |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Setup, where a change goes, tests and re-measuring, adding a language |
 | [`CHANGELOG.md`](CHANGELOG.md) | Changes that affect existing `ir.json`/`view.json` files |
 | [`assets/logo/GUIDELINES.md`](assets/logo/GUIDELINES.md) | Logo files, colours, clear space, minimum sizes |
 
-## Contributing
+## Development and contributing
+
+**Prerequisites** — [uv](https://docs.astral.sh/uv/); Node.js for the SVG and Mermaid tests.
+
+```bash
+uv sync                                         # Python dependencies
+npm ci --prefix skills/draftsman/scripts   # optional: ELK layout + Mermaid check
+uv run pytest                                   # includes node tests of draw.js and the viewer;
+                                                # they skip without node
+```
+
+The tests live in `tests/`, with the same `shop` fixture in all six languages. A language is
+a tree-sitter query plus a small spec: write `queries/<lang>.scm` following the
+[capture protocol](skills/draftsman/references/query-protocol.md), add a `LanguageSpec` in
+`scripts/draftsman/langs/`, and mirror the `shop` fixture under `tests/fixtures/<lang>/`.
 
 Issues and pull requests are welcome — bug reports from real projects most of all. Read
 [`CONTRIBUTING.md`](CONTRIBUTING.md) first: the never-invent rule, where a change goes, how
