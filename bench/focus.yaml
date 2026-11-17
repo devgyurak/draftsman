@@ -1,0 +1,106 @@
+# Written by select_focus.py; committed before any measured run.
+rule:
+  kinds:
+  - class
+  - interface
+  - record
+  unique_simple_name: true
+  metric: uses + used_by
+  min: 3
+  max: 40
+  strata: 3
+  seed: 20261117
+  pilot_seed: 20261118
+measured:
+  spring-petclinic:
+  - name: PetClinicRuntimeHints
+    fqn: org.springframework.samples.petclinic.PetClinicRuntimeHints
+    kind: class
+    file: src/main/java/org/springframework/samples/petclinic/PetClinicRuntimeHints.java
+    uses: 3
+    used_by: 1
+    metric: 4
+    stratum: low
+  - name: OwnerRepository
+    fqn: org.springframework.samples.petclinic.owner.OwnerRepository
+    kind: interface
+    file: src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java
+    uses: 1
+    used_by: 3
+    metric: 4
+    stratum: middle
+  - name: Owner
+    fqn: org.springframework.samples.petclinic.owner.Owner
+    kind: class
+    file: src/main/java/org/springframework/samples/petclinic/owner/Owner.java
+    uses: 3
+    used_by: 4
+    metric: 7
+    stratum: high
+  jsoup:
+  - name: LineMap
+    fqn: org.jsoup.internal.LineMap
+    kind: class
+    file: src/main/java/org/jsoup/internal/LineMap.java
+    uses: 0
+    used_by: 4
+    metric: 4
+    stratum: low
+  - name: HtmlToPlainText
+    fqn: org.jsoup.examples.HtmlToPlainText
+    kind: class
+    file: src/main/java/org/jsoup/examples/HtmlToPlainText.java
+    uses: 11
+    used_by: 0
+    metric: 11
+    stratum: middle
+  - name: Selector
+    fqn: org.jsoup.select.Selector
+    kind: class
+    file: src/main/java/org/jsoup/select/Selector.java
+    uses: 11
+    used_by: 10
+    metric: 21
+    stratum: high
+  netty:
+  - name: BooleanSupplier
+    fqn: io.netty.util.BooleanSupplier
+    kind: interface
+    file: common/src/main/java/io/netty/util/BooleanSupplier.java
+    uses: 0
+    used_by: 3
+    metric: 3
+    stratum: low
+  - name: Http2UnknownFrame
+    fqn: io.netty.handler.codec.http2.Http2UnknownFrame
+    kind: interface
+    file: codec-http2/src/main/java/io/netty/handler/codec/http2/Http2UnknownFrame.java
+    uses: 5
+    used_by: 2
+    metric: 7
+    stratum: middle
+  - name: Http2OutboundFrameLogger
+    fqn: io.netty.handler.codec.http2.Http2OutboundFrameLogger
+    kind: class
+    file: codec-http2/src/main/java/io/netty/handler/codec/http2/Http2OutboundFrameLogger.java
+    uses: 12
+    used_by: 3
+    metric: 15
+    stratum: high
+pilot:
+  spring-petclinic:
+  - name: Visit
+    fqn: org.springframework.samples.petclinic.owner.Visit
+    kind: class
+    file: src/main/java/org/springframework/samples/petclinic/owner/Visit.java
+    uses: 1
+    used_by: 3
+    metric: 4
+  netty:
+  - name: PreferredDirectByteBufAllocator
+    fqn: io.netty.channel.unix.PreferredDirectByteBufAllocator
+    kind: class
+    file: transport-native-unix-common/src/main/java/io/netty/channel/unix/PreferredDirectByteBufAllocator.java
+    uses: 4
+    used_by: 3
+    metric: 7

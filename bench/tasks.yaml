@@ -1,0 +1,74 @@
+# Benchmark configuration. Committed before any measured run; see RUBRIC.md for scoring
+# and README.md for the method and the change log.
+
+model: claude-opus-5-5
+effort: high                      # passed as --effort; the default differs per config
+claude_code_version: 2.1.326      # recorded per run as well
+
+repos:
+  spring-petclinic:
+    url: https://github.com/spring-projects/spring-petclinic
+    commit: 500158f732419217507c7656904b8e6aa1bcc0d6   # 2026-09-29
+    roots: [src/main]
+    exclude: []
+  jsoup:
+    url: https://github.com/jhy/jsoup
+    commit: d90d57521d931db7bf7ee464a4c0a1a9293db088   # 2026-11-04
+    roots: [src/main]
+    exclude: []
+  netty:
+    url: https://github.com/netty/netty
+    commit: e3cab70052e59cfa66622beeba54c95631e3435c   # 2026-11-16
+    roots: [.]
+    # the production scope of docs/e2e/java/netty.md
+    exclude: ['**/src/test/**', 'testsuite*/**', '*-tests/**', 'microbench/**', 'example/**']
+
+# Focus classes for T2, chosen by select_focus.py from grep counts only (no Draftsman IR).
+selection:
+  kinds: [class, interface, record]   # top-level public, file name = type name
+  unique_simple_name: true            # the name is declared once in production sources
+  metric: uses + used_by              # see select_focus.py
+  min: 3
+  max: 40                             # hub classes above this are out of scope
+  strata: 3                           # low / middle / high third of the bounded pool
+  seed: 20261117
+  pilot_seed: 20261118                # pilot classes: same pool, never a measured class
+  pilot_repos: [spring-petclinic, netty]
+
+tasks:
+  T1:
+    repos: [spring-petclinic]
+    runs: 3
+    prompt: >-
+      Draw a Mermaid classDiagram of the classes in this repository and the relations
+      between them, using production sources only (ignore tests). Do not ask questions.
+      Answer with a single mermaid block, at most 40 classes.
+  T2:
+    repos: [spring-petclinic, jsoup, netty]
+    classes_per_repo: 3
+    runs: 2
+    prompt: >-
+      Draw a Mermaid classDiagram of `{name}` ({fqn}) and the classes directly related
+      to it in either direction (types it uses and types that use it), using production
+      sources only (ignore tests). Do not ask questions. Answer with a single mermaid
+      block, at most 40 classes.
+
+arms:
+  A: {name: baseline, plugins: []}
+  B: {name: draftsman, plugins: [draftsman]}         # --plugin-dir <this repository>
+  C: {name: night-market class-diagram, plugins: [night-market]}   # after reviewing its hooks and scripts
+
+run:
+  container: true                 # repositories copied into the container, not bind-mounted
+  fresh_checkout_per_run: true
+  order: shuffled
+  flags:
+    - --print
+    - --output-format=stream-json
+    - --verbose
+    - --strict-mcp-config
+    - --setting-sources=
+    - --no-session-persistence
+    - --permission-mode=bypassPermissions
+  max_budget_usd: null            # set after the pilot; a run that hits it is a failed run
+  auth: null                      # decided in the pilot: API key (recommended) or subscription token
