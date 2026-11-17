@@ -376,6 +376,25 @@ def test_cpp_named_unions_are_types(tmp_path):
     assert not ir.unresolved
 
 
+def test_cpp_types_defined_with_a_variable(tmp_path):
+    """`struct { P inner; } named_var;`: the members are the variable's, not the enclosing
+    class's. `struct Tag { P p; } tagged;`: the field is of type `Tag`, not of its body."""
+    ir = extract_source(tmp_path, {"a.h": (
+        "namespace n {\nstruct P {};\nclass W {\n  struct { P inner; int z; } named_var;\n"
+        "  union { int i; P* pp; } u;\n  union { int a; float b; };\n"
+        "  struct Tag { P p; } tagged;\n  enum Mode { A, B } mode;\n"
+        "  struct Tag2 { P p; } *ptr, arr[2];\n};\n"
+        "typedef struct { P* x; } Point;\n}\n")})
+    w = next(t for t in ir.types if t.id == "n::W")
+    assert [(m.name, m.type_ref) for m in w.members] == [
+        ("named_var", None), ("u", None), ("a", "int"), ("b", "float"), ("tagged", "Tag"),
+        ("mode", "Mode"), ("ptr", "Tag2*"), ("arr", "Tag2[]")]
+    assert {r for r in rels(ir) if r[0] == "n::W"} == {
+        ("n::W", "association", "n::W::Tag"), ("n::W", "association", "n::W::Mode"),
+        ("n::W", "association", "n::W::Tag2")}
+    assert ("n::Point", "association", "n::P") in rels(ir)
+
+
 def test_cpp_names_of_unknown_types_and_values(tmp_path):
     """`typename R::Ptr` (a member of a template parameter), `NM::Map::const_iterator`
     (a member of what an alias names, also qualified by the class) and `sizeof(P)` in a

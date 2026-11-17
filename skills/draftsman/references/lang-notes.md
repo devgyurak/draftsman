@@ -309,7 +309,10 @@ is that type. Aliases of aliases are followed.
   (`acme::Versioned` is `acme::v1::Versioned`).
 - Parameters with a default value (`P p = P()`) are parameters. A function-pointer member
   (`void (*cb)(int)`) is a field of type `void(int)*`. Members of an anonymous union or
-  struct are members of the enclosing class, as in C++. `std::tuple<P, B*>` and
+  struct are members of the enclosing class, as in C++; with a variable (`union { int i;
+  float f; } u;`) they are the variable's (`u.i`), so the class lists only `u`, without a
+  type. A type defined with a variable (`struct Tag { P p; } tagged;`, `enum Mode { A, B }
+  mode;`) gives the field that type: `tagged` is a `Tag`. `std::tuple<P, B*>` and
   `std::pair` relate to each element once.
 - Qt: Qt's statement macros (`Q_OBJECT`, `Q_GADGET`, `Q_PROPERTY(...)`, `Q_ENUM(...)`,
   `Q_DISABLE_COPY(...)`, `Q_DECLARE_...`, `QT_BEGIN_NAMESPACE`/`QT_END_NAMESPACE`,

@@ -369,11 +369,26 @@ class CppSpec(LanguageSpec):
 
     def is_opaque(self, node):
         # `template <class S> class Ev<void, S> { ... }`: a specialisation is no type, and
-        # neither are the types and members in it
+        # neither are the types and members in it. `struct { P inner; } var;`: the members
+        # are var's (`var.inner`), not the enclosing class's, as they are of an anonymous
+        # union without a variable
         if node.type in ("class_specifier", "struct_specifier", "union_specifier"):
             name = node.child_by_field_name("name")
-            return name is not None and name.type == "template_type"
+            if name is None:
+                parent = node.parent
+                return parent is not None and parent.type in ("field_declaration", "declaration") \
+                    and parent.child_by_field_name("declarator") is not None
+            return name.type == "template_type"
         return node.type in self.opaque_nodes
+
+    def type_text(self, type_node, text, src):
+        # `struct Tag { P p; } tagged;`, `enum Mode { A, B } mode;`: a type defined in place
+        # is named by its name, not its body; an anonymous one has no name to point at
+        if type_node.type in ("class_specifier", "struct_specifier", "union_specifier",
+                              "enum_specifier") and type_node.child_by_field_name("body") is not None:
+            name = type_node.child_by_field_name("name")
+            return name.text.decode() if name is not None else None
+        return text
 
     def declarator(self, node, src):
         # `poco_static_assert (offsetof(Hdr, code) == 0x01);` in a class body: a macro call

@@ -217,3 +217,10 @@ Notes for anyone with `view.json` files written against a development build:
     qualified by the class, are not resolved further; `sizeof(P)`, `alignof(P)` and
     `noexcept(...)` in a template argument are values (no `sizeof` unresolved, no
     dependency on `P`).
+- C++: the members of an anonymous struct or union with a variable (`union { char
+  buffer[N]; Block* next; } _memory;`) are the variable's, not the enclosing class's; a
+  type defined with a variable (`struct Tag { P p; } tagged;`) is the variable's type,
+  where before the field's type was the whole body and drew nothing. POCO: 8 members of
+  4 classes are no longer listed, 9984 -> 9983 relations (`FastMemoryPool::Block` no
+  longer associates with itself through `_memory.next`); leveldb and the other projects
+  unchanged.
