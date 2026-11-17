@@ -63,8 +63,13 @@ arms:
     name: night-market class-diagram
     plugins: [night-market]           # after reviewing its hooks and scripts
     source: https://github.com/athola/claude-night-market
-    commit: null                      # pinned when the plugin is reviewed
-    plugin: null                      # the plugin name that holds class-diagram
+    commit: 9388cbbe6b09b00aa865383c11bec717750ae961   # 2026-11-16, marketplace 1.10.3
+    plugin: cartograph                # holds the class-diagram skill
+    # Reviewed 2026-11-17: one PostToolUse hook, active only after gauntlet's graph_build.py,
+    # no network or subprocess use. Its skill draws at most 15 classes, explores through a
+    # codebase-explorer subagent on Sonnet at effort medium, and renders through a Mermaid
+    # Chart MCP server the isolated runs do not have; its declared dependency gauntlet is
+    # used only by that hook.
 # Each run also records the Draftsman commit it ran with (arm B) and the Claude Code version.
 
 run:

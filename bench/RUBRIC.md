@@ -47,10 +47,11 @@ Every run is expected to answer with one Mermaid `classDiagram` block.
 Each distinct edge gets the **first** label that applies, checked in this order:
 
 1. **Unsupported** — the source has no relation between the two types in either
-   direction, neither directly nor through a third type: no supertype, field, signature,
+   direction, neither directly nor through a supertype: no supertype, field, signature,
    generic argument, annotation or method-body use of one type in the other's
-   declaration, and none through their supertypes.
-2. **Indirect** — the relation exists only through a third type: indirect inheritance
+   declaration. A chain through some other type (A uses X, X uses B) is no relation
+   between A and B.
+2. **Indirect** — the relation exists only through a supertype: indirect inheritance
    drawn as direct (`A → B → C`, drawn `A → C`), or a use through an inherited member
    (A uses B only through a field of its superclass).
 3. **Wrong kind or direction** — a direct relation exists, but the edge contradicts it:
@@ -111,8 +112,10 @@ T2 compares **edges incident to the focus class**; all edges are a secondary fig
 
 Written by hand from the source, with `file:line`, and committed **before the measured
 runs** (`labels/denominators/`): for each T2 focus class its outgoing and incoming
-relations, and for T1 every relation among the classes of spring-petclinic. Generated
-code, tests and examples outside the production scope are not part of it.
+relations, and for T1 every relation among the classes of spring-petclinic. Only types
+declared in the production sources count, nested types as types of their own; JDK and
+framework types, tests and examples are not part of it. Relations through a supertype
+(*indirect*) are not part of it either.
 
 A real relation found while labelling that the denominator missed is added, and the
 number of such additions is reported per repository.

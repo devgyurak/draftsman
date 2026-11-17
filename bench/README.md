@@ -39,9 +39,19 @@ class that have no basis in the source.
   Netty's `Channel` or `ByteBuf`, whose direct neighbourhood runs into the hundreds; no arm
   could draw it within the prompt's 80 classes, and the recall denominator could not be
   written by hand.
+- **Small classes are not measured in jsoup and Netty.** Their lower bound of 8 leaves out
+  classes with fewer relations, where we expect every arm to do well; spring-petclinic,
+  bounded at [3, 40], is the only place small classes are measured.
+- **Only jsoup and Netty compare repository sizes.** spring-petclinic's classes are small
+  as well as its repository (counts 4–7, against 13–21 in jsoup and 8–24 in Netty), so the
+  figures show it apart, as the small-class case, not as the first step of a size scale.
 - One language (Java), one model, two runs per focus class.
 - The grep count that picks the focus classes is a proxy: it counts names, so a simple
   name shared with an unrelated type adds to it.
+- **Arm C runs as its author built it, in our isolation.** Its skill limits a diagram to
+  15 classes, so its recall is bounded by its own rule against the prompt's 80; it
+  explores through a subagent on Sonnet; and it renders through a Mermaid Chart MCP server
+  that no isolated run has. The Mermaid text it writes is what is scored.
 - Draftsman reads declarations, not method bodies; relations found only in bodies are
   reported as recall it is expected to lose.
 
@@ -57,7 +67,8 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
   - jsoup's `org.jsoup.examples` is excluded, as Netty's `example/` already was.
   - Bounds raised from [3, 40] to [8, 80] for jsoup and Netty, and the prompt's limit from
     40 to 80 classes. With [3, 40] every drawn class had at most about 20 relations, small
-    enough for any arm to find by reading one file, so the arms could not be told apart.
+    enough, we expected, for any arm to find by reading one file, which would leave the
+    arms indistinguishable.
     Raising only the upper bound moved Netty's strata from 3–7 / 7–12 / 12–40 to
     3–7 / 7–13 / 13–80; the lower bound is what changes them.
   - Labels: *indirect* added (indirect inheritance and uses through an inherited member,
