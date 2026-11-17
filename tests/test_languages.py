@@ -869,6 +869,50 @@ def test_primary_constructors(tmp_path):
             ("WithInit", "association", "Item", "items", "*")} <= r
 
 
+def test_aliases_are_drawn_through_to_what_they_name(tmp_path):
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "cs/Point.cs": "namespace Acme.Core { class Point {} }",
+        "cs/Uses.cs": ("using Pt = Acme.Core.Point;\nnamespace App { class Uses {\n"
+                       "  Pt p; global::Acme.Core.Point q; void F(Pt x) {} } }"),
+        "kt/U.kt": ("package k\nclass Pt\nopen class Base\ntypealias PtAlias = List<Pt>\n"
+                    "typealias BaseAlias = Base\nclass Uses(val p: PtAlias) : BaseAlias()\n"),
+        "ts/u.ts": ("export class A {}\nexport class B {}\nexport type X = A | B;\n"
+                    "type Y = X;\nexport class Uses { x?: X; y?: Y; }\n"),
+        "cpp/s.h": ("class Circle {};\nclass S {\n  typedef Circle* CirclePtr;\n"
+                    "  using Ref = Circle;\n  CirclePtr c;\n  Ref r;\n};\n"),
+    })
+    r = _rels(ir)
+    assert {("Uses", "association", "Point", "p", "1"), ("Uses", "association", "Point", "q", "1"),
+            ("Uses", "dependency", "Point", "F", None),
+            ("Uses", "association", "Pt", "p", "*"), ("Uses", "extends", "Base", None, None),
+            ("Uses", "association", "A", "x", "1"), ("Uses", "association", "B", "x", "1"),
+            ("Uses", "association", "A", "y", "1"),
+            ("S", "association", "Circle", "c", "1"), ("S", "association", "Circle", "r", "1")} <= r
+    own = {(r.via, r.ownership) for r in ir.relations if r.from_ == "S"}
+    assert own == {("c", "shared"), ("r", "owned")}
+    assert not ir.unresolved
+
+
+def test_tuples_relate_to_each_element_once(tmp_path):
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "cs/T.cs": "namespace N { class Person {} class Point {} class T { (Person a, Point b) pair; } }",
+        "ts/t.ts": ("export class Point {}\nexport class Circle {}\n"
+                    "export class T { pair?: [Point, Circle]; named?: [a: Point, b?: Circle]; }\n"),
+        "py/t.py": ("class P: ...\nclass Q: ...\nclass T:\n    pair: tuple[P, Q]\n"
+                    "    many: tuple[P, ...]\n"),
+        "cpp/t.h": "#include <tuple>\nclass P {};\nclass B {};\nclass T { std::tuple<P, B*> t; };\n",
+    })
+    r = {(r.from_, r.to, r.via, r.multiplicity) for r in ir.relations}
+    assert r == {("N.T", "N.Person", "pair", "1"), ("N.T", "N.Point", "pair", "1"),
+                 ("ts/t.T", "ts/t.Point", "pair", "1"), ("ts/t.T", "ts/t.Circle", "pair", "1"),
+                 ("ts/t.T", "ts/t.Point", "named", "1"), ("ts/t.T", "ts/t.Circle", "named", "1"),
+                 ("py.t.T", "py.t.P", "pair", "1"), ("py.t.T", "py.t.Q", "pair", "1"),
+                 ("py.t.T", "py.t.P", "many", "*"),
+                 ("T", "P", "t", "1"), ("T", "B", "t", "1")}
+
+
 def test_java_throws_is_a_dependency(tmp_path):
     from conftest import extract_source
     ir = extract_source(tmp_path, {
@@ -877,3 +921,17 @@ def test_java_throws_is_a_dependency(tmp_path):
     assert ("p.S", "dependency", "p.E", "f") in {(r.from_, r.kind, r.to, r.via) for r in ir.relations}
     assert [m.params for m in by_name(ir, "S").members] == [[]]
     assert not ir.unresolved
+
+
+def test_python_literal_annotated_and_type_parameters(tmp_path):
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {"m.py": (
+        "from typing import Annotated, Literal\nclass Item: ...\nclass Order[K]: ...\n"
+        "class S:\n    mode: Literal['a', 'b']\n    item: Annotated[Item, 'x']\n"
+        "class New[K: Item, *Ts, **P](Order[K]):\n    k: K\n"
+        "    def f[T](self, x: T) -> T: ...\n")})
+    assert not ir.unresolved
+    r = {(short(r.from_), r.kind, short(r.to), r.via) for r in ir.relations}
+    assert ("S", "association", "Item", "item") in r
+    assert ("New", "extends", "Order", None) in r
+    assert by_name(ir, "New").generics == ["K", "Ts", "P"]

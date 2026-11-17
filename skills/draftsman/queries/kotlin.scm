@@ -76,5 +76,5 @@
     (parameter (simple_identifier) @param.name
                [(user_type) (nullable_type) (function_type)] @param.type) @param))
 
-; ---------------------------------------------------------------- aliases (not drawn)
-(type_alias (type_identifier) @alias)
+; ---------------------------------------------------------------- aliases
+(type_alias (type_identifier) @alias "=" . (_) @alias.type)

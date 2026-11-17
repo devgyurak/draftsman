@@ -61,6 +61,17 @@
      (dictionary_splat_pattern) @param.name] @param))
 
 ; ---------------------------------------------------------------- type variables
+; PEP 695: class New[K: Item, *Ts, **P], def f[T]
+(class_definition
+  type_parameters: (type_parameter
+    (type [(identifier) @tparam
+           (constrained_type . (type (identifier) @tparam))
+           (splat_type (identifier) @tparam)])))
+(function_definition
+  type_parameters: (type_parameter
+    (type [(identifier) @tparam
+           (constrained_type . (type (identifier) @tparam))
+           (splat_type (identifier) @tparam)])))
 ; module-level T = TypeVar("T") behaves like a type parameter of the whole file
 (module (expression_statement
   (assignment left: (identifier) @typevar
@@ -68,7 +79,8 @@
 (module (assignment left: (identifier) @typevar
                     right: (call function: (_) @_tv (#match? @_tv "TypeVar$"))))
 
-; ---------------------------------------------------------------- aliases (not drawn)
-(type_alias_statement left: (type (identifier) @alias))
+; ---------------------------------------------------------------- aliases
+; `type X = A | B` names its target; module assignments (`X = Union[...]`) may be values
+(type_alias_statement left: (type (identifier) @alias) right: (type) @alias.type)
 (module (expression_statement (assignment left: (identifier) @alias)))
 (module (assignment left: (identifier) @alias))

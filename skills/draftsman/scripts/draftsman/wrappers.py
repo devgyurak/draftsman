@@ -8,7 +8,7 @@ from typing import Callable, Optional
 
 import yaml
 
-from .typeref import NULL_LIKE, Array, Named, Nullable, Pointer, TypeRef, TypeUnion
+from .typeref import Array, NULL_LIKE, Named, Nullable, Pointer, TypeRef, TypeTuple, TypeUnion
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "wrappers.yaml"
 
@@ -86,6 +86,9 @@ class Wrappers:
                 walk(r.inner, combine(mult, "0..1"), own)
             elif isinstance(r, Pointer):
                 walk(r.inner, mult, own or "shared")  # pointers and references don't own
+            elif isinstance(r, TypeTuple):   # one of each: (Person, Point)
+                for item in r.items:
+                    walk(item, mult, own)
             elif isinstance(r, TypeUnion):
                 items = [i for i in r.items
                          if not (isinstance(i, Named) and i.name in NULL_LIKE)]

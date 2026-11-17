@@ -60,9 +60,12 @@
      (optional_parameter_declaration type: (_) @param.type declarator: (_)? @param.declarator)]
     @param))
 
-; ---------------------------------------------------------------- aliases (not drawn)
-(type_definition declarator: (type_identifier) @alias)
-(alias_declaration name: (type_identifier) @alias)
+; ---------------------------------------------------------------- aliases
+(type_definition type: (_) @alias.type declarator: (type_identifier) @alias)
+(type_definition type: (_) @alias.type
+  declarator: [(pointer_declarator declarator: (type_identifier) @alias)
+               (reference_declarator (type_identifier) @alias)])
+(alias_declaration name: (type_identifier) @alias type: (_) @alias.type)
 (type_definition
   declarator: (function_declarator
     declarator: (parenthesized_declarator (pointer_declarator declarator: (type_identifier) @alias))))

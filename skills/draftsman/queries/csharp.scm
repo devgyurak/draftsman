@@ -72,5 +72,6 @@
 (constructor_declaration
   parameters: (parameter_list "params" . (_) @param.type . (identifier) @param.name @param))
 
-; ---------------------------------------------------------------- aliases (not drawn)
-(using_directive name: (identifier) @alias)
+; ---------------------------------------------------------------- aliases
+; drawn through: a field typed with an alias relates to what the alias names
+(using_directive name: (identifier) @alias "=" . (_) @alias.type)

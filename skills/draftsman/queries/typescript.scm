@@ -99,5 +99,5 @@
      (optional_parameter pattern: (identifier) @param.name
                          type: (type_annotation (_) @param.type)?)] @param))
 
-; ---------------------------------------------------------------- aliases (not drawn)
-(type_alias_declaration name: (type_identifier) @alias)
+; ---------------------------------------------------------------- aliases
+(type_alias_declaration name: (type_identifier) @alias value: (_) @alias.type)

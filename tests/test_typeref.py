@@ -1,7 +1,7 @@
 import pytest
 
-from draftsman.typeref import (Array, FunctionType, Named, Nullable, Pointer, TypeUnion, all_names,
-                               function_types, parse_type)
+from draftsman.typeref import (Array, FunctionType, Named, Nullable, Pointer, TypeTuple, TypeUnion,
+                               all_names, function_types, parse_type)
 
 
 @pytest.mark.parametrize("text, expected", [
@@ -42,6 +42,20 @@ def test_parse(text, expected):
     ("std::function<int(Foo)>", Named("std::function", (FunctionType((Named("Foo"),), Named("int")),))),
     # parentheses that only group stay what they group
     ("(A | B)[]", Array(TypeUnion((Named("A"), Named("B"))))),
+    # tuples: TypeScript, C#, Python, C++; a homogeneous tuple[A, ...] stays a container
+    ("[Point, Circle]", TypeTuple((Named("Point"), Named("Circle")))),
+    ("[a: Point, b?: Circle]", TypeTuple((Named("Point"), Named("Circle")))),
+    ("(Person a, Point b)", TypeTuple((Named("Person"), Named("Point")))),
+    ("tuple[P, Q]", TypeTuple((Named("P"), Named("Q")))),
+    ("tuple[P, ...]", Named("tuple", (Named("P"), None))),
+    ("std::tuple<P, B*>", TypeTuple((Named("P"), Pointer(Named("B"), "*")))),
+    # Python: Literal holds values, Annotated's first argument is the type
+    ("Literal['a', 'b']", None),
+    ("Annotated[Item, 'x']", Named("Item")),
+    # C#: global:: is the root namespace
+    ("global::Acme.Core.Point", Named("Acme.Core.Point")),
+    # C/C++ multi-word builtins still join, a following name does not
+    ("unsigned long long", Named("unsigned long long")),
 ])
 def test_function_types(text, expected):
     assert parse_type(text) == expected
@@ -53,7 +67,7 @@ def test_function_types_inside_containers():
     assert function_types(ref) == [FunctionType((Named("HttpClient"),), Named("Unit"))]
 
 
-@pytest.mark.parametrize("text", ["'a' | 'b'", "", None, "Map<String", "(A, B)"])
+@pytest.mark.parametrize("text", ["'a' | 'b'", "", None, "Map<String", "(A)(B)"])
 def test_unparseable_yields_none(text):
     assert parse_type(text) is None
 

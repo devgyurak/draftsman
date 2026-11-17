@@ -12,10 +12,10 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from .extractor import RawFile, RawMember, RawType
-from .langs import LANGUAGES, FileScope, Import
+from .langs import LANGUAGES, FileScope, Import, spec_for_path
 from .model import IR, External, Location, Relation, Type, Unresolved
 from .typeref import Named, function_types, named_refs, parse_type, value_names
-from .wrappers import Wrappers
+from .wrappers import Wrappers, combine
 
 PROJECT, EXTERNAL, BUILTIN, TPARAM, ALIAS, UNRESOLVED = (
     "project", "external", "builtin", "tparam", "alias", "unresolved")
@@ -44,6 +44,9 @@ class Resolver:
                 self.scopes_by_ns.setdefault(s.namespace, []).append(s)
                 self.namespaces.add(s.namespace)
         self.aliases: set[str] = set().union(*(s.aliases for s in scopes)) if scopes else set()
+        # alias -> (the type text it names, the file scope that text is resolved in)
+        self.alias_targets: dict[str, tuple[str, FileScope]] = {
+            a: (text, s) for s in scopes for a, text in s.alias_targets.items()}
         # what an import can name: a class or a type alias (`export type X = ...`)
         self._targets = set(self.index) | self.aliases
         self._supers_cache: dict[str, list[Resolution]] = {}
@@ -136,7 +139,7 @@ class Resolver:
             f"files ({', '.join(imp.ambiguous)}); which one is meant is not known"))
 
     def _found(self, target: str) -> Resolution:
-        return Resolution(ALIAS) if target in self.aliases else Resolution(PROJECT, target)
+        return Resolution(ALIAS, target) if target in self.aliases else Resolution(PROJECT, target)
 
     def _not_found(self, path: str, spec) -> Resolution:
         """An import path that names no project type. External, unless it ends with
@@ -260,7 +263,7 @@ class Resolver:
                 if ns and ns + sep + name in self.index:
                     return Resolution(PROJECT, ns + sep + name)
                 if ns and ns + sep + name in self.aliases:
-                    return Resolution(ALIAS)
+                    return Resolution(ALIAS, ns + sep + name)
             head, rest = name.split(sep, 1)
             for imp in scope.imports:  # module alias: pay.Receipt, models.OrderLine
                 if not imp.wildcard and imp.module and imp.ambiguous and imp.local_name == head:
@@ -309,7 +312,7 @@ class Resolver:
             if found:
                 return Resolution(PROJECT, found)
             if cur.qualified_name + sep + name in self.aliases:
-                return Resolution(ALIAS)
+                return Resolution(ALIAS, cur.qualified_name + sep + name)
             cur = self.index.get(cur.outer) if cur.outer else None
 
         for imp in scope.imports:
@@ -337,7 +340,7 @@ class Resolver:
             if cand in self.index:
                 return Resolution(PROJECT, cand)
             if cand in self.aliases:
-                return Resolution(ALIAS)  # a type alias: not a class, nothing to draw
+                return Resolution(ALIAS, cand)  # a type alias: drawn through to its target
 
         external_wildcards: list[Import] = []
         shared_wildcards: list[Import] = []   # declared in the project too, but not this name
@@ -449,6 +452,7 @@ class _Builder:
         self.externals: dict[str, External] = {}
         self.unresolved: dict[tuple, Unresolved] = {}
         self.relations: list[Relation] = []
+        self._alias_cache: dict[str, tuple[list, list]] = {}
 
     def _add(self, t: RawType) -> None:
         existing = self.types.get(t.qualified_name)
@@ -558,6 +562,10 @@ class _Builder:
             if not isinstance(ref, Named):
                 continue
             loc = Location(sup.scope.file if sup.scope else rtype.location.file, sup.line)
+            if res.status == ALIAS and res.target:   # `class X : AliasOfBase()`
+                leaves, _ = self._expand_alias(res.target)
+                if len(leaves) == 1:
+                    res = Resolution(PROJECT, leaves[0][0])
             if res.status == PROJECT:
                 if res.target == rtype.qualified_name:
                     continue
@@ -591,6 +599,18 @@ class _Builder:
                 self.relations.append(Relation(
                     rtype.qualified_name, res.target, "association", loc,
                     multiplicity=leaf.multiplicity, ownership=leaf.ownership, via=m.name))
+            elif res.status == ALIAS and res.target:   # `Pt p;` with `using Pt = ...Point;`
+                leaves, names = self._expand_alias(res.target)
+                for target, mult, own in leaves:
+                    if target != rtype.qualified_name:
+                        self.relations.append(Relation(
+                            rtype.qualified_name, target, "association", loc,
+                            multiplicity=combine(leaf.multiplicity, mult),
+                            ownership=own or leaf.ownership, via=m.name))
+                for target in names:
+                    if target != rtype.qualified_name and target not in {t for t, _, _ in leaves}:
+                        self.relations.append(Relation(
+                            rtype.qualified_name, target, "dependency", loc, via=m.name))
             elif res.status == UNRESOLVED and not leaf.value:   # `typeof fn`: a value
                 self._unresolved(rtype, leaf.name, res, loc, via=m.name)
             # the arguments of a generic that is not a container (Repository<User>,
@@ -618,11 +638,52 @@ class _Builder:
             if self.wrappers.is_wrapper(name) and not self._is_project(rtype, rm)(name):
                 continue
             res = self.resolver.resolve(name, rtype, rm, arity=arity)
-            if res.status == PROJECT and res.target != rtype.qualified_name:
-                self.relations.append(Relation(
-                    rtype.qualified_name, res.target, "dependency", loc, via=m.name))
-            elif res.status == UNRESOLVED and name not in values:
+            targets = [res.target] if res.status == PROJECT else \
+                self._expand_alias(res.target)[1] if res.status == ALIAS and res.target else []
+            for target in targets:
+                if target != rtype.qualified_name:
+                    self.relations.append(Relation(
+                        rtype.qualified_name, target, "dependency", loc, via=m.name))
+            if res.status == UNRESOLVED and name not in values:
                 self._unresolved(rtype, name, res, loc, via=m.name)
+
+    def _expand_alias(self, alias: str, depth: int = 0) -> tuple[list, list]:
+        """What a type alias names, resolved where the alias is declared:
+        ([(project type, multiplicity, ownership)] it points at as a field type would,
+        [every project type it mentions]). Aliases of aliases are followed."""
+        if alias in self._alias_cache:
+            return self._alias_cache[alias]
+        entry = self.resolver.alias_targets.get(alias)
+        if entry is None or depth > 4:
+            return [], []
+        self._alias_cache[alias] = ([], [])   # a cycle expands to nothing
+        text, scope = entry
+        spec = spec_for_path(scope.file)
+        sep = spec.separator
+        owner = alias.rsplit(sep, 1)[0] if sep in alias else None
+        ctx = RawType(alias, alias.rsplit(sep, 1)[-1], "alias", Location(scope.file, 0), scope,
+                      spec.name, namespace=self.types[owner].namespace if owner in self.types
+                      else owner or scope.namespace,
+                      outer=owner if owner in self.types else None)
+        ref = parse_type(text)
+        leaves: list = []
+        for leaf in self.wrappers.leaves(ref, self._is_project(ctx, None),
+                                         track_ownership=spec.name == "cpp"):
+            res = self.resolver.resolve(leaf.name, ctx, None, arity=len(leaf.args))
+            if res.status == PROJECT:
+                leaves.append((res.target, leaf.multiplicity, leaf.ownership))
+            elif res.status == ALIAS and res.target:
+                for target, mult, own in self._expand_alias(res.target, depth + 1)[0]:
+                    leaves.append((target, combine(leaf.multiplicity, mult), own or leaf.ownership))
+        names: list = []
+        for name, arity in named_refs(ref):
+            res = self.resolver.resolve(name, ctx, None, arity=arity)
+            if res.status == PROJECT:
+                names.append(res.target)
+            elif res.status == ALIAS and res.target and res.target != alias:
+                names += self._expand_alias(res.target, depth + 1)[1]
+        self._alias_cache[alias] = (leaves, list(dict.fromkeys(names)))
+        return self._alias_cache[alias]
 
     def _finalize_relations(self) -> list[Relation]:
         # keep every fact: one relation per (from, to, kind, via). Collapsing

@@ -414,6 +414,11 @@ class Extractor:
                 q = self._qualify(n, _text(n, src), types_by_node, namespaces, scope)
                 if q is not None:
                     scope.aliases.add(q)
+                    if (t := _first(caps, "alias.type")) is not None:
+                        text = _text(t, src)
+                        if n.parent is not None and n.parent.type == "pointer_declarator":
+                            text += "*"   # C++ `typedef Circle* CirclePtr;`
+                        scope.alias_targets[q] = spec.normalize_type(text)
             elif (n := _first(caps, "annotation")) is not None:
                 target = _first(caps, "annotation.target")
                 if target is None:

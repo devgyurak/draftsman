@@ -56,6 +56,7 @@ class FileScope:
     imports: list[Import] = field(default_factory=list)
     type_params: set[str] = field(default_factory=set)  # file-wide (Python TypeVar)
     aliases: set[str] = field(default_factory=set)      # qualified type alias names
+    alias_targets: dict[str, str] = field(default_factory=dict)  # alias -> type it names
     project: Optional[str] = None   # build project the file compiles in (C#: its .csproj)
 
 

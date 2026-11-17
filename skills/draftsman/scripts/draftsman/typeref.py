@@ -13,6 +13,7 @@ Handles the shapes shared by the supported languages:
     context(A) () -> C                 context parameters kept as types)
     (a: A) => B                        function types (TypeScript)
     Callable[[A], B], R(A)             Python callables, C++ std::function<R(A)>
+    [A, B], (A a, B b), tuple[A, B]    tuples (TS, C#, Python, std::tuple / std::pair)
 
 Anything else (literal types, decltype...) yields ``None``; callers treat that as "no
 structural information".
@@ -24,7 +25,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Optional, Union
 
-TypeRef = Union["Named", "Array", "Nullable", "Pointer", "TypeUnion", "FunctionType"]
+TypeRef = Union["Named", "Array", "Nullable", "Pointer", "TypeUnion", "FunctionType", "TypeTuple"]
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,19 @@ class FunctionType:
     result: Optional["TypeRef"] = None
     receiver: Optional["TypeRef"] = None  # Kotlin `R.(A) -> C`
     context: tuple = ()                   # Kotlin context parameters: `context(A, B) () -> C`
+
+
+@dataclass(frozen=True)
+class TypeTuple:
+    """One value of each item: `[A, B]`, `(A a, B b)`, `tuple[A, B]`."""
+    items: tuple
+
+
+# generic names that are tuples when given two or more element types
+_TUPLES = frozenset({"tuple", "Tuple", "typing.Tuple", "std::tuple", "std::pair", "ValueTuple",
+                     "System.Tuple", "System.ValueTuple"})
+# words that combine into one C/C++ builtin type: `unsigned long long`, `long double`
+_MULTIWORD = frozenset({"unsigned", "signed", "long", "short", "int", "char", "double", "float"})
 
 
 @dataclass(frozen=True)
@@ -196,6 +210,8 @@ class _Parser:
                 return FunctionType(params, self.union())
             if plain and len(params) == 1:   # a parenthesised type: (A | B)[]
                 return params[0]
+            if len(params) >= 2:   # C# tuple: (Person a, Point b)
+                return TypeTuple(params)
             raise _ParseError("parameter list without an arrow")
         if tok == "?":  # Java wildcard
             self.take()
@@ -210,11 +226,16 @@ class _Parser:
         if tok == "#lit":
             self.take()
             return None
+        if tok == "[":   # TypeScript tuple: [A, B], [a: A, b?: B]
+            items, _ = self.param_list("[", "]")
+            return TypeTuple(items)
         if tok is None or not (tok == "::" or _is_ident(tok)):
             raise _ParseError(f"unexpected {tok!r}")
         name = self.qualified_name()
+        if name.startswith("global::"):   # C# global::Acme.Core.Point
+            name = name[len("global::"):]
         # multi-word builtins: `unsigned long long`, `long double`
-        while _is_ident(self.peek() or "") and self.peek() not in _QUALIFIERS:
+        while name.rsplit(" ", 1)[-1] in _MULTIWORD and (self.peek() or "") in _MULTIWORD:
             name += " " + self.take()
         args: tuple = ()
         if self.peek() == "<":
@@ -229,6 +250,13 @@ class _Parser:
         if self.peek() == "(":   # C++ std::function<R(A)>
             params, _ = self.param_list()
             return FunctionType(params, Named(name, args, value))
+        last = name.rsplit(".", 1)[-1]
+        if last == "Literal":       # Python Literal["a", "b"]: values, no types
+            return None
+        if last == "Annotated":     # Python Annotated[Item, "x"]: the type is the first
+            return args[0] if args else None
+        if name in _TUPLES and len(args) >= 2 and None not in args:   # not tuple[A, ...]
+            return TypeTuple(args)
         if name.rsplit(".", 1)[-1] == "Callable" and len(args) == 2 \
                 and (isinstance(args[0], _ParamList) or args[0] is None):   # Python
             params = args[0].items if isinstance(args[0], _ParamList) else ()
@@ -242,12 +270,12 @@ class _Parser:
                 args = self.arg_list(">")
         return Named(name, args, value)
 
-    def param_list(self) -> tuple[tuple, bool]:
+    def param_list(self, opener: str = "(", close: str = ")") -> tuple[tuple, bool]:
         """`(A, b: B, ...rest: C[])` -> (types, whether it was a plain `(Type)`)."""
-        self.take("(")
+        self.take(opener)
         params: list = []
         plain = True
-        while self.peek() != ")":
+        while self.peek() != close:
             if self.peek() is None:
                 raise _ParseError("unterminated parameter list")
             if self.peek() == "...":       # TS rest parameter
@@ -263,12 +291,15 @@ class _Parser:
             ref = self.union()
             if ref is not None:
                 params.append(ref)
+            if _is_ident(self.peek() or "") and self.peek(1) in (",", close):
+                self.take()                # C# tuple element name: (Person a, ...)
+                plain = False
             if self.peek() == ",":
                 self.take()
                 plain = False
-            elif self.peek() != ")":
-                raise _ParseError("expected ',' or ')'")
-        self.take(")")
+            elif self.peek() != close:
+                raise _ParseError(f"expected ',' or {close!r}")
+        self.take(close)
         return tuple(params), plain and len(params) == 1
 
     def qualified_name(self) -> str:
@@ -343,7 +374,7 @@ def value_names(ref: Optional[TypeRef]) -> set[str]:
                 walk(a)
         elif isinstance(r, (Array, Nullable, Pointer)):
             walk(r.elem if isinstance(r, Array) else r.inner)
-        elif isinstance(r, TypeUnion):
+        elif isinstance(r, (TypeUnion, TypeTuple)):
             for it in r.items:
                 walk(it)
         elif isinstance(r, FunctionType):
@@ -366,7 +397,7 @@ def named_refs(ref: Optional[TypeRef]) -> list[tuple[str, int]]:
                 walk(a)
         elif isinstance(r, (Array, Nullable, Pointer)):
             walk(r.elem if isinstance(r, Array) else r.inner)
-        elif isinstance(r, TypeUnion):
+        elif isinstance(r, (TypeUnion, TypeTuple)):
             for it in r.items:
                 walk(it)
         elif isinstance(r, FunctionType):
@@ -391,7 +422,7 @@ def all_names(ref: Optional[TypeRef]) -> list[str]:
                 walk(a)
         elif isinstance(r, (Array, Nullable, Pointer)):
             walk(r.elem if isinstance(r, Array) else r.inner)
-        elif isinstance(r, TypeUnion):
+        elif isinstance(r, (TypeUnion, TypeTuple)):
             for it in r.items:
                 walk(it)
         elif isinstance(r, FunctionType):
@@ -414,7 +445,7 @@ def function_types(ref: Optional[TypeRef]) -> list[FunctionType]:
                 walk(a)
         elif isinstance(r, (Array, Nullable, Pointer)):
             walk(r.elem if isinstance(r, Array) else r.inner)
-        elif isinstance(r, TypeUnion):
+        elif isinstance(r, (TypeUnion, TypeTuple)):
             for it in r.items:
                 walk(it)
 
