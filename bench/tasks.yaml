@@ -69,7 +69,9 @@ arms:
     # no network or subprocess use. Its skill draws at most 15 classes, explores through a
     # codebase-explorer subagent on Sonnet at effort medium, and renders through a Mermaid
     # Chart MCP server the isolated runs do not have; its declared dependency gauntlet is
-    # used only by that hook.
+    # used only by that hook. The pilot showed Claude Code skips the plugin while gauntlet
+    # is missing, so build.sh removes the "dependencies" line from its plugin.json (gauntlet
+    # would bring leyline and oracle, whose session hooks reach the network).
 # Each run also records the Draftsman commit it ran with (arm B) and the Claude Code version.
 
 run:

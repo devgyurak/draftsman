@@ -58,6 +58,11 @@ edges at the focus class that have no basis in the source.
   - It renders through a Mermaid Chart MCP server that no isolated run has, so it cannot
     meet its own exit criteria; retries this causes add to its cost and time. Its cost and
     time are listed in the tables with this note and left out of the cost and time figure.
+  - It runs without its declared dependencies. Its manifest names gauntlet (which brings
+    leyline and oracle); with them missing, Claude Code skips the plugin entirely, as the
+    pilot showed. The class-diagram skill uses none of them, and they add session hooks
+    that star a GitHub repository, fetch discussions and start a daemon, so we removed the
+    one `dependencies` line instead of installing them.
   - The Mermaid text it writes is what is scored.
 - **Uses that never name a type are not in the recall denominators** (a call on a field of
   that type, a nested class using its outer class's field). Counting them would take type
@@ -98,3 +103,7 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
     transcripts; each run records the image ID and the session's init event; the other
     arms' plugins are removed before a session starts; stdin is closed.
   - Limits: arm C's stated language range and file budget, unnamed uses.
+- 2026-11-17, pilot (6 runs, subscription token): isolation, metering and arm B worked.
+  Arm C's plugin never loaded: its manifest declares gauntlet as a dependency and Claude
+  Code skips a plugin whose dependency is missing. Its `dependencies` line is now removed
+  at build time (see Limits); the two arm C pilot runs were discarded and run again.

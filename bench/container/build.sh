@@ -30,6 +30,16 @@ nm_plugin=$(yq "d['arms']['C']['plugin']")
 git clone -q --filter=blob:none --no-checkout "$nm_url" "$ctx/night-market"
 git -C "$ctx/night-market" checkout -q "$nm_commit"
 cp -R "$ctx/night-market/plugins/$nm_plugin" "$ctx/plugins/night-market"
+# Its manifest declares gauntlet (and through it leyline and oracle) as dependencies; with
+# them missing Claude Code skips the plugin without a word. The class-diagram skill uses
+# none of them, and they bring session hooks that reach the network, so the one line goes.
+python3 - "$ctx/plugins/night-market/.claude-plugin/plugin.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+manifest = json.load(open(path))
+manifest.pop('dependencies')
+json.dump(manifest, open(path, 'w'), indent=2)
+PY
 rm -rf "$ctx/night-market"
 
 docker build -t draftsman-bench -f "$here/Dockerfile" \
