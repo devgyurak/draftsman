@@ -14,6 +14,7 @@ import argparse
 import fnmatch
 import os
 import sys
+from collections import Counter
 from pathlib import Path
 
 from draftsman.extractor import Extractor
@@ -87,9 +88,14 @@ def main(argv: list[str] | None = None) -> int:
     for r in ir.relations:
         counts[r.kind] = counts.get(r.kind, 0) + 1
     rel_summary = ", ".join(f"{k} {v}" for k, v in sorted(counts.items())) or "none"
+    reasons = Counter(u.reason for u in ir.unresolved)
+    split = ", ".join(f"{reasons[r]} {label}" for r, label in (
+        ("ambiguous", "ambiguous"), ("outside", "outside the sources"),
+        ("unexplained", "unexplained")) if reasons[r])
     print(
         f"draftsman: {ir.files} files, {len(ir.types)} types, relations: {rel_summary}, "
-        f"{len(ir.unresolved)} unresolved, {len(ir.diagnostics)} diagnostics",
+        f"{len(ir.unresolved)} unresolved{f' ({split})' if split else ''}, "
+        f"{len(ir.diagnostics)} diagnostics",
         file=sys.stderr,
     )
     return 0

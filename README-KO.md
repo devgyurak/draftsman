@@ -52,14 +52,20 @@
 | 언어 | 프로젝트 | 파일 | 타입 | 관계 | 미해결 | 파싱 진단 |
 |---|---|---:|---:|---:|---:|---:|
 | Java | [spring-petclinic](docs/e2e/java/spring-petclinic.md) | 30 | 25 | 73 | 0 | 0 |
-| Java | [jsoup](docs/e2e/java/jsoup.md) | 105 | 230 | 1310 | 2 (`Map.Entry`, 힌트 포함) | 0 |
-| C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 356 | 199 (`using`으로 들어온 라이브러리 타입 195, `.razor` 파일의 Blazor 컴포넌트 4) | 0 |
-| Kotlin | [nowinandroid](docs/e2e/kotlin/nowinandroid.md) | 226 | 237 | 388 | 4 (protobuf 생성 코드) | 0 |
+| Java | [jsoup](docs/e2e/java/jsoup.md) | 105 | 230 | 1310 | 2 (2 outside) | 0 |
+| Java | [Netty](docs/e2e/java/netty.md) | 2076 | 2752 | 17600 | 6 (3 ambiguous, 2 outside, 1 unexplained) | 0 |
+| C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 356 | 199 (1 ambiguous, 198 outside) | 0 |
+| C# | [eShop](docs/e2e/csharp/eshop.md) `src/` | 497 | 506 | 924 | 525 (7 ambiguous, 514 outside, 4 unexplained) | 0 |
+| C# | [Serilog](docs/e2e/csharp/serilog.md) `src/Serilog` | 113 | 119 | 560 | 23 (23 outside) | 0 |
+| Kotlin | [nowinandroid](docs/e2e/kotlin/nowinandroid.md) | 226 | 237 | 388 | 4 (3 outside, 1 unexplained) | 0 |
+| Kotlin | [Ktor](docs/e2e/kotlin/ktor.md) | 1578 | 2137 | 6418 | 659 (72 ambiguous, 587 outside) | 0 |
 | TypeScript | [nest](docs/e2e/typescript/nest.md) `packages/` | 730 | 738 | 2304 | 0 | 0 |
+| TypeScript | [TypeORM](docs/e2e/typescript/typeorm.md) `packages/typeorm/src` | 496 | 694 | 3968 | 1 (1 unexplained) | 0 |
 | Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 | 0 | 0 |
-| C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 | 2 | 9개 파일에 10구간 (5구간은 함수 본문; 매크로, `extern "C"`, 멤버 함수 포인터 필드 하나) |
+| Python | [Django](docs/e2e/python/django.md) `django/` | 879 | 1964 | 1853 | 0 | 0 |
+| C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 | 2 (2 unexplained) | 9개 파일에 10구간 (5구간은 함수 본문; 매크로, `extern "C"`, 멤버 함수 포인터 필드 하나) |
 
-프로젝트마다 [`docs/e2e/`](docs/e2e/README.md) 아래에 고정한 커밋, 실행 명령, 미해결 이름과 진단 하나하나의 원인을 적은 문서가 있습니다. 언어별로 알려진 한계는 [`lang-notes.md`](skills/draftsman/references/lang-notes.md)에 있습니다.
+미해결 참조는 이유별로 나눴습니다. *ambiguous*는 같은 이름의 프로젝트 타입이 있어 후보로만 적고 고르지 않은 것, *outside*는 소스 밖에 있는 것(와일드카드·기본 import, 외부 상위 타입의 중첩 타입)으로만 설명되는 것, *unexplained*는 둘 다 아닌 것입니다. 프로젝트마다 [`docs/e2e/`](docs/e2e/README.md) 아래에 고정한 커밋, 실행 명령, 미해결 이름과 진단 하나하나의 원인을 적은 문서가 있습니다. 언어별로 알려진 한계는 [`lang-notes.md`](skills/draftsman/references/lang-notes.md)에 있습니다.
 
 ## 설치
 

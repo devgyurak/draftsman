@@ -115,6 +115,21 @@ is that type. Aliases of aliases are followed.
   (the documentation gives no priority between star and default imports), else they stay
   unresolved with "may be the default import ..." in the hint. A project type of the name
   wins. `dynamic` (Kotlin/JS) is a type keyword: nothing to draw, nothing unresolved.
+- Library types through star imports: the types (classes, interfaces, objects, enums,
+  annotation classes; no functions, no typealiases) of `kotlin.coroutines`,
+  `kotlin.reflect`, `kotlinx.coroutines`, `kotlinx.coroutines.channels` and
+  `kotlinx.coroutines.flow`, as their API references on kotlinlang.org list them, get their
+  external id (`kotlinx.coroutines.CoroutineScope`) when the file star-imports the package
+  and exactly one of the star-imported packages has the name (two would be an ambiguity
+  error in Kotlin). The project's own types, explicit imports and the file's own package
+  come first. `CoroutineContext.Key` follows its head. The table is not used where a
+  nested type of an external supertype could have the name, as Kotlin would take that
+  first: under a supertype whose nested types are not known (Netty, `java.io`,
+  `kotlin.AutoCloseable`), the name stays unresolved with both hints. Names whose
+  `actual` is a typealias on some platform are left out: `Runnable` (`java.lang.Runnable`
+  on the JVM, so still the uncertain default import), `CloseableCoroutineDispatcher`, and
+  `CancellationException` (also in `kotlin.coroutines.cancellation`). Other libraries (kotlinx.serialization, kotlinx.io,
+  Netty, servlet) have no table: their names stay unresolved with a hint.
 - Gradle build and settings scripts (`*.gradle.kts`) are not extracted; other `.kts`
   scripts are.
 - Function types (`Route.() -> Unit`, `suspend (Call) -> Unit`, `context(Log) () -> Unit`,

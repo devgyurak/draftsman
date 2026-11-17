@@ -94,13 +94,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\nexternal supertypes: {', '.join(e.id for e in ir.externals)}")
 
     if ir.unresolved:
-        # names only explained by a wildcard import (C# `using`, Java `.*`) or by an
-        # external supertype (`LayoutParams` inside a FrameLayout subclass) are almost
+        # names only explained by something outside the sources (a wildcard import, an
+        # external supertype: `LayoutParams` inside a FrameLayout subclass) are almost
         # always framework types; list them compactly, the rest in full
-        wild = [u for u in ir.unresolved if u.hint and not u.candidates
-                and ("wildcard import" in u.hint or "inherited from" in u.hint)]
+        wild = [u for u in ir.unresolved if u.reason == "outside"]
         rest = [u for u in ir.unresolved if u not in wild]
-        print(f"\nunresolved references ({len(ir.unresolved)}):")
+        reasons = Counter(u.reason for u in ir.unresolved if u.reason)
+        split = ", ".join(f"{n} {r}" for r, n in sorted(reasons.items()))
+        print(f"\nunresolved references ({len(ir.unresolved)}{': ' + split if split else ''}):")
         for u in rest:
             where = f"{types[u.from_].display_name}" + (f".{u.via}" if u.via else "")
             extra = []

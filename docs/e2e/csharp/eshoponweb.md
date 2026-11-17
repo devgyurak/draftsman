@@ -8,7 +8,7 @@ A reference ASP.NET Core application: MVC, Razor Pages, Blazor admin, a public A
 | Commit | `4da8212117` (2025-01-13) |
 | Extracted | `src/` (tests are under `tests/`) |
 
-Measured on 2026-11-17 with Draftsman `6c455fc`.
+Measured on 2026-11-17 with Draftsman `82118c5` and the change that splits unresolved references by reason (the summary line below).
 
 ## Run
 
@@ -39,12 +39,12 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 209 files, 208 types, relations: association 96, dependency 199, extends 34, implements 27, 199 unresolved, 0 diagnostics
+draftsman: 209 files, 208 types, relations: association 96, dependency 199, extends 34, implements 27, 199 unresolved (1 ambiguous, 198 outside the sources), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 209 | 208 | 96 | 199 | 34 | 27 | 199 | 0 |
+| 209 | 208 | 96 | 199 | 34 | 27 | 199 (1 ambiguous, 198 outside) | 0 |
 
 Types by kind: 185 classes, 5 abstract classes, 16 interfaces, 1 record, 1 enum.
 
@@ -52,7 +52,10 @@ The Mermaid and SVG renders of the view draw 5 types and 5 relations (`BasketSer
 
 ## Unresolved
 
-- 195 are library and framework types reached through `using` directives: ASP.NET Core (`PageModel`, `IActionResult`, `Controller`), EF Core (`DbContext`, `ModelBuilder`, `EntityTypeBuilder`), Identity (`UserManager`, `SignInManager`), MediatR, AutoMapper and Ardalis (`Specification`, `EndpointBaseAsync.WithRequest.WithActionResult`). Each hint names the namespaces it may come from (*may come from wildcard import Microsoft.EntityFrameworkCore.*, ...*); a wildcard import cannot tell which of them declares the name, so none is picked.
+198 outside the sources, 1 ambiguous.
+
+- 194 are library and framework types reached through `using` directives: ASP.NET Core (`PageModel`, `IActionResult`, `Controller`), EF Core (`DbContext`, `ModelBuilder`, `EntityTypeBuilder`), Identity (`UserManager`, `SignInManager`), MediatR, AutoMapper and Ardalis (`Specification`, `EndpointBaseAsync.WithRequest.WithActionResult`). Each hint names the namespaces it may come from (*may come from wildcard import Microsoft.EntityFrameworkCore.*, ...*); a wildcard import cannot tell which of them declares the name, so none is picked.
+- `IEmailSender` in `RegisterModel` is ASP.NET Identity's (`using Microsoft.AspNetCore.Identity.UI.Services;`). The project declares an `IEmailSender` of its own, which is listed as a candidate and not picked: ambiguous.
 - 4 are Blazor components (`Create`, `Delete`, `Details`, `Edit`) declared in `.razor` files, which are not C# sources and are not extracted.
 - 83 distinct names in all; `PageModel` (12) and `IActionResult` (10) are the most frequent.
 

@@ -111,8 +111,12 @@ names imported from packages (`import { X } from 'lib'`) are externals, not unre
 | `raw_type` | the name as written |
 | `via` | member it appeared in, if any |
 | `candidates` | project types with the same simple name (not linked automatically) |
-| `hint` | e.g. `may come from wildcard import com.stripe.*` |
+| `hint` | where the name may come from: `may come from wildcard import com.stripe.*` (packages outside the sources by name, then a count of those the project also declares), `may be the default import java.lang.Class`, `may be a nested type inherited from android.widget.FrameLayout` |
+| `reason` | why it stays unresolved: `ambiguous` (there are `candidates`), `outside` (no candidates, and only something outside the sources explains it: a wildcard, project-wide or default import, a nested type of an external supertype), `unexplained` (anything else: a nested type the project type lacks, a relative import that reaches no class, no hint at all) |
 | `location` | `{file, line}` |
+
+`extract.py` prints the count by reason: `931 unresolved (72 ambiguous, 859 outside the
+sources)`. Files written before `reason` existed lack it; readers treat it as absent.
 
 ## Diagnostic
 

@@ -88,8 +88,10 @@ def test_summary_groups_likely_external_names(tmp_path):
         "package p; import android.widget.FrameLayout;"
         " class MyLayout extends FrameLayout { LayoutParams lp; MarginLayoutParams m; }")
     ir = tmp_path / "ir.json"
-    run("extract.py", tmp_path / "src", "-o", ir)
+    res = run("extract.py", tmp_path / "src", "-o", ir)
+    assert "2 unresolved (2 outside the sources)" in res.stderr
     out = run("summary.py", ir).stdout
+    assert "unresolved references (2: 2 outside):" in out
     assert "+ 2 only explained by wildcard imports or external supertypes" in out
     assert "LayoutParams" in out and "in MyLayout" not in out
 

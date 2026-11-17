@@ -1081,3 +1081,137 @@ def test_kotlin_annotation_class(tmp_path):
     from conftest import extract_source
     ir = extract_source(tmp_path, {"A.kt": "package p\nannotation class Marker\n"})
     assert by_name(ir, "Marker").kind == "annotation"
+
+
+# ------------------------------------------------------------------ library types and reasons
+
+def test_kotlin_library_types_through_star_imports(tmp_path):
+    """`import kotlinx.coroutines.*` makes CoroutineScope kotlinx.coroutines.CoroutineScope;
+    the project's own type, an explicit import or the same package come first, and
+    without the star import the name stays unresolved."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "k/Worker.kt": ("package io.app\nimport kotlinx.coroutines.*\nimport kotlin.coroutines.*\n"
+                        "class Worker : CoroutineScope {\n  val job: Job? = null\n"
+                        "  override val coroutineContext: CoroutineContext get() = TODO()\n}\n"
+                        "class Elem\nobject CurrentKey : CoroutineContext.Key<Elem>\n"),
+        "own/Job.kt": ("package io.own\nimport kotlinx.coroutines.*\nclass Job\n"
+                       "class Holder(val j: Job)\n"),
+        "exp/A.kt": "package io.exp\nimport kotlinx.coroutines.*\nimport my.lib.Job\nclass A : Job\n",
+        "none/B.kt": "package io.none\nimport io.vendor.*\nclass B : CoroutineScope\n",
+    })
+    rels = {(r.from_, r.kind, r.to) for r in ir.relations}
+    assert ("io.app.Worker", "implements", "kotlinx.coroutines.CoroutineScope") in rels
+    assert ("io.app.CurrentKey", "implements", "kotlin.coroutines.CoroutineContext.Key") in rels
+    assert ("io.own.Holder", "association", "io.own.Job") in rels          # same package
+    assert ("io.exp.A", "implements", "my.lib.Job") in rels                 # explicit import
+    (u,) = ir.unresolved                                                    # not star-imported
+    assert (u.from_, u.raw_type, u.reason) == ("io.none.B", "CoroutineScope", "outside")
+
+
+def test_kotlin_library_types_give_way_to_inherited_nested_types(tmp_path):
+    """A nested type of a supertype comes before any import in Kotlin. Under an external
+    supertype whose nested types are not known, the table is not used."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {"C.kt": (
+        "package io.app\nimport kotlinx.coroutines.*\nimport java.io.FilterInputStream\n"
+        "class C(i: java.io.InputStream) : FilterInputStream(i) {\n  val job: Job? = null\n"
+        # a nested class's own supertype clause sees the nested types of C's supertypes
+        "  class Inner : CoroutineScope\n}\n"
+        "class D : CoroutineScope {\n  val job: Job? = null\n}\n")})
+    assert {(u.from_, u.raw_type) for u in ir.unresolved} == {
+        ("io.app.C", "Job"), ("io.app.C.Inner", "CoroutineScope")}
+    assert all("inherited from java.io.FilterInputStream" in u.hint for u in ir.unresolved)
+
+
+def test_kotlin_library_type_rules(tmp_path, monkeypatch):
+    """Two star-imported packages with the name are an ambiguity, not a choice; a known
+    nested type of the same name in a supertype wins."""
+    from conftest import extract_source
+    from draftsman.langs import kotlin
+    monkeypatch.setitem(kotlin._LIBRARY, "Flow",
+                        ("kotlinx.coroutines.flow", "kotlinx.coroutines.channels"))
+    monkeypatch.setitem(kotlin._NESTED, "kotlinx.coroutines.CoroutineScope", frozenset({"Job"}))
+    ir = extract_source(tmp_path, {
+        "a/F.kt": ("package io.a\nimport kotlinx.coroutines.flow.*\n"
+                   "import kotlinx.coroutines.channels.*\nclass F : Flow<Int>\n"),
+        "b/G.kt": "package io.b\nimport kotlinx.coroutines.flow.*\nclass G : Flow<Int>\n",
+        "c/S.kt": "package io.c\nimport kotlinx.coroutines.*\nclass S : CoroutineScope {\n  val job: Job? = null\n}\n",
+    })
+    rels = {(r.from_, r.kind, r.to) for r in ir.relations}
+    assert ("io.b.G", "implements", "kotlinx.coroutines.flow.Flow") in rels
+    assert ("io.c.S", "implements", "kotlinx.coroutines.CoroutineScope") in rels
+    assert {(u.from_, u.raw_type) for u in ir.unresolved} == {("io.a.F", "Flow"), ("io.c.S", "Job")}
+
+
+def test_wildcard_hint_names_outside_packages_first(tmp_path):
+    """Packages outside the sources are named, all of them; those the project declares too
+    are counted after them."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "b/B.kt": "package io.app.b\nclass B\n",
+        "c/C.kt": "package io.app.c\nclass C\n",
+        "d/D.kt": "package io.app.d\nclass D\n",
+        "a/A.kt": ("package io.app.a\nimport io.app.b.*\nimport kotlinx.io.*\nimport io.app.c.*\n"
+                   "import okio.*\nclass A(val buf: Buffer)\n"),
+        "e/E.kt": "package io.app.e\nimport io.app.d.*\nimport kotlinx.io.*\nclass E(val buf: Buffer)\n",
+        "f/F.kt": "package io.app.f\nimport io.app.d.*\nclass F(val buf: Buffer)\n",
+    })
+    hints = {u.from_: u.hint for u in ir.unresolved}
+    assert hints["io.app.a.A"] == ("may come from wildcard import kotlinx.io.*, okio.*; "
+                                   "or from one of 2 packages the project also declares")
+    assert hints["io.app.e.E"] == ("may come from wildcard import kotlinx.io.*; "
+                                   "or from io.app.d.*, a package the project also declares")
+    assert hints["io.app.f.F"] == ("may come from wildcard import io.app.d.* "
+                                   "(a package the project also declares)")
+
+
+def test_unresolved_reasons(tmp_path):
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "p/Request.java": "package p; public class Request {}",
+        "q/A.java": ("package q; import com.vendor.*;\n"
+                     "class A { Request r; Gadget g; Outer.Missing m; Nowhere n; Gizmo.Part p; }"),
+        "q/Outer.java": "package q; class Outer {}",
+        "r/B.java": "package r; class B { Elsewhere e; }",
+    })
+    reasons = {u.raw_type: u.reason for u in ir.unresolved}
+    assert reasons == {"Request": "ambiguous",       # p.Request shares the name
+                       "Gadget": "outside",          # only com.vendor.* explains it
+                       "Outer.Missing": "unexplained",   # Outer has no such nested type
+                       "Nowhere": "outside",         # com.vendor.* could still provide it
+                       "Elsewhere": "unexplained",   # no import could provide it
+                       "Gizmo.Part": "outside"}      # as its head is
+
+
+def test_kotlin_library_table_leaves_out_platform_typealiases(tmp_path):
+    """kotlinx.coroutines.Runnable is java.lang.Runnable on the JVM (an `actual typealias`),
+    so it is not in the table: still the uncertain default import, as before."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {"W.kt": (
+        "package io.app\nimport kotlinx.coroutines.*\nclass Worker : Runnable\n"
+        "class D(val d: CloseableCoroutineDispatcher)\n")})
+    assert not ir.relations
+    hints = {u.raw_type: u.hint for u in ir.unresolved}
+    assert set(hints) == {"Runnable", "CloseableCoroutineDispatcher"}
+    assert "may be the default import java.lang.Runnable" in hints["Runnable"]
+
+
+def test_kotlin_library_types_under_known_library_supertypes(tmp_path):
+    """Under a library supertype whose nested types are known (its own and inherited:
+    CoroutineContext.Element sees CoroutineContext's Element and Key), the table applies."""
+    from conftest import extract_source
+    from draftsman.langs import kotlin
+    assert kotlin._NESTED["kotlinx.coroutines.CompletableJob"] == {"Element", "Key"}
+    assert kotlin._NESTED["kotlinx.coroutines.channels.Channel"] == {"Factory"}
+    ir = extract_source(tmp_path, {"E.kt": (
+        "package io.app\nimport kotlin.coroutines.*\nimport kotlinx.coroutines.channels.*\n"
+        "class Ctx : CoroutineContext.Element {\n"
+        "  override val key: CoroutineContext.Key<*> get() = TODO()\n"
+        "  object MyKey : CoroutineContext.Key<Ctx>\n}\n"
+        "class Tracer<E>(val delegate: ChannelIterator<E>) : ChannelIterator<E>\n")})
+    assert not ir.unresolved
+    assert {(r.from_, r.to) for r in ir.relations} == {
+        ("io.app.Ctx", "kotlin.coroutines.CoroutineContext.Element"),
+        ("io.app.Ctx.MyKey", "kotlin.coroutines.CoroutineContext.Key"),
+        ("io.app.Tracer", "kotlinx.coroutines.channels.ChannelIterator")}

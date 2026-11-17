@@ -250,7 +250,7 @@ class CSharpSpec(LanguageSpec):
         origin = f"usings common to the {len(projects)} projects that compile it"
         return ";".join(sorted(map(str, projects))), [(ns, origin) for ns in common]
 
-    def library_type(self, name, imported, arity=None):
+    def library_type(self, name, imported, arity=None, external_supers=None):
         spaces = []
         for ns in _LIBRARY.get(name, ()):
             generic = ns.endswith("*")

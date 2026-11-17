@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 if TYPE_CHECKING:
     import tree_sitter as ts
@@ -186,11 +186,13 @@ class LanguageSpec:
     def normalize_type(self, text: Optional[str]) -> Optional[str]:
         return text
 
-    def library_type(self, name: str, imported: set[str],
-                     arity: Optional[int] = None) -> Optional[str]:
+    def library_type(self, name: str, imported: set[str], arity: Optional[int] = None,
+                     external_supers: Optional[Callable[[], list[str]]] = None) -> Optional[str]:
         """Qualified id of a well-known library type ``name`` reachable through one of
         the ``imported`` namespaces, else None; ``arity`` is its number of type
-        arguments when known (generic and plain versions can live apart)."""
+        arguments when known (generic and plain versions can live apart).
+        ``external_supers()`` lists the external supertypes whose nested types are in
+        scope there, for languages where such a nested type would win over an import."""
         return None
 
     def is_package_head(self, head: str, known: set[str]) -> bool:

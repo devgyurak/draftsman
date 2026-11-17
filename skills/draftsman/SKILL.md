@@ -20,7 +20,8 @@ All paths below are relative to this skill's directory.
 2. **No hand-written diagrams.** If the output is wrong, change view.json and re-render.
    If the facts are wrong, that is an extractor bug: tell the user, do not patch the output.
 3. **Report what you left out.** Mention hidden types/members and list unresolved
-   references at the end of your answer.
+   references at the end of your answer, by reason: *ambiguous* ones (a project type has
+   the name) and *unexplained* ones one by one, *outside* ones as a group.
 
 ## Setup (once per session)
 
@@ -91,10 +92,10 @@ the user's repository, unless the user asks for a file there.
    and re-render. Exit 2: no validator installed; say the diagram was not syntax-checked.
 9. **Answer** with the Mermaid block (or the path of the SVG/HTML file), then briefly:
    scope (focus/hops, what was hidden), your notes, and the unresolved references with
-   their locations. In `summary.py` output, unresolved names explained only by wildcard
-   imports (`using X;`, `import x.*`) or by an external supertype (a nested type such as
-   `LayoutParams` inherited from `FrameLayout`) are listed compactly — these are almost
-   always framework types; mention them as a group, not one by one.
+   their locations. Each entry of `unresolved` has a `reason`. Those with `"outside"`, only
+   explained by a wildcard or default import or by an external supertype (a nested type
+   such as `LayoutParams` inherited from `FrameLayout`), are almost always framework types:
+   `summary.py` lists them compactly; mention them as a group, not one by one.
 
 ## References
 

@@ -226,9 +226,15 @@ class Unresolved:
     via: Optional[str] = None
     candidates: list[str] = field(default_factory=list)
     hint: Optional[str] = None
+    # why it stays unresolved: "ambiguous" (project types share the name: candidates),
+    # "outside" (only something outside the sources explains it: a wildcard or default
+    # import, a nested type of an external supertype), "unexplained" (anything else)
+    reason: Optional[str] = None
 
     def to_dict(self) -> dict:
         d: dict[str, Any] = {"from": self.from_, "raw_type": self.raw_type}
+        if self.reason is not None:
+            d["reason"] = self.reason
         if self.via is not None:
             d["via"] = self.via
         if self.candidates:
@@ -247,6 +253,7 @@ class Unresolved:
             via=d.get("via"),
             candidates=d.get("candidates", []),
             hint=d.get("hint"),
+            reason=d.get("reason"),
         )
 
 

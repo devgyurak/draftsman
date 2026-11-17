@@ -110,3 +110,24 @@ Notes for anyone with `view.json` files written against a development build:
   (typedefs, `std::pair` elements, default-valued parameters), nowinandroid 357 -> 388
   (dependencies of `@Inject` primary constructors with a plain parameter). Every new
   relation was checked against its source; none were lost.
+- **Unresolved references carry a `reason`**: `ambiguous` (project types share the name,
+  listed as `candidates`), `outside` (only something outside the sources explains it: a
+  wildcard or default import, a nested type of an external supertype) or `unexplained`.
+  `extract.py` prints the split (`657 unresolved (72 ambiguous, 585 outside the sources)`)
+  and `summary.py` groups by it instead of searching the hint text. Older `ir.json` files
+  have no `reason`; `summary.py` then lists every entry in full.
+- Wildcard hints name every package outside the sources first and count the ones the
+  project also declares after them (`may come from wildcard import kotlinx.coroutines.*;
+  or from one of 8 packages the project also declares`); before, the first three star
+  imports of the file were shown, project packages among them. A nested class's
+  supertype clause now gets the "nested type inherited from" hint of its enclosing type's
+  external supertypes too.
+- Kotlin: the types of `kotlin.coroutines`, `kotlin.reflect`, `kotlinx.coroutines`,
+  `kotlinx.coroutines.channels` and `kotlinx.coroutines.flow` (from their API references)
+  get their external id through a star import of their package, when exactly one
+  star-imported package has the name and no external supertype could hold a nested type
+  of that name. Names whose `actual` is a typealias on some platform (`Runnable`,
+  `CloseableCoroutineDispatcher`, `CancellationException`) are left out. Ktor: 931 -> 659
+  unresolved, 69 supertypes now drawn as external (`CoroutineScope` 47), 6349 -> 6418
+  relations; the other measured projects keep every relation (only hint texts changed, in
+  the two eShops).

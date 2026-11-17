@@ -29,6 +29,7 @@ class Resolution:
     target: Optional[str] = None      # project type id or external qualified name
     hint: Optional[str] = None
     candidates: list[str] = field(default_factory=list)
+    outside: bool = False   # unresolved, and only something outside the sources explains it
 
 
 class Resolver:
@@ -245,6 +246,15 @@ class Resolver:
             cur = self.index.get(cur.outer) if cur.outer else None
         return out
 
+    def _scope_supers(self, rtype: RawType, inherit: bool) -> list[str]:
+        """External supertypes whose nested types are in scope where a name is written:
+        those of the type and its enclosing types, or only the enclosing types' in the
+        type's own supertype clause."""
+        if inherit:
+            return self._external_supers(rtype)
+        outer = self.index.get(rtype.outer) if rtype.outer else None
+        return self._external_supers(outer) if outer else []
+
     def _nested_path(self, target: str, rest: str, sep: str, inherit: bool) -> Optional[str]:
         for part in rest.split(sep):
             target = self._member_type(self.index[target], part, sep, inherit, set())
@@ -317,7 +327,8 @@ class Resolver:
                 heads.add(scope.namespace.split(sep, 1)[0])
             if spec.is_package_head(head, heads):
                 return Resolution(EXTERNAL, name)
-            return Resolution(UNRESOLVED, hint=first.hint, candidates=first.candidates)
+            return Resolution(UNRESOLVED, hint=first.hint, candidates=first.candidates,
+                              outside=first.outside)
 
         # nested types of this type and its enclosing types, including inherited ones
         cur: Optional[RawType] = rtype
@@ -378,7 +389,8 @@ class Resolver:
                     # the rest of that namespace is still ASP.NET
                     shared_wildcards.append(imp)
 
-        library = spec.library_type(name, {i.path for i in scope.imports if i.wildcard}, arity)
+        library = spec.library_type(name, {i.path for i in scope.imports if i.wildcard}, arity,
+                                    lambda: self._scope_supers(rtype, inherit))
         if library:
             return Resolution(EXTERNAL, library)
         if spec.is_builtin(name):
@@ -391,11 +403,26 @@ class Resolver:
 
         hints = []
         candidates = external_wildcards + shared_wildcards
-        own = list(dict.fromkeys(i.path for i in candidates if not i.project_wide))
-        if own:   # the file's own imports first: they are what a reader can see
-            shown = ", ".join(f"{w}{sep}*" for w in own[:3])
-            more = f" (+{len(own) - 3} more)" if len(own) > 3 else ""
-            hints.append(f"may come from wildcard import {shown}{more}")
+        # the file's own imports first, as a reader sees them: every package outside the
+        # sources by name, then those the project declares too (a library may share one)
+        # by count, as they rarely are the source
+        outside = list(dict.fromkeys(i.path for i in external_wildcards if not i.project_wide))
+        shared = list(dict.fromkeys(i.path for i in shared_wildcards
+                                    if not i.project_wide and i.path not in outside))
+        own = outside + shared
+        if outside:
+            hint = "may come from wildcard import " + ", ".join(f"{w}{sep}*" for w in outside)
+            if len(shared) == 1:
+                hint += f"; or from {shared[0]}{sep}*, a package the project also declares"
+            elif shared:
+                hint += f"; or from one of {len(shared)} packages the project also declares"
+            hints.append(hint)
+        elif shared:
+            shown = ", ".join(f"{w}{sep}*" for w in shared[:3])
+            more = f" (+{len(shared) - 3} more)" if len(shared) > 3 else ""
+            also = "a package" if len(shared) == 1 else "packages"
+            hints.append(f"may come from wildcard import {shown}{more} ({also} the project "
+                         "also declares)")
         # project-wide ones by where they come from, not by example: any one of them may
         # be the source, and naming two at random misleads
         origins: dict[str, list[str]] = {}
@@ -416,12 +443,11 @@ class Resolver:
             hints.append("may come from a project-wide wildcard import: " + ", ".join(parts))
         if default:
             hints.append(f"may be the default import {default}")
-        if inherit:
-            ext = self._external_supers(rtype)
-            if ext:
-                hints.append("may be a nested type inherited from " + ", ".join(ext))
+        ext = self._scope_supers(rtype, inherit)
+        if ext:
+            hints.append("may be a nested type inherited from " + ", ".join(ext))
         return Resolution(UNRESOLVED, hint="; ".join(hints) or None,
-                          candidates=self._candidates(name, sep))
+                          candidates=self._candidates(name, sep), outside=bool(hints))
 
     def _candidates(self, name: str, sep: str) -> list[str]:
         return sorted(self.by_simple.get(name.rsplit(sep, 1)[-1], []))
@@ -527,9 +553,10 @@ class _Builder:
                     via: Optional[str]) -> None:
         key = (rtype.qualified_name, raw)
         if key not in self.unresolved:
+            reason = "ambiguous" if res.candidates else "outside" if res.outside else "unexplained"
             self.unresolved[key] = Unresolved(
                 rtype.qualified_name, raw, loc, via=via,
-                candidates=res.candidates, hint=res.hint)
+                candidates=res.candidates, hint=res.hint, reason=reason)
 
     # ------------------------------------------------------------------
 

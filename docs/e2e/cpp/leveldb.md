@@ -8,7 +8,7 @@ Google's key-value store: plain C++ with a C API, ports and benchmarks.
 | Commit | `29465588d3` (2026-11-12) |
 | Extracted | the whole repository without `*_test.cc` and `third_party/` |
 
-Measured on 2026-11-17 with Draftsman `6c455fc`.
+Measured on 2026-11-17 with Draftsman `82118c5` and the change that splits unresolved references by reason (the summary line below).
 
 ## Run
 
@@ -39,18 +39,20 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 102 files, 161 types, relations: association 227, dependency 616, extends 17, implements 25, 2 unresolved, 10 diagnostics
+draftsman: 102 files, 161 types, relations: association 227, dependency 616, extends 17, implements 25, 2 unresolved (2 unexplained), 10 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 102 | 161 | 227 | 616 | 17 | 25 | 2 | 10 |
+| 102 | 161 | 227 | 616 | 17 | 25 | 2 (2 unexplained) | 10 |
 
 Types by kind: 90 classes, 48 structs, 4 abstract classes, 8 interfaces, 11 enums.
 
 The Mermaid and SVG renders of the view draw 31 types and 105 relations (`DBImpl` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 161 types and 479 relations and opens on the same focus. No inferred edges.
 
 ## Unresolved
+
+Both unexplained, with no hint: C++ has no wildcard import that could explain them.
 
 - `HANDLE` in `leveldb::ScopedHandle` (`util/env_windows.cc`): the Windows API type from `<windows.h>`, which is not in the sources.
 - `BlockFunction` in `leveldb::TwoLevelIterator` (`table/two_level_iterator.cc`): a typedef of a function pointer, `typedef Iterator* (*BlockFunction)(...)`. Such typedefs are not read as aliases yet; the name stays unresolved rather than being dropped.

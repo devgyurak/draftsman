@@ -66,6 +66,85 @@ _DEFAULTS = {
                     "ExperimentalUnsignedTypes DeprecatedSinceKotlin"),
 }
 
+# Library types reached through a star import of their package (`import kotlinx.coroutines.*`),
+# from the packages' API references: kotlinlang.org/api/core/kotlin-stdlib (2.4) for
+# kotlin.coroutines and kotlin.reflect, kotlinlang.org/api/kotlinx.coroutines (1.11.0) for
+# the rest. Classifiers only: no functions (`SupervisorJob()`), no typealiases
+# (`CompletionHandler`), and none whose `actual` is a typealias on some platform in the
+# kotlinx.coroutines 1.11.0 sources: `CancellationException` (also in
+# kotlin.coroutines.cancellation), `Runnable` (java.lang.Runnable on the JVM),
+# `CloseableCoroutineDispatcher` (ExecutorCoroutineDispatcher on the JVM).
+_LIBRARY: dict[str, tuple[str, ...]] = {}
+# Library types that are common supertypes: (their own nested classifiers, their supertypes),
+# from the types' API pages and the kotlinx.coroutines 1.11.0 sources. In a class that
+# extends one, its nested classifiers and those of its supertypes are in scope without
+# qualification and come before any import, so the table does not apply to those names
+# there. Under a supertype not listed, any nested type is possible: no table at all.
+_SUPERTYPES: dict[str, tuple[frozenset, tuple[str, ...]]] = {
+    "kotlin.coroutines.CoroutineContext": (frozenset({"Element", "Key"}), ()),
+    "kotlin.coroutines.CoroutineContext.Element": (frozenset(), ("kotlin.coroutines.CoroutineContext",)),
+    "kotlin.coroutines.AbstractCoroutineContextElement":
+        (frozenset(), ("kotlin.coroutines.CoroutineContext.Element",)),
+    "kotlin.coroutines.Continuation": (frozenset(), ()),
+    "kotlin.coroutines.ContinuationInterceptor":
+        (frozenset({"Key"}), ("kotlin.coroutines.CoroutineContext.Element",)),
+    "kotlinx.coroutines.CoroutineScope": (frozenset(), ()),
+    "kotlinx.coroutines.DisposableHandle": (frozenset(), ()),
+    "kotlinx.coroutines.Job": (frozenset({"Key"}), ("kotlin.coroutines.CoroutineContext.Element",)),
+    "kotlinx.coroutines.CompletableJob": (frozenset(), ("kotlinx.coroutines.Job",)),
+    "kotlinx.coroutines.Deferred": (frozenset(), ("kotlinx.coroutines.Job",)),
+    "kotlinx.coroutines.CoroutineDispatcher": (frozenset(), (
+        "kotlin.coroutines.AbstractCoroutineContextElement", "kotlin.coroutines.ContinuationInterceptor")),
+    "kotlinx.coroutines.CoroutineExceptionHandler":
+        (frozenset({"Key"}), ("kotlin.coroutines.CoroutineContext.Element",)),
+    "kotlinx.coroutines.flow.Flow": (frozenset(), ()),
+    "kotlinx.coroutines.flow.FlowCollector": (frozenset(), ()),
+    "kotlinx.coroutines.channels.Channel": (frozenset({"Factory"}), (
+        "kotlinx.coroutines.channels.SendChannel", "kotlinx.coroutines.channels.ReceiveChannel")),
+    "kotlinx.coroutines.channels.SendChannel": (frozenset(), ()),
+    "kotlinx.coroutines.channels.ReceiveChannel": (frozenset(), ()),
+    "kotlinx.coroutines.channels.ChannelIterator": (frozenset(), ()),
+}
+
+
+def _nested_in_scope(type_id: str) -> frozenset:
+    own, supers = _SUPERTYPES[type_id]
+    return own.union(*(_nested_in_scope(s) for s in supers))
+
+
+_NESTED: dict[str, frozenset] = {t: _nested_in_scope(t) for t in _SUPERTYPES}
+
+for _package, _names in {
+    "kotlin.coroutines": "AbstractCoroutineContextElement AbstractCoroutineContextKey "
+                         "Continuation ContinuationInterceptor CoroutineContext "
+                         "EmptyCoroutineContext ExperimentalStdlibCoroutineSupportApi "
+                         "RestrictsSuspension SuspendFunction",
+    "kotlin.reflect": "AssociatedObjectKey ExperimentalAssociatedObjects KAnnotatedElement "
+                      "KCallable KClass KClassifier KDeclarationContainer KFunction "
+                      "KMutableProperty KMutableProperty0 KMutableProperty1 KMutableProperty2 "
+                      "KParameter KProperty KProperty0 KProperty1 KProperty2 KType "
+                      "KTypeParameter KTypeProjection KVariance KVisibility",
+    "kotlinx.coroutines": "CancellableContinuation CompletableDeferred CompletableJob "
+                          "CopyableThreadContextElement CopyableThrowable CoroutineDispatcher "
+                          "CoroutineExceptionHandler "
+                          "CoroutineName CoroutineScope CoroutineStart Deferred "
+                          "DelicateCoroutinesApi Dispatchers DisposableHandle "
+                          "ExecutorCoroutineDispatcher ExperimentalCoroutinesApi "
+                          "ExperimentalForInheritanceCoroutinesApi FlowPreview GlobalScope "
+                          "InternalCoroutinesApi InternalForInheritanceCoroutinesApi Job "
+                          "MainCoroutineDispatcher NonCancellable ObsoleteCoroutinesApi "
+                          "ThreadContextElement TimeoutCancellationException",
+    "kotlinx.coroutines.channels": "ActorScope BufferOverflow Channel ChannelIterator "
+                                   "ChannelResult ClosedReceiveChannelException "
+                                   "ClosedSendChannelException ProducerScope ReceiveChannel "
+                                   "SendChannel TickerMode",
+    "kotlinx.coroutines.flow": "AbstractFlow Flow FlowCollector MutableSharedFlow "
+                               "MutableStateFlow SharedFlow SharingCommand SharingStarted "
+                               "StateFlow",
+}.items():
+    for _name in _names.split():
+        _LIBRARY[_name] = _LIBRARY.get(_name, ()) + (_package,)
+
 
 class KotlinSpec(LanguageSpec):
     name = "kotlin"
@@ -89,6 +168,19 @@ class KotlinSpec(LanguageSpec):
 
     def builtin_id(self, name):
         return f"{_CORE[name]}.{name}" if name in _CORE else name
+
+    def library_type(self, name, imported, arity=None, external_supers=None):
+        # only through a star import of the package, and only when exactly one of the
+        # star-imported packages has the name: two would be an ambiguity error in Kotlin
+        packages = [p for p in _LIBRARY.get(name, ()) if p in imported]
+        if len(packages) != 1:
+            return None
+        # a nested type of a supertype comes before any import; one of an external
+        # supertype is known only for the types listed in _NESTED
+        for sup in external_supers() if external_supers else ():
+            if sup not in _NESTED or name in _NESTED[sup]:
+                return None
+        return f"{packages[0]}.{name}"
 
     def default_import(self, name):
         return f"{_DEFAULTS[name]}.{name}" if name in _DEFAULTS else None
