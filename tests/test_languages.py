@@ -822,3 +822,58 @@ def test_kotlin_companion_with_supertypes_is_its_own_type(tmp_path):
     assert ("p.B.Factory", "implements", "p.Creator") in r
     assert not any(f in ("p.A", "p.B") and k == "implements" for f, k, _ in r)
     assert members(ir, "C")["id"].static
+
+
+def test_variadic_default_and_optional_parameters(tmp_path):
+    from conftest import extract_source
+    from draftsman.graph import member_text
+    ir = extract_source(tmp_path, {
+        "py/m.py": ("class Item: ...\nclass Status: ...\n"
+                    "class S:\n    def f(self, *args: Item, **kw: Status) -> None: ...\n"
+                    "    def g(self, *args, **kw): ...\n"),
+        "ts/a.ts": ("export class P {}\nexport class Q {}\n"
+                    "export class S { constructor(protected q?: Q) {} f(...rest: P[]) {} }\n"),
+        "cs/O.cs": ("namespace N { class Q {} class S { void F(params Q[] qs) {} } }"),
+        "cpp/s.h": "class P {};\nclass S { void a(P p = P()); };\n",
+    })
+    sigs = {t.id: [member_text(m) for m in t.members] for t in ir.types}
+    assert sigs["py.m.S"] == ["+ f(*args: Item, **kw: Status): None", "+ g(*args, **kw)"]
+    assert sigs["ts/a.S"] == ["+ constructor(q: Q)", "# q: Q", "+ f(...rest: P[])"]
+    assert sigs["N.S"] == ["- F(qs: Q[]): void"]
+    assert sigs["S"] == ["- a(p: P): void"]
+    r = {(r.from_, r.kind, r.to, r.via) for r in ir.relations}
+    assert {("py.m.S", "dependency", "py.m.Item", "f"), ("py.m.S", "dependency", "py.m.Status", "f"),
+            ("ts/a.S", "dependency", "ts/a.P", "f"), ("ts/a.S", "association", "ts/a.Q", "q"),
+            ("N.S", "dependency", "N.Q", "F"), ("S", "dependency", "P", "a")} <= r
+
+
+def test_primary_constructors(tmp_path):
+    from conftest import extract_source
+    from draftsman.graph import member_text
+    ir = extract_source(tmp_path, {
+        "Order.cs": ("namespace N { interface IRepo<T> {} class Person {}\n"
+                     "class Order(IRepo<Order> repo, Person owner) {}\n"
+                     "record Rec(Person P); }"),
+        "W.kt": ("package p\nclass P\nclass Item\nclass WithInit(p: P, vararg val items: Item)\n"
+                 "class Hidden private constructor(p: P)\n"),
+    })
+    sigs = {t.id: [member_text(m) for m in t.members] for t in ir.types}
+    assert sigs["N.Order"] == ["+ Order(repo: IRepo<Order>, owner: Person)"]
+    assert sigs["N.Rec"] == ["+ P: Person"]                       # records: properties only
+    assert sigs["p.WithInit"] == ["+ constructor(p: P, items: Item...)", "+ items: Item..."]
+    assert sigs["p.Hidden"] == ["- constructor(p: P)"]
+    r = _rels(ir)
+    assert {("Order", "dependency", "IRepo", "Order", None),
+            ("Order", "dependency", "Person", "Order", None),
+            ("WithInit", "dependency", "P", "constructor", None),
+            ("WithInit", "association", "Item", "items", "*")} <= r
+
+
+def test_java_throws_is_a_dependency(tmp_path):
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "p/E.java": "package p; public class E extends Exception {}",
+        "p/S.java": "package p; class S { void f() throws E, java.io.IOException {} }"})
+    assert ("p.S", "dependency", "p.E", "f") in {(r.from_, r.kind, r.to, r.via) for r in ir.relations}
+    assert [m.params for m in by_name(ir, "S").members] == [[]]
+    assert not ir.unresolved

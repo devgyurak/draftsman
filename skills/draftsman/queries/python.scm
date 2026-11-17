@@ -53,7 +53,12 @@
     [(identifier) @param.name
      (typed_parameter (identifier) @param.name type: (type) @param.type)
      (default_parameter name: (identifier) @param.name)
-     (typed_default_parameter name: (identifier) @param.name type: (type) @param.type)] @param))
+     (typed_default_parameter name: (identifier) @param.name type: (type) @param.type)
+     ; `*args: Item`, `**kw: Status` (the name keeps its stars)
+     (typed_parameter [(list_splat_pattern) (dictionary_splat_pattern)] @param.name
+                      type: (type) @param.type)
+     (list_splat_pattern) @param.name
+     (dictionary_splat_pattern) @param.name] @param))
 
 ; ---------------------------------------------------------------- type variables
 ; module-level T = TypeVar("T") behaves like a type parameter of the whole file

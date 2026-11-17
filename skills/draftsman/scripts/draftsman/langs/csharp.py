@@ -266,7 +266,7 @@ class CSharpSpec(LanguageSpec):
         return "private"
 
     def visibility(self, owner_kind, member_kind, modifiers, name, node):
-        if node.type == "parameter":  # positional record property
+        if node.type in ("parameter", "parameter_list"):  # record property, primary constructor
             return "public"
         return super().visibility(owner_kind, member_kind, modifiers, name, node)
 

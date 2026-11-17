@@ -106,8 +106,16 @@ class KotlinSpec(LanguageSpec):
         prev = type_node.prev_named_sibling
         if prev is not None and prev.type == "type_modifiers":
             mods = " ".join(src[prev.start_byte:prev.end_byte].decode("utf-8", "replace").split())
-            return f"{mods} {text}"
+            text = f"{mods} {text}"
+        # `vararg val items: Item` is a property holding many Items
+        owner = type_node.parent
+        if owner is not None and owner.type == "class_parameter" and any(
+                c.type == "modifiers" and b"vararg" in c.text for c in owner.children):
+            text += "..."
         return text
+
+    def member_name(self, kind, name):
+        return "constructor" if kind == "constructor" else name
 
     def type_name(self, node, name):
         if node.type == "companion_object":   # `companion object Factory`, else Companion

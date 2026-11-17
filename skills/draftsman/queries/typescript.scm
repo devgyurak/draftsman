@@ -59,6 +59,11 @@
   parameters: (formal_parameters
     (required_parameter "readonly" pattern: (identifier) @name
                         type: (type_annotation (_) @type)?) @member.field))
+(method_definition
+  name: (property_identifier) @_ctor (#eq? @_ctor "constructor")
+  parameters: (formal_parameters
+    (optional_parameter [(accessibility_modifier) "readonly"] pattern: (identifier) @name
+                        type: (type_annotation (_) @type)?) @member.field))
 
 (method_definition
   name: (_) @name
@@ -77,19 +82,19 @@
 ; ---------------------------------------------------------------- parameters
 (method_definition
   parameters: (formal_parameters
-    [(required_parameter pattern: (identifier) @param.name
+    [(required_parameter pattern: [(identifier) (rest_pattern)] @param.name
                          type: (type_annotation (_) @param.type)?)
      (optional_parameter pattern: (identifier) @param.name
                          type: (type_annotation (_) @param.type)?)] @param))
 (method_signature
   parameters: (formal_parameters
-    [(required_parameter pattern: (identifier) @param.name
+    [(required_parameter pattern: [(identifier) (rest_pattern)] @param.name
                          type: (type_annotation (_) @param.type)?)
      (optional_parameter pattern: (identifier) @param.name
                          type: (type_annotation (_) @param.type)?)] @param))
 (abstract_method_signature
   parameters: (formal_parameters
-    [(required_parameter pattern: (identifier) @param.name
+    [(required_parameter pattern: [(identifier) (rest_pattern)] @param.name
                          type: (type_annotation (_) @param.type)?)
      (optional_parameter pattern: (identifier) @param.name
                          type: (type_annotation (_) @param.type)?)] @param))

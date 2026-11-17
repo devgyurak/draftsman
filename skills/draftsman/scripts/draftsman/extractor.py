@@ -39,6 +39,7 @@ class RawMember:
     flags: set[str] = field(default_factory=set)   # capture names present in the match
     value: Optional[str] = None                     # initialiser text, if captured
     scope: Optional[FileScope] = None               # file it was written in (partial types)
+    throws: list[str] = field(default_factory=list)  # Java `throws E`: used, not drawn as a member
 
 
 @dataclass
@@ -395,6 +396,10 @@ class Extractor:
                                          or spec.is_varargs(n)):
                     tref += "..."
                 owner.member.params.append(Param(name, tref))
+            elif (n := _first(caps, "throws")) is not None:
+                owner, _ = self._owner(n, callables, stops=types_by_node)
+                if owner is not None:
+                    owner.throws.append(spec.normalize_type(_text(n, src)))
             elif (n := _first(caps, "tparam")) is not None:
                 target = _first(caps, "tparam.target")
                 if target is not None:
@@ -476,6 +481,7 @@ class Extractor:
             return
         if kind == "method" and type_node is None and name == owner.name:
             kind = "constructor"
+        name = spec.member_name(kind, name)
 
         key = (node.id, name)
         if key in seen_members:  # several patterns matched one declaration

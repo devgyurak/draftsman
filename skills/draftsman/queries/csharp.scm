@@ -48,6 +48,10 @@
 (constructor_declaration
   (modifier)* @modifiers
   name: (identifier) @name) @member.constructor
+; primary constructors (C# 12): `class Order(IRepo<Order> repo, Person owner)`. Records
+; turn their parameters into properties instead (above)
+(class_declaration name: (identifier) @name (parameter_list) @member.constructor)
+(struct_declaration name: (identifier) @name (parameter_list) @member.constructor)
 
 (enum_member_declaration name: (identifier) @name) @member.enum_constant
 
@@ -58,6 +62,15 @@
 (constructor_declaration
   parameters: (parameter_list
     (parameter type: (_) @param.type name: (identifier) @param.name) @param))
+(class_declaration
+  (parameter_list (parameter type: (_) @param.type name: (identifier) @param.name) @param))
+(struct_declaration
+  (parameter_list (parameter type: (_) @param.type name: (identifier) @param.name) @param))
+; `params Q[] qs` is no parameter node: the keyword, type and name are list items
+(method_declaration
+  parameters: (parameter_list "params" . (_) @param.type . (identifier) @param.name @param))
+(constructor_declaration
+  parameters: (parameter_list "params" . (_) @param.type . (identifier) @param.name @param))
 
 ; ---------------------------------------------------------------- aliases (not drawn)
 (using_directive name: (identifier) @alias)

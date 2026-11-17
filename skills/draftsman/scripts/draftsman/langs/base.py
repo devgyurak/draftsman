@@ -123,6 +123,10 @@ class LanguageSpec:
         the type node (Kotlin `suspend`, `context(A)`)."""
         return text
 
+    def member_name(self, kind: str, name: str) -> str:
+        """The name a member is listed under (Kotlin calls every constructor `constructor`)."""
+        return name
+
     def type_name(self, node, name: str) -> str:
         """The name of a type declaration whose @name capture is not the name itself."""
         return name

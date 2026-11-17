@@ -58,6 +58,8 @@
 (enum_constant name: (identifier) @name) @member.enum_constant
 
 ; ---------------------------------------------------------------- parameters
+; `throws E`: the method depends on E
+(throws [(type_identifier) (scoped_type_identifier) (generic_type)] @throws)
 (method_declaration
   parameters: (formal_parameters
     (formal_parameter type: (_) @param.type name: (identifier) @param.name) @param))

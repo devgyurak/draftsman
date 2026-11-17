@@ -56,7 +56,9 @@
 ; ---------------------------------------------------------------- parameters
 (function_declarator
   parameters: (parameter_list
-    (parameter_declaration type: (_) @param.type declarator: (_)? @param.declarator) @param))
+    [(parameter_declaration type: (_) @param.type declarator: (_)? @param.declarator)
+     (optional_parameter_declaration type: (_) @param.type declarator: (_)? @param.declarator)]
+    @param))
 
 ; ---------------------------------------------------------------- aliases (not drawn)
 (type_definition declarator: (type_identifier) @alias)

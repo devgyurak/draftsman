@@ -607,7 +607,7 @@ class _Builder:
     def _dependencies(self, rtype: RawType, rm: RawMember) -> None:
         m = rm.member
         loc = Location(m.file or rtype.location.file, m.line)
-        for text in [m.type_ref, m.receiver] + [p.type_ref for p in m.params]:
+        for text in [m.type_ref, m.receiver] + [p.type_ref for p in m.params] + rm.throws:
             self._depend_on(rtype, rm, parse_type(text), loc)
 
     def _depend_on(self, rtype: RawType, rm: RawMember, ref, loc: Location) -> None:
