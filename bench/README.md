@@ -117,3 +117,7 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
 - 2026-11-17, pilot with the new prompt: the skill fired in every arm B and arm C run;
   six runs, $1.19 in Claude Code's cost estimates, at most $0.37 a run. Measured runs
   capped at $3 each, on the subscription token, with the pilot's image.
+- 2026-11-17, after the measured runs, before labelling: the parser also reads `+--`
+  (outer type to nested type, kind *nesting*), which 42 drawn edges use and the rubric's
+  arrow table did not list; on top-level types it collapses onto one type and drops out of
+  the main scoring. `o-->` and `*-->` read as association.
