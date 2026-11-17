@@ -15,7 +15,7 @@ interprets **matches** (not individual captures) by capture name. Captures start
 | `@import.wildcard` | a namespace whose members all become visible (`a.b.*`, `using X;`) |
 | `@import.from` + `@import.name` (+ `@import.alias`) | `from module import Name` style; the module text goes through `LanguageSpec.module_id` |
 | `@import.module` (+ `@import.alias`) | a whole module bound to a local name (`import * as pay`, `import typing as t`) |
-| `@alias` | a type alias declaration (not drawn; references to it resolve silently) |
+| `@alias` (+ `@alias.type`) | a type alias declaration and the type it names; references to it are drawn as references to that type |
 | `@typevar` | a file-wide type parameter (Python `T = TypeVar("T")`) |
 
 ## Declarations
@@ -36,6 +36,7 @@ interprets **matches** (not individual captures) by capture name. Captures start
 | `@tparam` (+ `@tparam.target`) | – | a type parameter; `target` names the declaration when it is not an ancestor (C++ `template<>` wraps the class) |
 | `@annotation` + `@annotation.target` | – | an annotation/decorator/attribute and the declaration it applies to |
 | `@param` + `@param.name`, `@param.type`, `@param.declarator`, `@param.varargs` | yes | a parameter |
+| `@throws` | yes | a type a method declares it throws (a dependency, not shown) |
 
 ## Ownership
 
@@ -51,7 +52,10 @@ Captures are attached to declarations by position in the tree, not by the query:
 If an **opaque node** (`LanguageSpec.is_opaque`: method bodies, lambdas, anonymous class
 expressions, inline object types, …) lies on the way up, the capture is dropped. The same
 rule skips local and anonymous types. Crossing a **static scope** node (Kotlin companion
-object) makes the member static.
+object) makes the member static, unless the node is itself a `@type.*` (a companion with
+supertypes). `LanguageSpec.type_name` names a type whose `@name` capture is not its name
+(`companion` → `Companion`), and `LanguageSpec.member_name` the name a member is listed
+under (Kotlin's primary constructor is `constructor`).
 
 ## Adding a language
 

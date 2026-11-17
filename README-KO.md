@@ -54,10 +54,10 @@
 | Java | spring-petclinic | 30 | 25 | 73 | 0 | 0 |
 | Java | jsoup | 105 | 230 | 1310 | 2 (`Map.Entry`, 힌트 포함) | 0 |
 | C# | eShopOnWeb `src/` | 209 | 208 | 356 | 199 (그중 198은 `using`으로 들어온 프레임워크 타입) | 0 |
-| Kotlin | nowinandroid | 226 | 237 | 357 | 4 (protobuf 생성 코드) | 0 |
-| TypeScript | nest `packages/` | 730 | 738 | 2172 | 0 | 0 |
+| Kotlin | nowinandroid | 226 | 237 | 439 | 4 (protobuf 생성 코드) | 0 |
+| TypeScript | nest `packages/` | 730 | 738 | 2304 | 0 | 0 |
 | Python | httpx | 23 | 87 | 283 | 0 | 0 |
-| C++ | leveldb | 102 | 161 | 877 | 2 | 9개 파일에 10구간 (매크로만 있는 헤더, `extern "C"` 가드, 멤버 함수 포인터 필드 하나) |
+| C++ | leveldb | 102 | 161 | 885 | 2 | 9개 파일에 10구간 (매크로만 있는 헤더, `extern "C"` 가드, 멤버 함수 포인터 필드 하나) |
 
 행마다 측정한 커밋과 추출 명령은 [`docs/measurements.md`](docs/measurements.md)에 있습니다. 언어별로 알려진 한계는 [`lang-notes.md`](skills/draftsman/references/lang-notes.md)에 있습니다.
 

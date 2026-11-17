@@ -3,6 +3,13 @@
 Read only the section for the language you are working with. "Not handled" items are
 known gaps: expect them in `unresolved` or as missing relations, never as invented ones.
 
+Type aliases (`using Pt = Acme.Point;`, `typealias`, `type X = A | B`, `typedef`, `using X
+= ...`, Python `type X = ...`) are not types in the IR, but they are drawn through: a
+field of an alias type relates to the project types the alias names, resolved where the
+alias is declared, with the multiplicity it implies (`typealias Pts = List<Pt>` is many
+`Pt`); a signature that uses it depends on them; a supertype that is an alias of one type
+is that type. Aliases of aliases are followed.
+
 ## Java
 
 - Types: `class`, `interface`, `enum`, `record`, `@interface` (kind `annotation`).
@@ -23,6 +30,7 @@ known gaps: expect them in `unresolved` or as missing relations, never as invent
   Java 8 that the tree-sitter grammar rejects; they are blanked before parsing (same
   length, so line numbers are exact). Annotations on array levels (`String @A []`) are
   read and ignored.
+- `throws E` makes the method depend on `E` (it is not listed in the signature).
 - Not handled: static imports of nested types, `permits` clauses.
 
 ## C#
@@ -32,6 +40,10 @@ known gaps: expect them in `unresolved` or as missing relations, never as invent
 - `partial` declarations are merged by full name; members from other files carry `file`.
 - Namespaces: block and file-scoped. Types of enclosing namespaces are visible
   (`Shop.Orders` sees `Shop.X`). `using X;` is a wildcard import, `using A = B;` an alias.
+  `global::A.B` is `A.B`. Primary constructors (C# 12, `class Order(IRepo<Order> repo)`)
+  are a public constructor whose parameters are dependencies; records keep their
+  parameters as properties. `params Q[] qs` is a parameter. Tuples (`(Person a, Point b)`)
+  relate to each element once.
 - `: Base, IFoo` cannot be split syntactically: project targets are classified by their
   kind; external ones by the .NET convention (`I` + capital letter = interface).
 - Defaults: members `private`, interface members `public`; `const` implies static.
@@ -74,12 +86,21 @@ known gaps: expect them in `unresolved` or as missing relations, never as invent
 - `class`, `interface`, `enum class`, `object` (kind `object`), data/value/sealed classes
   (modifiers). Properties are kind `property`; `val`/`var` primary-constructor parameters
   are properties, plain constructor parameters are not.
-- Companion object members become `static` members of the enclosing class.
+- Companion object members become `static` members of the enclosing class. A companion
+  with supertypes (`companion object : Parcelable.Creator<A>`) is the object that
+  implements them, so it is a nested type `A.Companion` (or its own name,
+  `A.Factory`) of kind `object`, and the supertypes are its relations, not `A`'s.
+- `annotation class` has kind `annotation`, as in Java.
 - Supertypes: `Base()` (constructor call) is a superclass; a bare type in a class's list is
   an interface (Kotlin requires the call for classes), so external ones are `implements`.
 - Visibility default `public`. Top-level extension functions belong to no class; a member
   extension keeps its receiver (`+ Grammar.unaryPlus()`), and the receiver type is a
   dependency. `vararg` parameters read as `String...`, `suspend` stays in function types.
+- The primary constructor is listed as `constructor(...)` with all its parameters when it
+  has any; its plain parameters are dependencies. A `vararg val` property is
+  `items: Item...` (multiplicity `*`).
+- Properties without a written type (`val state = MutableStateFlow(...)`) have no type:
+  the initialiser is not evaluated, so no relation.
 - `expect`/`actual`: the expect class and its actuals are one type, located at the expect
   declaration. A method or constructor declared again in another file with the same
   receiver, name and parameter types is one member (the expect's is kept); look-alikes
@@ -98,12 +119,17 @@ known gaps: expect them in `unresolved` or as missing relations, never as invent
 - Function types (`Route.() -> Unit`, `suspend (Call) -> Unit`, `context(Log) () -> Unit`,
   also inside containers) make a dependency on every project type they name; a field of such a type is no
   association. Supertypes with a function type among their arguments are read too.
-- `typealias` is an alias. Not handled: delegation targets (`by x`).
+- `typealias` is an alias (see the note on aliases below). Not handled: delegation targets
+  (`by x`).
 
 ## TypeScript / TSX
 
 - `class`, `abstract class`, `interface`, `enum`; `namespace` blocks nest their types
   (`Customer.Address` through declaration merging works). `type X = ...` is an alias.
+- Tuples (`[Point, Circle]`, `[a: Point, b?: Circle]`) relate to each element once.
+  Rest parameters read as `...rest: P[]`. `import("rxjs").Observable<P>` (an import
+  type, not in the grammar) is read as `Observable<P>`: the module part is blanked
+  before parsing, same length.
 - Ids are module path + name: `src/order/order.Order`; `index.ts` is its directory.
 - Scopes: a `namespace` block sees the module around it (`namespace Order { … Order … }`).
   Members of a merged namespace are not inherited: a subclass of `Base` must write
@@ -123,13 +149,16 @@ known gaps: expect them in `unresolved` or as missing relations, never as invent
   name the package does not contain is unresolved, like a relative import. Extract from
   the workspace root so every package is inside it.
 - Imported type aliases (`import { Options } from "./x"` where `type Options = …`) are
-  aliases: nothing is drawn. Standard-library globals (`Partial`, `Required`,
+  aliases, drawn through to the project types they name. Standard-library globals (`Partial`, `Required`,
   `Float32Array`, `AsyncDisposable`, ...) are builtins.
 - Not handled: `exports` subpath maps in package.json, tsconfig `paths` aliases
   (`@app/*`), `export * as ns from`.
-- Constructor parameter properties (`constructor(private repo: Repo)`) are fields;
+- Constructor parameter properties (`constructor(private repo: Repo)`, also optional
+  ones: `protected q?: Q`) are fields;
   `#private` names are private. Properties of inline object types are not members, and
   the types inside them produce no relations (`options: { socketClass?: Type<X> }`).
+  Fields without a written type (`reg = new Registry()`) have no type and no relation:
+  initialisers are not evaluated.
 - Default imports are resolved by the local name. Not handled: `declare module`, global
   scripts without imports/exports, mixins built with functions.
 
@@ -161,7 +190,12 @@ known gaps: expect them in `unresolved` or as missing relations, never as invent
 - Visibility by naming: `__x` private, `_x` protected. `@staticmethod`/`@classmethod` are
   static, `@property` methods are properties. `self`/`cls` are dropped from parameters.
 - Module-level `T = TypeVar(...)` and other module-level assignments (type aliases) are
-  never unresolved. String annotations (`"Order"`) are read as types.
+  never unresolved, and draw nothing (an assignment may be a value). `type X = A | B`
+  (PEP 695) is an alias drawn through to `A` and `B`; PEP 695 type parameters
+  (`class New[K: Item]`, `def f[T]`) are type parameters. String annotations (`"Order"`)
+  are read as types. `Literal[...]` holds values, no types; `Annotated[X, ...]` is `X`.
+  `tuple[P, Q]` relates to `P` and `Q` once each, `tuple[P, ...]` to many `P`.
+  `*args: Item` and `**kw: Status` are parameters.
 - Not handled: `__all__` (a `*` re-export is taken to expose every name the module
   defines), attributes created outside `__init__`, untyped values (no association
   without a type hint), `__getattr__` magic.
@@ -183,8 +217,20 @@ known gaps: expect them in `unresolved` or as missing relations, never as invent
   attributes (`GUARDED_BY(mu)`), and `#if` lines inside initializer lists are blanked
   before parsing (same length, so line numbers are exact). Other macros may still cause
   syntax errors; they are reported as diagnostics and only affect nearby declarations.
-- `typedef`/`using X = ...` are aliases. `using namespace X;` is a wildcard import;
-  qualified names into namespaces outside the sources (`std::`, `boost::`) are external.
+- `typedef`/`using X = ...` are aliases, also inside a class (`typedef Circle* CirclePtr;`
+  makes a field of type `CirclePtr` a shared association to `Circle`). `using namespace
+  X;` is a wildcard import, and `using a::B;` imports `B` at file or namespace level; inside
+  a class (`using Base::Base;`, `using Base::f;`) it is a member declaration and imports
+  nothing. Qualified names into namespaces outside the sources (`std::`, `boost::`) are
+  external. Types in an `inline namespace` are found with or without it
+  (`acme::Versioned` is `acme::v1::Versioned`).
+- Parameters with a default value (`P p = P()`) are parameters. A function-pointer member
+  (`void (*cb)(int)`) is a field of type `void(int)*`. Members of an anonymous union or
+  struct are members of the enclosing class, as in C++. `std::tuple<P, B*>` and
+  `std::pair` relate to each element once.
+- Qt: `Q_OBJECT`, `Q_PROPERTY(...)` and other `Q_...` statements on a line of their own,
+  `Q_INVOKABLE`/`Q_SIGNAL`/`Q_SLOT`, and the `signals:` / `public slots:` sections are
+  blanked or read as access sections before parsing (signals are public).
 - Not handled: `#include` graphs (resolution is by name and namespace, not by includes),
   template specialisations as separate types, private/protected inheritance (drawn as
   plain `extends`).

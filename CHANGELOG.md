@@ -77,3 +77,31 @@ Notes for anyone with `view.json` files written against a development build:
   in every language: jsoup 1304 -> 1310, nest 2171 -> 2172, httpx 281 -> 283 relations.
 - Comments inside a type (a JSDoc block in an inline object type, `/* … */` in a generic
   argument) are no longer part of `type_ref`, in every language.
+- **Type aliases are drawn through** to the project types they name, in every language
+  (`using Pt = Acme.Point;`, `typealias Pts = List<Pt>`, `type X = A | B`, `typedef
+  Circle* CirclePtr;`, Python `type X = ...`): a field of an alias type is an association
+  with the multiplicity the alias implies, a signature a dependency, a supertype that is
+  an alias of one type an `extends`/`implements`. Before, every alias was a dead end.
+- Tuples relate to each element once (`[A, B]`, `(A a, B b)`, `tuple[A, B]`,
+  `std::pair`/`std::tuple`); `tuple[P, Q]` and `std::tuple<P, B*>` were read as many `P`.
+- Wrong facts fixed: C++ `using Base::Base;` inside a class no longer imports `Base::Base`
+  (which turned every `Base` of the file into an external type); a Kotlin companion with
+  supertypes is its own type `A.Companion`, so `companion object : Creator<A>` no longer
+  makes `A implements Creator`.
+- Parameters no longer dropped: Python `*args: T`/`**kw: T`, TypeScript `...rest: T[]`,
+  C# `params T[]`, C++ parameters with a default value. TypeScript optional parameter
+  properties (`protected q?: Q`) are fields. C# 12 and Kotlin primary constructors are
+  listed with all their parameters (a Kotlin `vararg val` property is many). Java
+  `throws E` is a dependency.
+- No longer unresolved: Python `Literal[...]` (values), `Annotated[X, ...]` (is `X`), PEP
+  695 type parameters; C# `global::A.B`; C++ in-class `typedef`. C++ types in an `inline
+  namespace` are found without it (`acme::Versioned`), where they silently vanished.
+- Parsing: TypeScript `import("x").T` types, Qt's `Q_OBJECT`/`Q_PROPERTY(...)`/`signals:`
+  /`slots:`, and C++ function-pointer members (now fields, not methods). Kotlin
+  `annotation class` has kind `annotation`.
+- Measured: nest 2172 -> 2304 relations (aliases, rest parameters, optional parameter
+  properties, tuples; `implements` 41 -> 43 through aliases), leveldb 877 -> 885
+  (typedefs, `std::pair` elements, default-valued parameters), nowinandroid 357 -> 439
+  (dependencies of the `@Inject` primary constructors; where the parameter is also a
+  `val` property, the diagram already showed the association). Every new relation was
+  checked against its source; none were lost.

@@ -82,9 +82,11 @@ How each kind is derived:
 Composition vs. aggregation is not inferred (except C++ `ownership`), and nothing from
 method bodies is used.
 
-Type aliases (`type X = ...`, `typedef`, `typealias`, `using X = ...`, module-level
-Python aliases) are not types in the IR; references to them are resolved silently and
-produce no relation. A TypeScript `typeof x` is a relation when `x` is a class and is
+Type aliases (`type X = ...`, `typedef`, `typealias`, `using X = ...`) are not types in
+the IR; a reference to one is drawn as a reference to the project types the alias names
+(`x: X` with `type X = A | B` is an association to `A` and to `B`). Module-level Python
+assignments may be values and draw nothing. Tuples (`[A, B]`, `(A a, B b)`, `tuple[A,
+B]`, `std::pair<A, B>`) relate to each element with multiplicity `1`. A TypeScript `typeof x` is a relation when `x` is a class and is
 otherwise a value: never unresolved.
 
 ## External

@@ -24,10 +24,10 @@ source of every number:
 | spring-petclinic | 30 | 25 | 11 | 46 | 11 | 5 | 0 | 0 |
 | jsoup | 105 | 230 | 147 | 1014 | 118 | 31 | 2 | 0 |
 | eShopOnWeb | 209 | 208 | 96 | 199 | 34 | 27 | 199 | 0 |
-| nowinandroid | 226 | 237 | 106 | 141 | 27 | 83 | 4 | 0 |
-| nest | 730 | 738 | 415 | 1502 | 214 | 41 | 0 | 0 |
+| nowinandroid | 226 | 237 | 106 | 223 | 27 | 83 | 4 | 0 |
+| nest | 730 | 738 | 449 | 1598 | 214 | 43 | 0 | 0 |
 | httpx | 23 | 87 | 31 | 188 | 64 | 0 | 0 | 0 |
-| leveldb | 102 | 161 | 222 | 613 | 17 | 25 | 2 | 10 |
+| leveldb | 102 | 161 | 227 | 616 | 17 | 25 | 2 | 10 |
 
 To re-measure, clone at the commit (`git clone <repo> && git -C <dir> checkout <commit>`),
 run the command, and update both tables and the README rows together. If the files or
