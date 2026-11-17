@@ -98,6 +98,9 @@ _KEYWORDS = {b"explicit", b"virtual", b"friend", b"inline", b"static", b"constex
              b"consteval", b"return", b"new", b"delete", b"throw", b"else", b"case",
              b"typedef", b"using", b"co_return", b"co_yield", b"co_await", b"operator"}
 _ESCAPE = re.compile(rb"\\.")
+# keywords a member cannot be named
+_RESERVED = {"sizeof", "alignof", "decltype", "noexcept", "static_assert", "typeid",
+             "offsetof", "struct", "class", "union", "enum", "return", "new", "delete"}
 
 
 def _attribute_macro(m: re.Match) -> bytes:
@@ -237,28 +240,38 @@ def _blank_leading_macros(src: bytes) -> bytes:
 
 def _blank_inline_directives(src: bytes) -> bytes:
     """Blank an `#if` group whose `#if` sits inside an expression (the code line before it
-    ends with `,` `:` `(` `)`): the group's `#elif`/`#else`/`#endif` go with it, and the
-    lines of other directives (`#define MIN(a, b) (...)`, `#pragma pack(push, 1)`) are no
-    code line to judge by."""
+    ends with `,` `:` `(` `)` `=`): the group's `#elif`/`#else`/`#endif` go with it. After
+    `=` the branches are alternative values, so only the first stays (`MAX = #if V6
+    sizeof(in6_addr) #else sizeof(in_addr) #endif`); elsewhere every branch stays (members
+    or initializers of each platform). The lines of other directives (`#define MIN(a, b)
+    (...)`, `#pragma pack(push, 1)`) are no code line to judge by."""
+    inside = (b",", b":", b"(", b")", b"=")
     lines = src.split(b"\n")
     prev = b""
-    groups: list[bool] = []   # per open `#if`: blanked or not
-    continued = False         # inside a directive continued with `\`
+    groups: list[list[bool]] = []   # per open `#if`: [blanked, first branch only, past it]
+    continued = False               # inside a directive continued with `\`
     for i, line in enumerate(lines):
+        skipping = any(g[2] for g in groups)
         directive = continued or line.lstrip().startswith(b"#")
         continued = directive and line.rstrip().endswith(b"\\")
         m = _DIRECTIVE.match(line)
         if m:
             word = m.group(1)
             if word.startswith(b"if"):
-                groups.append(prev.rstrip().endswith((b",", b":", b"(", b")")))
-                blank = groups[-1]
+                end = prev.rstrip()
+                groups.append([skipping or end.endswith(inside), end.endswith(b"="), False])
+                blank = groups[-1][0]
             else:
-                blank = groups[-1] if groups else prev.rstrip().endswith((b",", b":", b"(", b")"))
+                blank = groups[-1][0] if groups else prev.rstrip().endswith(inside)
                 if word == b"endif" and groups:
                     groups.pop()
+                elif groups and groups[-1][1]:
+                    groups[-1][2] = True
             if blank:
                 lines[i] = b" " * len(line)
+            continue
+        if skipping:
+            lines[i] = b" " * len(line)
             continue
         if line.strip() and not directive:
             prev = line
@@ -349,7 +362,24 @@ class CppSpec(LanguageSpec):
             cur = cur.parent
         return True
 
+    def member_name(self, kind, name):
+        # `MAX = #if ... sizeof(struct in6_addr) #else ... #endif` in an enum does not
+        # parse, and `sizeof` comes out as an enumerator: no member is called that
+        return None if name in _RESERVED else name
+
+    def is_opaque(self, node):
+        # `template <class S> class Ev<void, S> { ... }`: a specialisation is no type, and
+        # neither are the types and members in it
+        if node.type in ("class_specifier", "struct_specifier", "union_specifier"):
+            name = node.child_by_field_name("name")
+            return name is not None and name.type == "template_type"
+        return node.type in self.opaque_nodes
+
     def declarator(self, node, src):
+        # `poco_static_assert (offsetof(Hdr, code) == 0x01);` in a class body: a macro call
+        # the grammar takes for a declarator in parentheses, with an error inside
+        if node.type == "parenthesized_declarator" and any(c.type == "ERROR" for c in node.children):
+            return None, "", False
         suffix, is_function = "", False
         cur = node
         while cur is not None:
@@ -397,7 +427,7 @@ class CppSpec(LanguageSpec):
             if sib.type == "access_specifier":
                 return sib.text.decode().strip()
             sib = sib.prev_named_sibling
-        return "public" if owner_kind == "struct" else "private"
+        return "public" if owner_kind in ("struct", "union") else "private"
 
     def is_static(self, owner_kind, member_kind, modifiers):
         return member_kind == "enum_constant" or "static" in modifiers

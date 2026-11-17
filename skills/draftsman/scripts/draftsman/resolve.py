@@ -318,14 +318,16 @@ class Resolver:
         outer = self.index.get(rtype.outer) if rtype.outer else None
         return self._external_supers(outer) if outer else []
 
-    def _nested_path(self, target: str, rest: str, sep: str, inherit: bool) -> Optional[str]:
+    def _nested_path(self, target: str, rest: str, sep: str, inherit: bool) -> Optional[Resolution]:
         for part in rest.split(sep):
-            if target not in self.index:   # an alias, not a type to look into
-                return None
+            if target not in self.index:
+                # `NamespaceManager::NamespaceMap::const_iterator`: a member of what the
+                # alias names, as `NamespaceMap::const_iterator` inside the class
+                return Resolution(ALIAS)
             target = self._member_type(self.index[target], part, sep, inherit, set())
             if target is None:
                 return None
-        return target
+        return self._found(target)
 
     # ------------------------------------------------------------ resolve
 
@@ -370,7 +372,7 @@ class Resolver:
             if first.status == PROJECT:
                 found = self._nested_path(first.target, rest, sep, inherit)
                 if found:
-                    return self._found(found)
+                    return found
                 target = self.index[first.target]
                 if target.kind == "enum" and any(
                         rm.member.name == rest for rm in target.members):
@@ -386,6 +388,8 @@ class Resolver:
                 return Resolution(EXTERNAL, (first.target or head) + sep + rest)
             if first.status == ALIAS:
                 return Resolution(ALIAS)
+            if first.status == TPARAM:   # `typename R::Ptr`: a member of whatever R is
+                return Resolution(TPARAM)
             # a fully qualified name outside the project, when its head is a package
             # (com.foo.Bar, System.Text.Encoding); otherwise a type this file could not
             # find (`Outer.Inner` under a star import), which stays unresolved

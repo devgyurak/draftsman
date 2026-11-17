@@ -15,6 +15,8 @@
 (class_specifier name: (type_identifier) @name body: (field_declaration_list)) @type.class
 (struct_specifier name: (type_identifier) @name body: (field_declaration_list)) @type.struct
 (enum_specifier name: (type_identifier) @name body: (enumerator_list)) @type.enum
+; a named union is a type; the members of an anonymous one belong to the enclosing class
+(union_specifier name: (type_identifier) @name body: (field_declaration_list)) @type.union
 ; C: `typedef struct { ... } Point;` is an anonymous struct named by its typedef
 (type_definition type: (struct_specifier !name body: (field_declaration_list)) @type.struct
   . declarator: (type_identifier) @name)
@@ -23,6 +25,7 @@
 ; out-of-class definitions of nested types: struct Table::Rep { ... }
 (class_specifier name: (qualified_identifier) @name body: (field_declaration_list)) @type.class
 (struct_specifier name: (qualified_identifier) @name body: (field_declaration_list)) @type.struct
+(union_specifier name: (qualified_identifier) @name body: (field_declaration_list)) @type.union
 
 (template_declaration
   parameters: (template_parameter_list
@@ -38,8 +41,8 @@
        [(type_parameter_declaration (type_identifier) @tparam)
         (optional_type_parameter_declaration name: (type_identifier) @tparam)
         (variadic_type_parameter_declaration (type_identifier) @tparam)])])
-  [(class_specifier) (struct_specifier) (function_definition) (field_declaration)
-   (declaration)] @tparam.target)
+  [(class_specifier) (struct_specifier) (union_specifier) (function_definition)
+   (field_declaration) (declaration)] @tparam.target)
 
 ; ---------------------------------------------------------------- supertypes
 (base_class_clause [(type_identifier) (qualified_identifier) (template_type)] @super.inherits)

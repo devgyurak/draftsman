@@ -523,6 +523,8 @@ class Extractor:
         if kind == "method" and type_node is None and name == owner.name:
             kind = "constructor"
         name = spec.member_name(kind, name)
+        if not name:
+            return
 
         key = (node.id, name)
         if key in seen_members:  # several patterns matched one declaration

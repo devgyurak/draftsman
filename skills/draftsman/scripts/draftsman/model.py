@@ -10,7 +10,7 @@ from typing import Any, Optional
 IR_VERSION = 1
 
 TYPE_KINDS = (
-    "class", "interface", "abstract_class", "enum", "record", "struct",
+    "class", "interface", "abstract_class", "enum", "record", "struct", "union",
     "object", "trait", "mixin", "annotation",
 )
 MEMBER_KINDS = ("field", "method", "property", "constructor", "enum_constant")
@@ -22,7 +22,7 @@ VISIBILITIES = ("public", "protected", "package", "internal", "private")
 VISIBILITY_SYMBOLS = {"public": "+", "private": "-", "protected": "#", "package": "~", "internal": "~"}
 STEREOTYPES = {
     "interface": "interface", "abstract_class": "abstract", "enum": "enumeration",
-    "record": "record", "annotation": "annotation", "struct": "struct",
+    "record": "record", "annotation": "annotation", "struct": "struct", "union": "union",
     "object": "object", "trait": "trait", "mixin": "mixin",
 }
 

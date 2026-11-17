@@ -198,3 +198,22 @@ Notes for anyone with `view.json` files written against a development build:
 - End-to-end page for POCO (C++, `2ef5cec8a9`): 2317 files, 2065 types, 9978 relations,
   326 unresolved (system and library headers, POCO's `#define` types, exception classes a
   macro declares, and 20 gaps of Draftsman listed on the page), 346 diagnostics.
+- C++ (POCO: 2065 -> 2066 types, 9978 -> 9984 relations, 326 -> 309 unresolved, 346 ->
+  333 diagnostics; every other project unchanged):
+  - a named union is a type of the new kind `union` (`Poco::Placeholder`); before, its
+    members were the enclosing class's and its nested types escaped to the namespace
+    (`Poco::Size`, `Poco::Allocation`). The members of an anonymous union still belong to
+    the enclosing class.
+  - a template specialisation and everything in it are no types; before, its nested
+    types came out as types of the namespace (`Poco::NotifyAsyncParams` from
+    `AbstractEvent<void, ...>`).
+  - a macro call in a class body read as a declarator in parentheses with an error
+    inside (`poco_static_assert (offsetof(Header, code) == 0x01);`) is no member, and no
+    member is named `sizeof`; 4 `offsetof` members and their dependencies are gone.
+  - after `=`, only the first branch of an `#if` group stays (`MAX_ADDRESS_LENGTH =
+    #if ... sizeof(struct in6_addr) #else ... #endif`): `IPAddress` and `SocketAddress`
+    list `MAX_ADDRESS_LENGTH` instead of `sizeof`, `in6_addr`, ... as enumerators.
+  - `typename R::Ptr` (a member of a template parameter) and `Alias::const_iterator`, also
+    qualified by the class, are not resolved further; `sizeof(P)`, `alignof(P)` and
+    `noexcept(...)` in a template argument are values (no `sizeof` unresolved, no
+    dependency on `P`).

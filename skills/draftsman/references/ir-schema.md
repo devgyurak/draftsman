@@ -24,7 +24,7 @@ sources always give byte-identical output.
 | `id` | qualified name, unique in the IR. Separator is the language's own: `com.shop.Order.Status` (Java, C#, Kotlin), `shop::pay::Receipt` (C++), `src.shop.order.models.Order` (Python module path), `src/order/order.Order` (TypeScript file path without extension) |
 | `name` | simple name (`Status`) |
 | `qualified_name` | same as `id` for now; kept separate for languages that need disambiguation |
-| `kind` | `class` `interface` `abstract_class` `enum` `record` `struct` `object` `trait` `mixin` `annotation` |
+| `kind` | `class` `interface` `abstract_class` `enum` `record` `struct` `union` `object` `trait` `mixin` `annotation` |
 | `language` | `java`, ... |
 | `namespace` | package / namespace / module, or `null` |
 | `outer` | id of the enclosing type for nested types, else `null` |

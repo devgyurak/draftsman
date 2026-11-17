@@ -330,6 +330,80 @@ def test_cpp_names_several_macros_mention(tmp_path):
     assert u.reason == "unexplained"
 
 
+def test_cpp_macro_calls_in_class_bodies_are_no_members(tmp_path):
+    """`poco_static_assert (offsetof(Hdr, code) == 0x01);` parses as a declarator in
+    parentheses with an error inside: no member `offsetof`, no dependency on a `checksum`
+    type. A pointer-to-member field, also with an error inside, stays."""
+    ir = extract_source(tmp_path, {"a.h": (
+        "namespace n {\nstruct checksum {};\nstruct P {};\nstruct Hdr { int code; int checksum; };\n"
+        "class Impl {\n  poco_static_assert (offsetof(Hdr, code) == 0x01);\n"
+        "  poco_static_assert (offsetof(Hdr, checksum) == 0x02);\n"
+        "  void (P::*method)(int);\n  int x;\n};\n}\n")})
+    assert [m.name for m in next(t for t in ir.types if t.id == "n::Impl").members] == ["method", "x"]
+    assert not any(r.from_ == "n::Impl" for r in ir.relations)
+    assert not ir.unresolved
+
+
+def test_cpp_specialisations_are_no_types(tmp_path):
+    """A partial or full specialisation is no type, and neither is anything in it: its
+    nested types do not come out as types of the namespace."""
+    ir = extract_source(tmp_path, {"a.h": (
+        "namespace n {\nstruct P {};\n"
+        "template <class A, class S> class Ev { struct Params { S* s; }; };\n"
+        "template <class S> class Ev<void, S> {\n  struct Params { S* s; P* p; };\n"
+        "  struct OnlyInSpec { P* p; };\n  P* q;\n};\n"
+        "template <> class Ev<int, int> { struct Full { P* p; }; };\n}\n")})
+    assert {t.id for t in ir.types} == {"n::P", "n::Ev", "n::Ev::Params"}
+    assert not ir.relations and not ir.unresolved
+
+
+def test_cpp_named_unions_are_types(tmp_path):
+    """A named union is a type of kind `union` (POCO's `Placeholder`); the members of an
+    anonymous one belong to the enclosing class, as in C++."""
+    ir = extract_source(tmp_path, {"a.h": (
+        "namespace n {\nstruct P {};\n"
+        "template <typename T, unsigned N = 8> union Holder { T* ptr; char buf[N]; };\n"
+        "class U {\n  union Placeholder { P* ptr; char buf[8]; };\n  Placeholder holder;\n"
+        "  union { int i; float f; };\n  Holder<P> h;\n};\n}\n")})
+    kinds = {t.id: t.kind for t in ir.types}
+    assert kinds["n::U::Placeholder"] == "union" and kinds["n::Holder"] == "union"
+    assert _members(ir, "n::U::Placeholder") == ["+ ptr: P*", "+ buf: char[]"]
+    assert [m.name for m in next(t for t in ir.types if t.id == "n::U").members] == ["holder", "i", "f", "h"]
+    assert {("n::U", "association", "n::U::Placeholder"), ("n::U::Placeholder", "association", "n::P"),
+            ("n::U", "association", "n::Holder")} <= rels(ir)
+    # P only as the argument of Holder<P>: the union's `ptr` is not U's
+    assert ("n::U", "dependency", "n::P") in rels(ir) and ("n::U", "association", "n::P") not in rels(ir)
+    assert not ir.unresolved
+
+
+def test_cpp_names_of_unknown_types_and_values(tmp_path):
+    """`typename R::Ptr` (a member of a template parameter), `NM::Map::const_iterator`
+    (a member of what an alias names, also qualified by the class) and `sizeof(P)` in a
+    template argument (a value) are neither unresolved nor relations."""
+    ir = extract_source(tmp_path, {"a.h": (
+        "namespace n {\nstruct P {};\n"
+        "template <typename R> class Q { typename R::Ptr run(); };\n"
+        "class NM { public: using Map = std::map<int, P>;\n"
+        "  Map::const_iterator a(); NM::Map::const_iterator b(); };\n"
+        "class Arr { std::array<char, sizeof(P)> a;\n"
+        "  typename std::aligned_storage<sizeof(P), alignof(P)>::type s; };\n}\n")})
+    assert not ir.unresolved
+    assert not any(r.from_ in ("n::Q", "n::NM", "n::Arr") for r in ir.relations)
+
+
+def test_cpp_directive_after_assignment_keeps_first_branch(tmp_path):
+    """`MAX = #if V6 sizeof(struct in6_addr) #else sizeof(struct in_addr) #endif` is one
+    value: the first branch stays. Members and enumerators of every branch elsewhere stay."""
+    ir = extract_source(tmp_path, {"a.h": (
+        "class IPAddress {\n  enum\n  {\n    MAX_ADDRESS_LENGTH =\n#if defined(V6)\n"
+        "      sizeof(struct in6_addr)\n#else\n      sizeof(struct in_addr)\n#endif\n  };\n  int x;\n};\n"
+        "class W {\npublic:\n#ifdef _WIN32\n  HANDLE h;\n#else\n  int fd;\n#endif\n};\n"
+        "enum E { A,\n#ifdef X\n  B,\n#else\n  C,\n#endif\n};\n")})
+    assert not ir.diagnostics
+    members = {t.id: [m.name for m in t.members] for t in ir.types}
+    assert members == {"IPAddress": ["MAX_ADDRESS_LENGTH", "x"], "W": ["h", "fd"], "E": ["A", "B", "C"]}
+
+
 def test_cpp_member_aliases_are_inherited(tmp_path):
     ir = extract_source(tmp_path, {"a.h": (
         "class Item {};\n"

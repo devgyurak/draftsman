@@ -148,8 +148,9 @@ class LanguageSpec:
         """Whether an `@import*` capture really imports (C++ `using` in a class does not)."""
         return True
 
-    def member_name(self, kind: str, name: str) -> str:
-        """The name a member is listed under (Kotlin calls every constructor `constructor`)."""
+    def member_name(self, kind: str, name: str) -> Optional[str]:
+        """The name a member is listed under (Kotlin calls every constructor `constructor`),
+        or None for no member: a name no declaration can have, read inside a syntax error."""
         return name
 
     def type_name(self, node, name: str) -> str:

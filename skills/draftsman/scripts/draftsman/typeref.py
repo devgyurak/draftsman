@@ -77,6 +77,9 @@ _TUPLES = frozenset({"tuple", "Tuple", "typing.Tuple", "std::tuple", "std::pair"
                      "System.Tuple", "System.ValueTuple"})
 # words that combine into one C/C++ builtin type: `unsigned long long`, `long double`
 _MULTIWORD = frozenset({"unsigned", "signed", "long", "short", "int", "char", "double", "float"})
+# C++ operators that make a value of a type (`std::array<char, sizeof(P)>`): no type
+# reference, as a number argument is none
+_VALUE_OPERATORS = frozenset({"sizeof", "alignof", "__alignof__", "offsetof", "noexcept"})
 
 
 @dataclass(frozen=True)
@@ -234,6 +237,13 @@ class _Parser:
         if tok is None or not (tok == "::" or _is_ident(tok)):
             raise _ParseError(f"unexpected {tok!r}")
         name = self.qualified_name()
+        if name in _VALUE_OPERATORS and self.peek() == "(":
+            depth = 0
+            while True:
+                tok = self.take()
+                depth += (tok == "(") - (tok == ")")
+                if depth == 0:
+                    return None
         if name.startswith("global::"):   # C# global::Acme.Core.Point
             name = name[len("global::"):]
         # multi-word builtins: `unsigned long long`, `long double`

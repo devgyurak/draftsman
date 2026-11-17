@@ -229,8 +229,10 @@ is that type. Aliases of aliases are followed.
 
 ## C++
 
-- `class`, `struct` (default `public`), `enum`/`enum class`; forward declarations are
-  ignored. Out-of-class definitions of nested types (`struct Table::Rep { ... }`) attach
+- `class`, `struct` and `union` (default `public`; a named union is kind `union`),
+  `enum`/`enum class`; forward declarations are ignored. A template specialisation
+  (`template <class S> class Ev<void, S> {...}`, `template <> class Ev<int> {...}`) is no
+  type, and neither is anything inside it, nested types included. Out-of-class definitions of nested types (`struct Table::Rep { ... }`) attach
   to their owner. Ids use `::`; types of enclosing namespaces are visible.
 - Visibility follows `public:`/`protected:`/`private:` sections. Pure virtual methods
   (`= 0`) are abstract; a class with only pure virtual methods and no data members is
@@ -262,10 +264,16 @@ is that type. Aliases of aliases are followed.
     `E_OLD POCO_DEPRECATED("since 4.2; use f() instead") = 4,`: a string argument may
     hold `;` and parentheses), after a declarator or `)` only: `const std::string
     SENTINEL("=?");` declares `SENTINEL`, `explicit URI(...)` is a constructor, and text
-    inside a string literal stays. Also `#if` groups
-    inside an expression (an initializer list), blanked with their `#elif`/`#else`/`#endif`.
+    inside a string literal stays. Also `#if` groups inside an expression (an
+    initializer list), blanked with their `#elif`/`#else`/`#endif`; after `=` the
+    branches are alternative values and only the first stays (`MAX = #if V6
+    sizeof(struct in6_addr) #else sizeof(struct in_addr) #endif`).
   Other macros may still cause syntax errors; they are reported as diagnostics and only
-  affect nearby declarations.
+  affect nearby declarations. A macro call in a class body that the grammar reads as a
+  declarator in parentheses with an error inside (`poco_static_assert (offsetof(Hdr,
+  code) == 0x01);`) is no member, nor is a name no member can have (`sizeof`); a
+  pointer-to-member field (`void (P::*method)(int);`), also with an error inside, is
+  kept.
 - `typedef`/`using X = ...` are aliases, also inside a class (`typedef Circle* CirclePtr;`
   makes a field of type `CirclePtr` a shared association to `Circle`), also with several
   declarators (`typedef struct Legacy {…} Legacy_t, *LegacyPtr;` names `Legacy`). C's
@@ -289,10 +297,15 @@ is that type. Aliases of aliases are followed.
   (`std::size_t N`, `int N = 8`, `int... Is`, `auto V`) and templates (`template <class>
   class C`). Inside the template they hide a project type of the same name (`Array<P, N>`
   does not depend on a `struct N`), and they are listed with the class (`Array<T, N>`).
+  A member of one (`typename R::Ptr`) is unknown and not resolved. `sizeof(P)`,
+  `alignof(P)` and `noexcept(...)` in a template argument are values
+  (`std::array<char, sizeof(P)>` depends on nothing).
 - Class scope: nested types and type aliases of a base class (`using CharacterMap =
   int[256];`) are inherited, and so is the base's own name (`CodeGenerator::Properties` in
   a subclass of `Poco::CodeGeneration::CodeGenerator`); a class's own name comes first
-  (`Listener` inside `tcp::Listener`, which derives from another `Listener`). Types in an `inline namespace` are found with or without it
+  (`Listener` inside `tcp::Listener`, which derives from another `Listener`). A member of
+  what an alias names (`NamespaceMap::const_iterator`, also `NamespaceManager::NamespaceMap::const_iterator`)
+  is not resolved further, as the alias's target is not read. Types in an `inline namespace` are found with or without it
   (`acme::Versioned` is `acme::v1::Versioned`).
 - Parameters with a default value (`P p = P()`) are parameters. A function-pointer member
   (`void (*cb)(int)`) is a field of type `void(int)*`. Members of an anonymous union or
@@ -306,5 +319,5 @@ is that type. Aliases of aliases are followed.
   sections before parsing (signals are public). Other `Q_` names (`Q_FIRST = 1,`) are left
   alone.
 - Not handled: `#include` graphs (resolution is by name and namespace, not by includes),
-  template specialisations as separate types, private/protected inheritance (drawn as
+  template specialisations (skipped, see above), private/protected inheritance (drawn as
   plain `extends`).

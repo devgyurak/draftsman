@@ -32,7 +32,7 @@
 
   const DIRECTIONS = { TB: "DOWN", BT: "UP", LR: "RIGHT", RL: "LEFT" };
   const BADGES = {
-    class: "C", interface: "I", abstract_class: "A", enum: "E", record: "R", struct: "S",
+    class: "C", interface: "I", abstract_class: "A", enum: "E", record: "R", struct: "S", union: "U",
     object: "O", trait: "T", mixin: "M", annotation: "@",
   };
 
