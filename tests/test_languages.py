@@ -1215,3 +1215,88 @@ def test_kotlin_library_types_under_known_library_supertypes(tmp_path):
         ("io.app.Ctx", "kotlin.coroutines.CoroutineContext.Element"),
         ("io.app.Ctx.MyKey", "kotlin.coroutines.CoroutineContext.Key"),
         ("io.app.Tracer", "kotlinx.coroutines.channels.ChannelIterator")}
+
+
+def test_kotlin_serialization_types_through_star_imports(tmp_path):
+    """kotlinx.serialization through star imports; the project's own Decoder wins where its
+    package is imported; Json (also kotlin.js's default import) is not decided by the table."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "own/Decoder.kt": "package io.app.charsets\nclass Decoder\n",
+        "a/D.kt": ("package io.app.a\nimport kotlinx.serialization.*\n"
+                   "import kotlinx.serialization.encoding.*\n"
+                   "class D : AbstractDecoder() {\n  val s: KSerializer<Int>? = null\n}\n"
+                   "class E(val d: Decoder) : Encoder\n"),
+        "b/U.kt": "package io.app.b\nimport io.app.charsets.*\nclass U(val d: Decoder)\n",
+        "c/J.kt": "package io.app.c\nimport kotlinx.serialization.json.*\nclass J(val j: Json, val e: JsonElement)\n",
+    })
+    rels = {(r.from_, r.kind, r.to) for r in ir.relations}
+    assert ("io.app.a.D", "extends", "kotlinx.serialization.encoding.AbstractDecoder") in rels
+    assert ("io.app.a.E", "implements", "kotlinx.serialization.encoding.Encoder") in rels
+    assert ("io.app.b.U", "association", "io.app.charsets.Decoder") in rels
+    (u,) = ir.unresolved
+    assert (u.from_, u.raw_type, u.reason) == ("io.app.c.J", "Json", "outside")
+    assert "may be the default import kotlin.js.Json" in u.hint
+
+
+def test_kotlin_core_supertypes_have_known_nested_types(tmp_path):
+    """Exception and AutoCloseable declare no nested types (nor their java.lang classes):
+    the table applies under them."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {"X.kt": (
+        "package io.app\nimport kotlinx.coroutines.*\n"
+        "class Failure : IllegalStateException() {\n  val job: Job? = null\n}\n"
+        "class Res : AutoCloseable {\n  val scope: CoroutineScope? = null\n"
+        "  override fun close() {}\n}\n")})
+    assert not ir.unresolved
+
+
+def test_kotlin_js_any_is_a_core_type(tmp_path):
+    """`: JsAny` is drawn like `: Exception`, also next to a star import of an outside package;
+    a JsAny field relates to nothing."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {"O.kt": (
+        "package io.app\nimport org.khronos.webgl.*\n"
+        "external interface Options : JsAny\nclass Holder(val any: JsAny)\n")})
+    assert {(r.from_, r.kind, r.to) for r in ir.relations} == {
+        ("io.app.Options", "extends", "kotlin.js.JsAny")}
+    assert not ir.unresolved
+
+
+def test_unreachable_nested_types_are_no_candidates(tmp_path):
+    """A nested type is a candidate only inside its outer type; elsewhere it is named in the
+    hint and the reason follows what is left."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "a/Outer.java": ("package a; public class Outer { public static class Entry {}\n"
+                         "  public static class Link { public static class Map {} } }"),
+        "b/U.java": "package b; class U { Entry e; Map.Entry m; Link l; }",
+        "c/V.java": "package c; import com.vendor.*; class V { Link l; }",
+        "d/Entry.java": "package d; public class Entry {}",
+        "f/Box.java": "package f; public class Box { public static class Gone {} }",
+        "g/X.java": "package g; import a.Outer; class X { Outer.Gone g; }",
+    })
+    found = {(u.from_, u.raw_type): u for u in ir.unresolved}
+    e = found[("b.U", "Entry")]
+    assert e.reason == "ambiguous" and e.candidates == ["d.Entry"]   # top-level stays
+    assert "out of scope here: a.Outer.Entry" in e.hint
+    m = found[("b.U", "Map.Entry")]                                    # dotted: by its head
+    assert m.candidates == [] and m.reason == "unexplained"
+    assert "a.Outer.Link.Map" in m.hint
+    # only a nested type has the name: no candidate, the reason is what else explains it
+    assert (found[("b.U", "Link")].candidates, found[("b.U", "Link")].reason) == ([], "unexplained")
+    assert (found[("c.V", "Link")].candidates, found[("c.V", "Link")].reason) == ([], "outside")
+    assert "out of scope here: a.Outer.Link" in found[("c.V", "Link")].hint
+    # the head found, the rest not: other nested types of the name are out of scope too
+    g = found[("g.X", "Outer.Gone")]
+    assert g.candidates == [] and g.hint == ("a.Outer has no nested type Gone; project nested "
+                                             "type of the name, out of scope here: f.Box.Gone")
+
+
+def test_typescript_import_alias_of_a_namespace_member(tmp_path):
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "o.ts": "export namespace Outer { export class Inner {} }\n",
+        "u.ts": "import { Outer } from './o';\nimport Inner = Outer.Inner;\nexport class U { i?: Inner; }\n"})
+    assert {(r.from_, r.to) for r in ir.relations} == {("u.U", "o.Outer.Inner")}
+    assert not ir.unresolved

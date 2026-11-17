@@ -110,22 +110,30 @@ is that type. Aliases of aliases are followed.
   `annotation`, `collections`, `comparisons`, `io`, `ranges`, `sequences`, `text`, `math`
   subpackages, plus `java.lang.*`/`kotlin.jvm.*` on the JVM and `kotlin.js.*` on JS, used
   together) give external ids with their package: `kotlin.Exception`, `java.lang.Class`,
-  `kotlin.js.JsAny`. The core types (`String`, `Int`, `Exception`, ...) are always taken;
+  `kotlin.js.JsAny`. The core types (`String`, `Int`, `Exception`, and Kotlin/Wasm's
+  `JsAny`, written where `Any` would be) are always taken;
   the others only when no star import of an outside package could also provide the name
   (the documentation gives no priority between star and default imports), else they stay
   unresolved with "may be the default import ..." in the hint. A project type of the name
   wins. `dynamic` (Kotlin/JS) is a type keyword: nothing to draw, nothing unresolved.
 - Library types through star imports: the types (classes, interfaces, objects, enums,
   annotation classes; no functions, no typealiases) of `kotlin.coroutines`,
-  `kotlin.reflect`, `kotlinx.coroutines`, `kotlinx.coroutines.channels` and
-  `kotlinx.coroutines.flow`, as their API references on kotlinlang.org list them, get their
-  external id (`kotlinx.coroutines.CoroutineScope`) when the file star-imports the package
-  and exactly one of the star-imported packages has the name (two would be an ambiguity
-  error in Kotlin). The project's own types, explicit imports and the file's own package
-  come first. `CoroutineContext.Key` follows its head. The table is not used where a
+  `kotlin.reflect`, `kotlinx.coroutines`, `kotlinx.coroutines.channels`,
+  `kotlinx.coroutines.flow` and of kotlinx.serialization (`kotlinx.serialization`, its
+  `descriptors`, `encoding`, `modules` and `json` packages), as their API references on
+  kotlinlang.org list them and the sources of the versions Ktor builds with confirm
+  (kotlinx.coroutines 1.11.0, kotlinx.serialization 1.11.0), get their external id
+  (`kotlinx.coroutines.CoroutineScope`) when the file star-imports the package and exactly
+  one of the star-imported packages has the name (two would be an ambiguity error in
+  Kotlin). The project's own types, explicit imports and the file's own package come
+  first; a core type or default import of the same name is not overruled (`Transient`,
+  and `Json`, which kotlin.js also has, stay as they are). `CoroutineContext.Key` follows its head. The table is not used where a
   nested type of an external supertype could have the name, as Kotlin would take that
-  first: under a supertype whose nested types are not known (Netty, `java.io`,
-  `kotlin.AutoCloseable`), the name stays unresolved with both hints. Names whose
+  first: under a supertype whose nested types are not known (Netty, `java.io`), the name
+  stays unresolved with both hints. Known: the common supertypes of those libraries, and
+  `kotlin.AutoCloseable`, `Throwable`, `Exception`, `RuntimeException`,
+  `IllegalStateException`, `IllegalArgumentException` (none declares a nested type, nor do
+  their java.lang classes on the JVM). Names whose
   `actual` is a typealias on some platform are left out: `Runnable` (`java.lang.Runnable`
   on the JVM, so still the uncertain default import), `CloseableCoroutineDispatcher`, and
   `CancellationException` (also in `kotlin.coroutines.cancellation`). Other libraries (kotlinx.serialization, kotlinx.io,

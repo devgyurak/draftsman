@@ -27,6 +27,8 @@ _CORE = {
     **_in("kotlin.text", "Regex StringBuilder Appendable"),
     **_in("kotlin.jvm", "JvmInline JvmStatic JvmField JvmOverloads Volatile Transient "
                         "Synchronized"),
+    # the top type of Kotlin/Wasm's JS interop, written where Any would be: `: JsAny`
+    **_in("kotlin.js", "JsAny"),
 }
 
 # the rest of the default-imported types: taken when no star import of an outside package
@@ -40,7 +42,7 @@ _DEFAULTS = {
                        "StackOverflowError ThreadDeath Package Module ThreadGroup"),
     **_in("kotlin.jvm", "JvmName JvmMultifileClass JvmSuppressWildcards JvmWildcard JvmRecord "
                         "JvmSynthetic Strictfp PurelyImplements JvmSerializableLambda"),
-    **_in("kotlin.js", "JsAny JsNumber JsString JsBoolean JsArray JsBigInt JsReference JsName "
+    **_in("kotlin.js", "JsNumber JsString JsBoolean JsArray JsBigInt JsReference JsName "
                        "JsExport JsModule JsNonModule JsQualifier JsFileName JsFun JsStatic "
                        "Promise Json ExperimentalJsExport"),
     **_in("kotlin.annotation", "Retention Target MustBeDocumented Repeatable AnnotationTarget "
@@ -104,6 +106,42 @@ _SUPERTYPES: dict[str, tuple[frozenset, tuple[str, ...]]] = {
     "kotlinx.coroutines.channels.SendChannel": (frozenset(), ()),
     "kotlinx.coroutines.channels.ReceiveChannel": (frozenset(), ()),
     "kotlinx.coroutines.channels.ChannelIterator": (frozenset(), ()),
+    # kotlin.* (API pages; on the JVM these are java.lang classes, none with a nested class
+    # in the Java SE 21 API)
+    "kotlin.AutoCloseable": (frozenset(), ()),
+    "kotlin.Throwable": (frozenset(), ()),
+    "kotlin.Exception": (frozenset(), ("kotlin.Throwable",)),
+    "kotlin.RuntimeException": (frozenset(), ("kotlin.Exception",)),
+    "kotlin.IllegalStateException": (frozenset(), ("kotlin.RuntimeException",)),
+    "kotlin.IllegalArgumentException": (frozenset(), ("kotlin.RuntimeException",)),
+    # kotlinx.serialization 1.11.0 sources; sealed ones (Json, JsonElement,
+    # SerializersModule) cannot be extended outside the library
+    "kotlinx.serialization.SerializationStrategy": (frozenset(), ()),
+    "kotlinx.serialization.DeserializationStrategy": (frozenset(), ()),
+    "kotlinx.serialization.KSerializer": (frozenset(), (
+        "kotlinx.serialization.SerializationStrategy",
+        "kotlinx.serialization.DeserializationStrategy")),
+    "kotlinx.serialization.SerialFormat": (frozenset(), ()),
+    "kotlinx.serialization.StringFormat": (frozenset(), ("kotlinx.serialization.SerialFormat",)),
+    "kotlinx.serialization.BinaryFormat": (frozenset(), ("kotlinx.serialization.SerialFormat",)),
+    "kotlinx.serialization.descriptors.SerialDescriptor": (frozenset(), ()),
+    "kotlinx.serialization.encoding.Decoder": (frozenset(), ()),
+    "kotlinx.serialization.encoding.Encoder": (frozenset(), ()),
+    "kotlinx.serialization.encoding.CompositeDecoder": (frozenset({"Companion"}), ()),
+    "kotlinx.serialization.encoding.CompositeEncoder": (frozenset(), ()),
+    "kotlinx.serialization.encoding.AbstractDecoder": (frozenset(), (
+        "kotlinx.serialization.encoding.Decoder", "kotlinx.serialization.encoding.CompositeDecoder")),
+    "kotlinx.serialization.encoding.AbstractEncoder": (frozenset(), (
+        "kotlinx.serialization.encoding.Encoder", "kotlinx.serialization.encoding.CompositeEncoder")),
+    "kotlinx.serialization.modules.SerializersModuleCollector": (frozenset(), ()),
+    "kotlinx.serialization.json.JsonDecoder": (frozenset(), (
+        "kotlinx.serialization.encoding.Decoder", "kotlinx.serialization.encoding.CompositeDecoder")),
+    "kotlinx.serialization.json.JsonEncoder": (frozenset(), (
+        "kotlinx.serialization.encoding.Encoder", "kotlinx.serialization.encoding.CompositeEncoder")),
+    "kotlinx.serialization.json.JsonContentPolymorphicSerializer":
+        (frozenset(), ("kotlinx.serialization.KSerializer",)),
+    "kotlinx.serialization.json.JsonTransformingSerializer":
+        (frozenset(), ("kotlinx.serialization.KSerializer",)),
 }
 
 
@@ -141,6 +179,30 @@ for _package, _names in {
     "kotlinx.coroutines.flow": "AbstractFlow Flow FlowCollector MutableSharedFlow "
                                "MutableStateFlow SharedFlow SharingCommand SharingStarted "
                                "StateFlow",
+    # kotlinx.serialization: names both in the API reference (1.13.0) and the 1.11.0
+    # sources Ktor builds with (ChunkedDecoder, only in the sources, is left out)
+    "kotlinx.serialization": "BinaryFormat Contextual ContextualSerializer "
+                             "DeserializationStrategy EncodeDefault ExperimentalSerializationApi "
+                             "InheritableSerialInfo InternalSerializationApi KSerializer "
+                             "KeepGeneratedSerializer MetaSerializable MissingFieldException "
+                             "Polymorphic PolymorphicSerializer Required SealedClassSerializer "
+                             "SealedSerializationApi SerialFormat SerialInfo SerialName "
+                             "Serializable SerializationException SerializationStrategy "
+                             "Serializer StringFormat Transient UseContextualSerialization "
+                             "UseSerializers",
+    "kotlinx.serialization.descriptors": "ClassSerialDescriptorBuilder PolymorphicKind "
+                                         "PrimitiveKind SerialDescriptor SerialKind StructureKind",
+    "kotlinx.serialization.encoding": "AbstractDecoder AbstractEncoder CompositeDecoder "
+                                      "CompositeEncoder Decoder Encoder",
+    "kotlinx.serialization.modules": "PolymorphicModuleBuilder SerializersModule "
+                                     "SerializersModuleBuilder SerializersModuleCollector",
+    "kotlinx.serialization.json": "ClassDiscriminatorMode DecodeSequenceMode Json JsonArray "
+                                  "JsonArrayBuilder JsonBuilder JsonClassDiscriminator "
+                                  "JsonConfiguration JsonContentPolymorphicSerializer JsonDecoder "
+                                  "JsonDecodingException JsonElement JsonEncoder "
+                                  "JsonEncodingException JsonException JsonIgnoreUnknownKeys "
+                                  "JsonNames JsonNamingStrategy JsonNull JsonObject "
+                                  "JsonObjectBuilder JsonPrimitive JsonTransformingSerializer",
 }.items():
     for _name in _names.split():
         _LIBRARY[_name] = _LIBRARY.get(_name, ()) + (_package,)
@@ -172,6 +234,10 @@ class KotlinSpec(LanguageSpec):
     def library_type(self, name, imported, arity=None, external_supers=None):
         # only through a star import of the package, and only when exactly one of the
         # star-imported packages has the name: two would be an ambiguity error in Kotlin
+        # a core type or default import of the name (`Transient`, kotlin.js `Json`) is not
+        # overruled: which of the two a star import gets is not decided here either
+        if name in _CORE or name in _DEFAULTS:
+            return None
         packages = [p for p in _LIBRARY.get(name, ()) if p in imported]
         if len(packages) != 1:
             return None

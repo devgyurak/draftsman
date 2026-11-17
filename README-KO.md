@@ -53,12 +53,12 @@
 |---|---|---:|---:|---:|---:|---:|
 | Java | [spring-petclinic](docs/e2e/java/spring-petclinic.md) | 30 | 25 | 73 | 0 | 0 |
 | Java | [jsoup](docs/e2e/java/jsoup.md) | 105 | 230 | 1310 | 2 (2 outside) | 0 |
-| Java | [Netty](docs/e2e/java/netty.md) | 2076 | 2752 | 17600 | 6 (3 ambiguous, 2 outside, 1 unexplained) | 0 |
+| Java | [Netty](docs/e2e/java/netty.md) | 2076 | 2752 | 17600 | 6 (5 outside, 1 unexplained) | 0 |
 | C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 356 | 199 (1 ambiguous, 198 outside) | 0 |
 | C# | [eShop](docs/e2e/csharp/eshop.md) `src/` | 497 | 506 | 924 | 525 (7 ambiguous, 514 outside, 4 unexplained) | 0 |
 | C# | [Serilog](docs/e2e/csharp/serilog.md) `src/Serilog` | 113 | 119 | 560 | 23 (23 outside) | 0 |
 | Kotlin | [nowinandroid](docs/e2e/kotlin/nowinandroid.md) | 226 | 237 | 388 | 4 (3 outside, 1 unexplained) | 0 |
-| Kotlin | [Ktor](docs/e2e/kotlin/ktor.md) | 1578 | 2137 | 6418 | 659 (72 ambiguous, 587 outside) | 0 |
+| Kotlin | [Ktor](docs/e2e/kotlin/ktor.md) | 1578 | 2137 | 6451 | 541 (49 ambiguous, 492 outside) | 0 |
 | TypeScript | [nest](docs/e2e/typescript/nest.md) `packages/` | 730 | 738 | 2304 | 0 | 0 |
 | TypeScript | [TypeORM](docs/e2e/typescript/typeorm.md) `packages/typeorm/src` | 496 | 694 | 3968 | 1 (1 unexplained) | 0 |
 | Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 | 0 | 0 |

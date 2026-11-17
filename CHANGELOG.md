@@ -131,3 +131,15 @@ Notes for anyone with `view.json` files written against a development build:
   unresolved, 69 supertypes now drawn as external (`CoroutineScope` 47), 6349 -> 6418
   relations; the other measured projects keep every relation (only hint texts changed, in
   the two eShops).
+- Kotlin: kotlinx.serialization (`kotlinx.serialization` and its `descriptors`,
+  `encoding`, `modules`, `json` packages) joins the library table; a core type or default
+  import of the same name is not overruled by it (`Transient`, kotlin.js `Json`).
+  `AutoCloseable` and the common exception classes are known supertypes for the table
+  (no nested types). `JsAny` is a core type like `Any`, so `: JsAny` is drawn.
+- Candidates of an unresolved name no longer include project types nested in a class the
+  reference is not inside, which it cannot mean; the hint names them instead, and the
+  reason follows what is left (Netty: 3 `Entry` ambiguous -> outside). TypeScript
+  `import Inner = Outer.Inner;` is read as an alias.
+- Measured: Ktor 659 -> 541 unresolved (49 ambiguous, 492 outside), 6418 -> 6451
+  relations (33 more external supertypes: `AbstractDecoder` 8, `KSerializer` 6, `JsAny`
+  12, ...). Every other project keeps its relations and unresolved names.

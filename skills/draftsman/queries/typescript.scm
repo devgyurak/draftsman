@@ -101,3 +101,5 @@
 
 ; ---------------------------------------------------------------- aliases
 (type_alias_declaration name: (type_identifier) @alias value: (_) @alias.type)
+; `import Inner = Outer.Inner;` (an import alias of a namespace member)
+(import_alias (identifier) @alias . (nested_identifier) @alias.type)

@@ -310,8 +310,11 @@ class Resolver:
                 if target.kind == "enum" and any(
                         rm.member.name == rest for rm in target.members):
                     return Resolution(PROJECT, first.target)  # enum member as a type
-                return Resolution(UNRESOLVED, hint=f"{first.target} has no nested type {rest}",
-                                  candidates=self._candidates(name, sep))
+                cands, unreachable = self._candidates(name, sep, rtype)
+                hint = f"{first.target} has no nested type {rest}"
+                if unreachable:
+                    hint += "; " + _unreachable_hint(unreachable)
+                return Resolution(UNRESOLVED, hint=hint, candidates=cands)
             if first.status == EXTERNAL and first.target:
                 return self._not_found(first.target + sep + rest, spec)
             if first.status in (EXTERNAL, BUILTIN):
@@ -446,11 +449,34 @@ class Resolver:
         ext = self._scope_supers(rtype, inherit)
         if ext:
             hints.append("may be a nested type inherited from " + ", ".join(ext))
+        outside = bool(hints)   # what explains it so far is all outside the sources
+        cands, unreachable = self._candidates(name, sep, rtype)
+        if unreachable:
+            hints.append(_unreachable_hint(unreachable))
         return Resolution(UNRESOLVED, hint="; ".join(hints) or None,
-                          candidates=self._candidates(name, sep), outside=bool(hints))
+                          candidates=cands, outside=outside)
 
-    def _candidates(self, name: str, sep: str) -> list[str]:
-        return sorted(self.by_simple.get(name.rsplit(sep, 1)[-1], []))
+    def _candidates(self, name: str, sep: str, rtype: RawType) -> tuple[list[str], list[str]]:
+        """Project types with the simple name: (those the reference could mean, nested
+        types it cannot reach). A nested type is reachable by its simple name only from
+        inside its outer type; every other way in (imports, inheritance, aliases) is
+        resolved before candidates are looked for."""
+        enclosing = set()
+        cur: Optional[RawType] = rtype
+        while cur is not None:
+            enclosing.add(cur.qualified_name)
+            cur = self.index.get(cur.outer) if cur.outer else None
+        cands, unreachable = [], []
+        for c in sorted(self.by_simple.get(name.rsplit(sep, 1)[-1], [])):
+            outer = self.index[c].outer
+            (cands if outer is None or outer in enclosing else unreachable).append(c)
+        return cands, unreachable
+
+
+def _unreachable_hint(nested: list[str]) -> str:
+    shown = ", ".join(nested[:3]) + (f" (+{len(nested) - 3} more)" if len(nested) > 3 else "")
+    return (f"project nested type{'s' if len(nested) > 1 else ''} of the name, out of scope "
+            f"here: {shown}")
 
 
 def _share_project_imports(scopes: list[FileScope]) -> None:
