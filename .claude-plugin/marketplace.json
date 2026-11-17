@@ -7,8 +7,8 @@
     {
       "name": "draftsman",
       "source": "./",
-      "description": "UML class diagrams whose relations come from a tree-sitter parser, not from an LLM."
+      "description": "The parser measures, the agent drafts. UML class diagrams for Java, C#, Kotlin, TypeScript, Python and C++ — every relation traced to source, never guessed. Mermaid, SVG or an interactive HTML viewer."
     }
   ],
-  "description": "Draftsman: UML class diagrams whose relations come from a tree-sitter parser."
+  "description": "Draftsman: the parser measures, the agent drafts — UML class diagrams with every relation traced to source."
 }

@@ -1,7 +1,7 @@
 {
   "name": "draftsman",
   "version": "0.2.0",
-  "description": "UML class diagrams for Java, C#, Kotlin, TypeScript, Python and C++ whose relations come from a tree-sitter parser, not from an LLM. Mermaid, SVG or an interactive HTML viewer.",
+  "description": "The parser measures, the agent drafts. UML class diagrams for Java, C#, Kotlin, TypeScript, Python and C++ — every relation traced to source, never guessed. Mermaid, SVG or an interactive HTML viewer.",
   "author": {
     "name": "devgyurak"
   },
@@ -10,7 +10,16 @@
     "class-diagram",
     "mermaid",
     "tree-sitter",
-    "architecture"
+    "static-analysis",
+    "code-visualization",
+    "software-architecture",
+    "diagram-generator",
+    "java",
+    "csharp",
+    "kotlin",
+    "typescript",
+    "python",
+    "cpp"
   ],
   "license": "Apache-2.0",
   "icon": "./assets/icon.png",
