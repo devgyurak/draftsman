@@ -70,8 +70,11 @@ class Wrappers:
         return self.rule_for(name) is not None
 
     def leaves(self, ref: Optional[TypeRef], is_project: Callable[[str], bool],
-               track_ownership: bool = False) -> list[Leaf]:
-        """The element types a field of type ``ref`` actually points at."""
+               track_ownership: bool = False,
+               dropped: Optional[list] = None) -> list[Leaf]:
+        """The element types a field of type ``ref`` actually points at. The type
+        arguments a container rule does not follow (the K of `Map<K, V>`) are appended
+        to ``dropped`` when given."""
         out: list[Leaf] = []
 
         def walk(r, mult: str, own: Optional[str]):
@@ -101,6 +104,8 @@ class Wrappers:
                 if not r.args:
                     return
                 idx = len(r.args) - 1 if rule.arg == "last" else int(rule.arg)
+                if dropped is not None:
+                    dropped.extend(a for j, a in enumerate(r.args) if j != idx and a is not None)
                 if idx >= len(r.args):
                     return
                 walk(r.args[idx], combine(mult, rule.multiplicity), own or rule.ownership)

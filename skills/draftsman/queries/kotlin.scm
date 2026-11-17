@@ -42,12 +42,14 @@
 
 (function_declaration
   (modifiers)? @modifiers
+  (receiver_type)? @receiver
   (simple_identifier) @name
   (function_value_parameters)
   .
   [(user_type) (nullable_type) (function_type)] @type) @member.method
 (function_declaration
   (modifiers)? @modifiers
+  (receiver_type)? @receiver
   (simple_identifier) @name
   (function_body)? @body) @member.method
 

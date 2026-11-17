@@ -54,5 +54,26 @@ Notes for anyone with `view.json` files written against a development build:
   longer replaces `Microsoft.NET.Sdk`), and `Aspire.AppHost.Sdk` brings Microsoft.NET.Sdk's
   implicit usings, as does `MSTest.Sdk` (both checked in the SDKs' sources). dotnet/eShop:
   the names its `src/Shared` files, its AppHost and its MSTest project use resolve again.
+- Kotlin: `expect`/`actual` declarations merge into one type at the expect, each method
+  once (Ktor: 343 duplicated members in 67 types gone); default imports give real ids
+  (`kotlin.Exception`, `java.lang.Class`, `kotlin.js.JsAny`), certain unless a star import
+  of an outside package could shadow them; `dynamic` is a type keyword; `*.gradle.kts`
+  build scripts are not extracted; `vararg` (`String...`), member-extension receivers
+  (`Grammar.unaryPlus()`, now also a dependency) and `suspend` stay in signatures.
+- A dotted name whose head cannot be found (`Outer.Inner` under a star import) is
+  unresolved with the head's hint instead of an external type; only a package head
+  (`com.foo.Bar`, C# `System.Text.Encoding`) makes it a qualified external name.
+  eShopOnWeb: `EndpointBaseAsync.WithRequest.WithActionResult` is now unresolved.
+- Function types are read: Kotlin `(A) -> B`, `R.(A) -> B` and `suspend` forms, TypeScript
+  `(a: A) => B`, Python `Callable[[A], B]`, C++ `std::function<R(A)>`. Every project type
+  they name is a dependency (a function-typed field is no association). Before, a type
+  containing one was unreadable as a whole, so `Map<K, (A) -> B>` lost even its map and a
+  supertype like `ClientHook<suspend (HttpResponse) -> Unit>` dropped its relation. Ktor:
+  linked references inside function types 69 -> 387, implements +47; nest 2103 -> 2171
+  relations, nowinandroid 354 -> 357.
+- Kotlin context parameters in function types (`context(Log) () -> Unit`) are dependencies,
+  and `suspend`/`context(...)` stay in property and return types too. Container arguments a
+  wrapper rule does not follow (the key of `Map<K, V>`) are dependencies of the field,
+  in every language: jsoup 1304 -> 1310, nest 2171 -> 2172, httpx 281 -> 283 relations.
 - Comments inside a type (a JSDoc block in an inline object type, `/* … */` in a generic
   argument) are no longer part of `type_ref`, in every language.

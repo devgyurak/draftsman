@@ -385,12 +385,14 @@ class Extractor:
                     continue
                 pname, ptype = _first(caps, "param.name"), _first(caps, "param.type")
                 name = _text(pname, src) if pname is not None else ""
-                tref = spec.normalize_type(_text(ptype, src)) if ptype is not None else None
+                tref = spec.normalize_type(spec.type_text(ptype, _text(ptype, src), src)) \
+                    if ptype is not None else None
                 if (d := _first(caps, "param.declarator")) is not None:
                     dname, suffix, _ = spec.declarator(d, src)
                     name = dname or name
                     tref = (tref or "") + suffix if tref else tref
-                if tref is not None and _first(caps, "param.varargs") is not None:
+                if tref is not None and (_first(caps, "param.varargs") is not None
+                                         or spec.is_varargs(n)):
                     tref += "..."
                 owner.member.params.append(Param(name, tref))
             elif (n := _first(caps, "tparam")) is not None:
@@ -458,7 +460,8 @@ class Extractor:
             return
         name_node = _first(caps, "name")
         type_node = _first(caps, "type")
-        type_ref = spec.normalize_type(_text(type_node, src)) if type_node is not None else None
+        type_ref = (spec.normalize_type(spec.type_text(type_node, _text(type_node, src), src))
+                    if type_node is not None else None)
         name = _text(name_node, src) if name_node is not None else None
         if (d := _first(caps, "declarator")) is not None:
             dname, suffix, is_function = spec.declarator(d, src)
@@ -479,6 +482,8 @@ class Extractor:
             existing = seen_members[key]
             if existing.member.type_ref is None:
                 existing.member.type_ref = type_ref
+            if (recv := _first(caps, "receiver")) is not None and existing.member.receiver is None:
+                existing.member.receiver = spec.normalize_type(_text(recv, src))
             if _first(caps, "body") is not None and not existing.has_body:
                 existing.has_body = True
                 existing.member.abstract = spec.is_abstract(
@@ -500,6 +505,8 @@ class Extractor:
             modifiers=mods,
             annotations=annos,
             line=_line(node),
+            receiver=(spec.normalize_type(_text(_first(caps, "receiver"), src))
+                      if _first(caps, "receiver") is not None else None),
         )
         value = _first(caps, "value")
         rm = RawMember(member, has_body=has_body, flags=set(caps),

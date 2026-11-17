@@ -39,7 +39,8 @@ def _member_line(m: Member) -> str:
             f"{_mm_type(p.type_ref)} {p.name}".strip() for p in m.params)
         flags = ("*" if m.abstract else "") + ("$" if m.static else "")
         ret = f" {typ}" if typ and m.kind == "method" else ""
-        return f"{vis}{m.name}({params}){flags}{ret}"
+        name = f"{_mm_type(m.receiver)}.{m.name}" if m.receiver else m.name
+        return f"{vis}{name}({params}){flags}{ret}"
     return f"{vis}{typ + ' ' if typ else ''}{m.name}{'$' if m.static else ''}"
 
 

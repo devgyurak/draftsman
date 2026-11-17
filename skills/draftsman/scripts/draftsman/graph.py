@@ -20,7 +20,8 @@ def member_text(m: Member) -> str:
         params = ", ".join(f"{p.name}: {p.type_ref}" if p.type_ref else p.name
                            for p in m.params)
         ret = f": {m.type_ref}" if m.type_ref and m.kind == "method" else ""
-        return f"{vis} {m.name}({params}){ret}"
+        name = f"{m.receiver}.{m.name}" if m.receiver else m.name
+        return f"{vis} {name}({params}){ret}"
     return f"{vis} {m.name}: {m.type_ref}" if m.type_ref else f"{vis} {m.name}"
 
 

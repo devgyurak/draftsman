@@ -52,11 +52,11 @@
 | 언어 | 프로젝트 | 파일 | 타입 | 관계 | 미해결 | 파싱 진단 |
 |---|---|---:|---:|---:|---:|---:|
 | Java | spring-petclinic | 30 | 25 | 73 | 0 | 0 |
-| Java | jsoup | 105 | 230 | 1304 | 2 (`Map.Entry`, 힌트 포함) | 0 |
-| C# | eShopOnWeb `src/` | 209 | 208 | 357 | 198 (그중 193은 `using`으로 들어온 프레임워크 타입) | 0 |
-| Kotlin | nowinandroid | 264 | 237 | 351 | 5 (protobuf 생성 코드) | 0 |
-| TypeScript | nest `packages/` | 730 | 738 | 2103 | 0 | 0 |
-| Python | httpx | 23 | 87 | 281 | 0 | 0 |
+| Java | jsoup | 105 | 230 | 1310 | 2 (`Map.Entry`, 힌트 포함) | 0 |
+| C# | eShopOnWeb `src/` | 209 | 208 | 356 | 199 (그중 198은 `using`으로 들어온 프레임워크 타입) | 0 |
+| Kotlin | nowinandroid | 226 | 237 | 357 | 4 (protobuf 생성 코드) | 0 |
+| TypeScript | nest `packages/` | 730 | 738 | 2172 | 0 | 0 |
+| Python | httpx | 23 | 87 | 283 | 0 | 0 |
 | C++ | leveldb | 102 | 161 | 877 | 2 | 9개 파일에 10구간 (매크로만 있는 헤더, `extern "C"` 가드, 멤버 함수 포인터 필드 하나) |
 
 행마다 측정한 커밋과 추출 명령은 [`docs/measurements.md`](docs/measurements.md)에 있습니다. 언어별로 알려진 한계는 [`lang-notes.md`](skills/draftsman/references/lang-notes.md)에 있습니다.
@@ -110,7 +110,7 @@ $draftsman:draftsman                # Codex(플러그인). 스킬만 설치했�
 
 ```bash
 cd skills/draftsman
-python3 scripts/extract.py path/to/src -o ir.json --exclude '**/test/**'
+python3 scripts/extract.py path/to/src -o ir.json --exclude '**/test/**'   # *.gradle.kts는 건너뜀
 python3 scripts/summary.py ir.json                  # 규모, 허브 클래스, 미해결 참조
 python3 scripts/summary.py ir.json --type Order     # 타입 하나 자세히
 python3 scripts/render.py ir.json view.json -o diagram.mmd     # 또는 --format svg | html

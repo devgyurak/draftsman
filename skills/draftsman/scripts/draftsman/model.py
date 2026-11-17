@@ -66,6 +66,7 @@ class Member:
     annotations: list[str] = field(default_factory=list)
     line: int = 0
     file: Optional[str] = None  # only when it differs from the type's file (partial types)
+    receiver: Optional[str] = None  # Kotlin member extension: `fun Grammar.unaryPlus()`
 
     def to_dict(self) -> dict:
         d: dict[str, Any] = {
@@ -84,6 +85,8 @@ class Member:
             d["annotations"] = self.annotations
         if self.file:
             d["file"] = self.file
+        if self.receiver:
+            d["receiver"] = self.receiver
         d["line"] = self.line
         return d
 
@@ -98,6 +101,7 @@ class Member:
             abstract=d.get("abstract", False),
             params=[Param.from_dict(p) for p in d.get("params", [])],
             modifiers=d.get("modifiers", []),
+            receiver=d.get("receiver"),
             annotations=d.get("annotations", []),
             line=d.get("line", 0),
             file=d.get("file"),

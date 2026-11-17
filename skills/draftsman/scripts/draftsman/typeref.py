@@ -9,9 +9,13 @@ Handles the shapes shared by the supported languages:
     A | B | None                       unions (TypeScript, Python)
     T*, T&, T&&                        C++ pointers / references
     ? extends T, out T, const T        wildcards and qualifiers (dropped)
+    (A, B) -> C, R.(A) -> C            function types (Kotlin; `suspend` dropped,
+    context(A) () -> C                 context parameters kept as types)
+    (a: A) => B                        function types (TypeScript)
+    Callable[[A], B], R(A)             Python callables, C++ std::function<R(A)>
 
-Anything else (function types, literal types, decltype...) yields ``None``;
-callers treat that as "no structural information".
+Anything else (literal types, decltype...) yields ``None``; callers treat that as "no
+structural information".
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Optional, Union
 
-TypeRef = Union["Named", "Array", "Nullable", "Pointer", "TypeUnion"]
+TypeRef = Union["Named", "Array", "Nullable", "Pointer", "TypeUnion", "FunctionType"]
 
 
 @dataclass(frozen=True)
@@ -51,6 +55,20 @@ class TypeUnion:
     items: tuple
 
 
+@dataclass(frozen=True)
+class FunctionType:
+    params: tuple                       # parameter types (unknown ones dropped)
+    result: Optional["TypeRef"] = None
+    receiver: Optional["TypeRef"] = None  # Kotlin `R.(A) -> C`
+    context: tuple = ()                   # Kotlin context parameters: `context(A, B) () -> C`
+
+
+@dataclass(frozen=True)
+class _ParamList:
+    """`[A, B]` inside `Callable[[A, B], R]`."""
+    items: tuple
+
+
 NULL_LIKE = frozenset({"None", "null", "undefined", "nullptr_t", "NoneType"})
 
 # Words that qualify a type without changing which type it is.
@@ -58,6 +76,7 @@ _QUALIFIERS = frozenset({
     "const", "volatile", "struct", "class", "enum", "union", "typename", "final",
     "readonly", "in", "out", "ref", "mutable", "constexpr", "static", "inline",
     "extern", "unsafe", "scoped", "params", "keyof", "typeof", "unique", "infer",
+    "suspend",
 })
 
 _TOKEN = re.compile(
@@ -162,13 +181,22 @@ class _Parser:
             value = value or tok == "typeof"
             self.take()
             tok = self.peek()
-        if tok == "(":
+        if tok == "context" and self.peek(1) == "(":   # Kotlin context(A, B) () -> C
             self.take()
-            inner = self.union()
-            self.take(")")
-            if self.peek() in ("->", "=>"):
-                raise _ParseError("function type")
-            return inner
+            context, _ = self.param_list()
+            inner = self.primary()
+            if not isinstance(inner, FunctionType):
+                raise _ParseError("context without a function type")
+            return FunctionType(inner.params, inner.result, inner.receiver,
+                                context + inner.context)
+        if tok == "(":
+            params, plain = self.param_list()
+            if self.peek() in ("->", "=>"):   # (A, b: B) -> C, (a: A) => B
+                self.take()
+                return FunctionType(params, self.union())
+            if plain and len(params) == 1:   # a parenthesised type: (A | B)[]
+                return params[0]
+            raise _ParseError("parameter list without an arrow")
         if tok == "?":  # Java wildcard
             self.take()
             if self.peek() in ("extends", "super"):
@@ -193,6 +221,18 @@ class _Parser:
             args = self.arg_list(">")
         elif self.peek() == "[" and self.peek(1) != "]":
             args = self.arg_list("]")
+        if self.peek() == "." and self.peek(1) == "(":   # Kotlin R.(A) -> C
+            self.take()
+            params, _ = self.param_list()
+            self.take("->")
+            return FunctionType(params, self.union(), Named(name, args, value))
+        if self.peek() == "(":   # C++ std::function<R(A)>
+            params, _ = self.param_list()
+            return FunctionType(params, Named(name, args, value))
+        if name.rsplit(".", 1)[-1] == "Callable" and len(args) == 2 \
+                and (isinstance(args[0], _ParamList) or args[0] is None):   # Python
+            params = args[0].items if isinstance(args[0], _ParamList) else ()
+            return FunctionType(params, args[1])
         if self.peek() in (".", "::") and args:
             # Outer<T>.Inner -> treat as Inner nested in Outer
             sep = self.take()
@@ -201,6 +241,35 @@ class _Parser:
             if self.peek() == "<":
                 args = self.arg_list(">")
         return Named(name, args, value)
+
+    def param_list(self) -> tuple[tuple, bool]:
+        """`(A, b: B, ...rest: C[])` -> (types, whether it was a plain `(Type)`)."""
+        self.take("(")
+        params: list = []
+        plain = True
+        while self.peek() != ")":
+            if self.peek() is None:
+                raise _ParseError("unterminated parameter list")
+            if self.peek() == "...":       # TS rest parameter
+                self.take()
+                plain = False
+            if _is_ident(self.peek() or "") and (
+                    self.peek(1) == ":" or (self.peek(1) == "?" and self.peek(2) == ":")):
+                self.take()                # a parameter name: `b: B`, `b?: B`
+                if self.peek() == "?":
+                    self.take()
+                self.take(":")
+                plain = False
+            ref = self.union()
+            if ref is not None:
+                params.append(ref)
+            if self.peek() == ",":
+                self.take()
+                plain = False
+            elif self.peek() != ")":
+                raise _ParseError("expected ',' or ')'")
+        self.take(")")
+        return tuple(params), plain and len(params) == 1
 
     def qualified_name(self) -> str:
         parts = []
@@ -222,7 +291,10 @@ class _Parser:
             if self.peek() is None:
                 raise _ParseError("unterminated argument list")
             if self.peek() == "[" and close == "]":  # Callable[[A, B], R]
-                self.skip_balanced("[", "]")
+                items = self.arg_list("]")
+                args.append(_ParamList(tuple(i for i in items if i is not None)))
+            elif self.peek() == "..." and close == "]":  # Callable[..., R]
+                self.take()
                 args.append(None)
             else:
                 args.append(self.union())
@@ -274,6 +346,9 @@ def value_names(ref: Optional[TypeRef]) -> set[str]:
         elif isinstance(r, TypeUnion):
             for it in r.items:
                 walk(it)
+        elif isinstance(r, FunctionType):
+            for it in (*r.context, r.receiver, *r.params, r.result):
+                walk(it)
 
     walk(ref)
     return values - types
@@ -294,6 +369,9 @@ def named_refs(ref: Optional[TypeRef]) -> list[tuple[str, int]]:
         elif isinstance(r, TypeUnion):
             for it in r.items:
                 walk(it)
+        elif isinstance(r, FunctionType):
+            for it in (*r.context, r.receiver, *r.params, r.result):
+                walk(it)
 
     walk(ref)
     return out
@@ -309,6 +387,29 @@ def all_names(ref: Optional[TypeRef]) -> list[str]:
         if isinstance(r, Named):
             if r.name not in NULL_LIKE:
                 out.append(r.name)
+            for a in r.args:
+                walk(a)
+        elif isinstance(r, (Array, Nullable, Pointer)):
+            walk(r.elem if isinstance(r, Array) else r.inner)
+        elif isinstance(r, TypeUnion):
+            for it in r.items:
+                walk(it)
+        elif isinstance(r, FunctionType):
+            for it in (*r.context, r.receiver, *r.params, r.result):
+                walk(it)
+
+    walk(ref)
+    return out
+
+
+def function_types(ref: Optional[TypeRef]) -> list[FunctionType]:
+    """Every function type in ``ref``, also inside containers (`Map<K, (A) -> B>`)."""
+    out: list[FunctionType] = []
+
+    def walk(r):
+        if isinstance(r, FunctionType):
+            out.append(r)
+        elif isinstance(r, Named):
             for a in r.args:
                 walk(a)
         elif isinstance(r, (Array, Nullable, Pointer)):

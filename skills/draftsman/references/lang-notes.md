@@ -77,8 +77,28 @@ known gaps: expect them in `unresolved` or as missing relations, never as invent
 - Companion object members become `static` members of the enclosing class.
 - Supertypes: `Base()` (constructor call) is a superclass; a bare type in a class's list is
   an interface (Kotlin requires the call for classes), so external ones are `implements`.
-- Visibility default `public`. Extension functions are top level and belong to no class.
-- `typealias` is an alias. Not handled: delegation targets (`by x`), `expect`/`actual`.
+- Visibility default `public`. Top-level extension functions belong to no class; a member
+  extension keeps its receiver (`+ Grammar.unaryPlus()`), and the receiver type is a
+  dependency. `vararg` parameters read as `String...`, `suspend` stays in function types.
+- `expect`/`actual`: the expect class and its actuals are one type, located at the expect
+  declaration. A method or constructor declared again in another file with the same
+  receiver, name and parameter types is one member (the expect's is kept); look-alikes
+  within one file are overloads and all stay.
+- Default imports (kotlinlang.org/docs/packages.html#default-imports: `kotlin.*` and its
+  `annotation`, `collections`, `comparisons`, `io`, `ranges`, `sequences`, `text`, `math`
+  subpackages, plus `java.lang.*`/`kotlin.jvm.*` on the JVM and `kotlin.js.*` on JS, used
+  together) give external ids with their package: `kotlin.Exception`, `java.lang.Class`,
+  `kotlin.js.JsAny`. The core types (`String`, `Int`, `Exception`, ...) are always taken;
+  the others only when no star import of an outside package could also provide the name
+  (the documentation gives no priority between star and default imports), else they stay
+  unresolved with "may be the default import ..." in the hint. A project type of the name
+  wins. `dynamic` (Kotlin/JS) is a type keyword: nothing to draw, nothing unresolved.
+- Gradle build and settings scripts (`*.gradle.kts`) are not extracted; other `.kts`
+  scripts are.
+- Function types (`Route.() -> Unit`, `suspend (Call) -> Unit`, `context(Log) () -> Unit`,
+  also inside containers) make a dependency on every project type they name; a field of such a type is no
+  association. Supertypes with a function type among their arguments are read too.
+- `typealias` is an alias. Not handled: delegation targets (`by x`).
 
 ## TypeScript / TSX
 

@@ -25,6 +25,7 @@ interprets **matches** (not individual captures) by capture name. Captures start
 | `@type.<kind>` | yes | a type declaration; `<kind>` is an IR type kind. When several patterns match one node, a specific kind beats `class` |
 | `@member.<kind>` | yes | `field`, `method`, `property`, `constructor`, `enum_constant` |
 | `@name` | in type/member | declared name (may be qualified for C++ out-of-class nested types) |
+| `@receiver` | in member | receiver type of a member extension function (Kotlin `fun Grammar.plus()`) |
 | `@type` | in member | field type or return type |
 | `@declarator` | in member | C-style declarator; `LanguageSpec.declarator` returns name, `*`/`&`/`[]` suffix and whether it declares a function (turning a `field` into a `method`) |
 | `@modifiers` | in type/member | modifier node(s); leaves are keywords, `annotation_nodes` are annotations |

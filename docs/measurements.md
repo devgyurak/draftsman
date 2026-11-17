@@ -2,7 +2,9 @@
 
 The numbers in the README's status table, pinned to the commit each project was measured at
 and the command that produced them, so a later re-run can tell a change in Draftsman from a
-change in the project. Measured on 2026-11-17 with the code of this repository at that date.
+change in the project. Measured on 2026-11-17 with the code of this repository at that
+date, re-run after each change that moved a number. `*.gradle.kts` build scripts are not
+extracted, which is why nowinandroid counts fewer files than it has `.kt`/`.kts` files.
 
 | Project | Repository | Commit (date) | Extract command (from the clone's root) |
 |---|---|---|---|
@@ -20,11 +22,11 @@ source of every number:
 | Project | Files | Types | association | dependency | extends | implements | Unresolved | Diagnostics |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | spring-petclinic | 30 | 25 | 11 | 46 | 11 | 5 | 0 | 0 |
-| jsoup | 105 | 230 | 147 | 1008 | 118 | 31 | 2 | 0 |
-| eShopOnWeb | 209 | 208 | 96 | 199 | 35 | 27 | 198 | 0 |
-| nowinandroid | 264 | 237 | 106 | 135 | 27 | 83 | 5 | 0 |
-| nest | 730 | 738 | 411 | 1437 | 214 | 41 | 0 | 0 |
-| httpx | 23 | 87 | 31 | 186 | 64 | 0 | 0 | 0 |
+| jsoup | 105 | 230 | 147 | 1014 | 118 | 31 | 2 | 0 |
+| eShopOnWeb | 209 | 208 | 96 | 199 | 34 | 27 | 199 | 0 |
+| nowinandroid | 226 | 237 | 106 | 141 | 27 | 83 | 4 | 0 |
+| nest | 730 | 738 | 415 | 1502 | 214 | 41 | 0 | 0 |
+| httpx | 23 | 87 | 31 | 188 | 64 | 0 | 0 | 0 |
 | leveldb | 102 | 161 | 222 | 613 | 17 | 25 | 2 | 10 |
 
 To re-measure, clone at the commit (`git clone <repo> && git -C <dir> checkout <commit>`),

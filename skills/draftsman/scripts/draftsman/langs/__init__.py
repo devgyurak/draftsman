@@ -16,7 +16,7 @@ LANGUAGES: dict[str, LanguageSpec] = {spec.name: spec for spec in (
 def spec_for_path(path: str) -> LanguageSpec | None:
     for spec in LANGUAGES.values():
         if path.endswith(spec.extensions):
-            return spec
+            return spec if spec.accepts(path.rsplit("/", 1)[-1]) else None
     return None
 
 

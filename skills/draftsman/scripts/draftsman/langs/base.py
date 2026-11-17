@@ -113,6 +113,20 @@ class LanguageSpec:
         prepended to every file's path before file_namespace/module_id see it."""
         return ""
 
+    def is_varargs(self, param_node) -> bool:
+        """Whether a parameter is variadic when the query cannot say (a modifier that is
+        the parameter's sibling, like Kotlin's `vararg`)."""
+        return False
+
+    def type_text(self, type_node, text: str, src: bytes) -> str:
+        """A member's or parameter's type text, with modifiers the grammar keeps beside
+        the type node (Kotlin `suspend`, `context(A)`)."""
+        return text
+
+    def accepts(self, filename: str) -> bool:
+        """Whether a file with one of ``extensions`` is source to extract."""
+        return True
+
     def is_project_wide(self, import_node) -> bool:
         """Whether an import applies to the whole build project (`global using`)."""
         return False
@@ -158,6 +172,16 @@ class LanguageSpec:
         """Qualified id of a well-known library type ``name`` reachable through one of
         the ``imported`` namespaces, else None; ``arity`` is its number of type
         arguments when known (generic and plain versions can live apart)."""
+        return None
+
+    def is_package_head(self, head: str, known: set[str]) -> bool:
+        """Whether ``head`` in ``head.Rest`` names a package rather than a type: lower
+        case by convention, or a first segment of an import or a project namespace."""
+        return head[:1].islower() or head in known
+
+    def default_import(self, name: str) -> Optional[str]:
+        """Qualified id of a type the language imports into every file by default but a
+        star import of another package could shadow (Kotlin java.lang.*), else None."""
         return None
 
     def is_builtin(self, name: str) -> bool:

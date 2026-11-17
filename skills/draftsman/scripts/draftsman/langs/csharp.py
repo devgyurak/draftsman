@@ -227,6 +227,10 @@ class CSharpSpec(LanguageSpec):
                 out.append(line if active else _blank(line))
         return b"\n".join(out)
 
+    def is_package_head(self, head, known):
+        # namespaces are capitalised too: only what the file or the project uses as one
+        return head in known or head in ("System", "Microsoft", "global")
+
     def is_project_wide(self, import_node):
         parent = import_node.parent
         return parent is not None and any(c.type == "global" for c in parent.children)

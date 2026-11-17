@@ -566,6 +566,122 @@ def test_csharp_linked_files_and_sdks(tmp_path):
     assert "Microsoft.VisualStudio.TestTools.UnitTesting" not in [i.path for i in unit.imports]
 
 
+def test_kotlin_expect_actual_is_one_type(tmp_path):
+    """expect in common and actuals per platform merge into one type with each method once,
+    kept from the expect declaration even when an actual is read first (androidMain
+    sorts before commonMain); look-alike overloads of one file all stay."""
+    from conftest import extract_source
+    body = "actual fun start(wait: Boolean) {}\n  actual fun stop(a: Long, b: Long) {}\n"
+    ir = extract_source(tmp_path, {
+        "commonMain/E.kt": ("package p\nclass A\nclass B\n"
+                        "expect class Engine {\n  fun start(wait: Boolean)\n  fun stop(a: Long, b: Long)\n"
+                        "  fun <T : A> pick(x: T)\n  fun <T : B> pick(x: T)\n}\n"),
+        "androidMain/E.kt": "package p\nactual class Engine {\n  " + body + "  fun jvmOnly() {}\n}\n",
+        "jsMain/E.kt": "package p\nactual class Engine {\n  " + body + "}\n",
+    })
+    (engine,) = [t for t in ir.types if t.name == "Engine"]
+    names = [m.name for m in engine.members]
+    assert sorted(names) == ["jvmOnly", "pick", "pick", "start", "stop"]
+    assert engine.location.file == "commonMain/E.kt"                  # where the expect is
+    start = next(m for m in engine.members if m.name == "start")
+    assert start.file is None and start.line == 5                 # the expect's member
+
+
+def test_kotlin_default_imports(tmp_path):
+    """Default imports are external with their package; with a star import of an outside
+    package they are only a hint; a project type of the name wins; `dynamic` is nothing."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "a/Fetch.kt": ("package io.app.fetch\nimport io.app.model.*\n"
+                       "class Fetch(val any: JsAny, val d: dynamic) : Exception()\n"),
+        "a/model/M.kt": "package io.app.model\nclass M\n",
+        "b/Loader.kt": ("package io.app.load\nimport kotlinx.coroutines.*\n"
+                        "class Loader(val c: Class<*>)\n"),
+        "c/Class.kt": "package io.app.own\nclass Class\nclass Uses(val k: Class)\n",
+    })
+    rels = {(r.from_, r.kind, r.to) for r in ir.relations}
+    assert ("io.app.fetch.Fetch", "extends", "kotlin.Exception") in rels
+    assert ("io.app.own.Uses", "association", "io.app.own.Class") in rels
+    (u,) = ir.unresolved
+    assert u.raw_type == "Class" and "default import java.lang.Class" in u.hint
+    assert not any("JsAny" in r.to or "dynamic" in r.to for r in ir.relations)
+
+
+def test_kotlin_build_scripts_are_not_sources(tmp_path):
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "build.gradle.kts": "class BuildOnly\n",
+        "settings.gradle.kts": "class SettingsOnly\n",
+        "x/ktorsettings.cache.settings.gradle.kts": "class Convention\n",
+        "scripts/tool.main.kts": "class Tool\n",
+    })
+    assert {t.name for t in ir.types} == {"Tool"}
+
+
+def test_dotted_name_with_an_unknown_head_is_not_external(tmp_path):
+    """`Outer.Inner` under a star import is unresolved; `com.foo.Bar` and C#'s
+    `System.Text.Encoding` are qualified external names."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "J.kt": ("package app\nimport io.ktor.http.*\n"
+                 "class J(val a: OutgoingContent.ReadChannelContent, val b: com.foo.Bar)\n"),
+        "C.cs": ("using Acme.Web;\nnamespace App;\n"
+                 "public class C { System.Text.Encoding e; Outer.Inner i; }\n"),
+    })
+    unresolved = {u.raw_type: u.hint for u in ir.unresolved}
+    assert set(unresolved) == {"OutgoingContent.ReadChannelContent", "Outer.Inner"}
+    assert "io.ktor.http.*" in unresolved["OutgoingContent.ReadChannelContent"]
+    assert not any("OutgoingContent" in e.id for e in ir.externals)
+
+
+def test_kotlin_signatures_keep_vararg_receiver_and_suspend(tmp_path):
+    from conftest import extract_source
+    from draftsman.graph import member_text
+    ir = extract_source(tmp_path, {"G.kt": (
+        "package p\nclass Grammar\nclass Ctx\nclass B {\n"
+        "  constructor(uri: String, rel: String)\n  constructor(uri: String, vararg rel: String)\n"
+        "  operator fun Grammar.unaryPlus(): Grammar = this\n"
+        "  operator fun String.unaryPlus(): Grammar = Grammar()\n"
+        "  fun module(body: Ctx.() -> Unit) {}\n  fun module(body: suspend Ctx.() -> Unit) {}\n}\n")})
+    (b,) = [t for t in ir.types if t.name == "B"]
+    assert [member_text(m) for m in b.members] == [
+        "+ constructor(uri: String, rel: String)", "+ constructor(uri: String, rel: String...)",
+        "+ Grammar.unaryPlus(): Grammar", "+ String.unaryPlus(): Grammar",
+        "+ module(body: Ctx.() -> Unit)", "+ module(body: suspend Ctx.() -> Unit)"]
+    assert not ir.unresolved
+
+
+def test_function_types_are_dependencies(tmp_path):
+    """Types inside a function type (Kotlin DSL lambdas, TS callbacks, Python callables)
+    are dependencies of the field or method that writes them; no association."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "k/Client.kt": ("package k\nclass Config\nclass Client\nclass Key\nclass Route\nclass Call\n"
+                        "class Log\n"
+                        "class Holder(val config: Config.() -> Unit,\n"
+                        "             val plugins: MutableMap<Key, (Client) -> Unit>,\n"
+                        "             val scoped: context(Log) () -> Unit) {\n"
+                        "  fun route(body: suspend Route.(Call) -> Unit) {}\n}\n"),
+        "t/hooks.ts": ("export class Req {}\nexport class Res {}\n"
+                       "export class Hooks { onRequest?: (req: Req) => Res; }\n"),
+        "p/handlers.py": ("from typing import Callable\nclass Event: ...\nclass Result: ...\n"
+                          "class Bus:\n    def __init__(self, cb: Callable[[Event], Result]) -> None:\n"
+                          "        self.cb = cb\n"),
+    })
+    rels = {(r.from_.rsplit(".", 1)[-1], r.kind, r.to.rsplit(".", 1)[-1], r.via) for r in ir.relations}
+    assert {("Holder", "dependency", "Config", "config"), ("Holder", "dependency", "Client", "plugins"),
+            ("Holder", "dependency", "Route", "route"), ("Holder", "dependency", "Call", "route"),
+            ("Hooks", "dependency", "Req", "onRequest"), ("Hooks", "dependency", "Res", "onRequest"),
+            ("Bus", "dependency", "Event", "cb"), ("Bus", "dependency", "Result", "cb")} <= rels
+    assert not any(kind == "association" and to in ("Config", "Req", "Event")
+                   for _, kind, to, _ in rels)
+    # a map key is no element of the map, but the field depends on it
+    assert ("Holder", "association", "Key", "plugins") not in rels
+    assert ("Holder", "dependency", "Key", "plugins") in rels
+    assert ("Holder", "dependency", "Log", "scoped") in rels      # context parameters
+    assert not ir.unresolved
+
+
 def test_no_inherited_member_types_in_typescript(tmp_path):
     """Merged namespace members are not inherited by subclasses."""
     from conftest import extract_source

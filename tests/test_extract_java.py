@@ -159,6 +159,16 @@ def test_generic_field_depends_on_its_type_arguments(tmp_path):
                     ("dependency", "Order", "orders")}
 
 
+def test_container_arguments_that_are_not_elements_are_dependencies(tmp_path):
+    ir = extract_source(tmp_path, {
+        "p/Customer.java": "package p; public class Customer {}",
+        "p/Order.java": "package p; public class Order {}",
+        "p/Index.java": "package p; import java.util.Map; class Index { Map<Customer, Order> byCustomer; }",
+    })
+    rels = {(r.kind, r.to, r.via) for r in ir.relations if r.from_ == "p.Index"}
+    assert rels == {("association", "p.Order", "byCustomer"), ("dependency", "p.Customer", "byCustomer")}
+
+
 def test_explicit_import_beats_same_package(tmp_path):
     ir = extract_source(tmp_path, {
         "a/Item.java": "package a; public class Item {}",

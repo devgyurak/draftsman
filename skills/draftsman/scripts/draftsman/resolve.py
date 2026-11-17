@@ -14,7 +14,7 @@ from typing import Optional
 from .extractor import RawFile, RawMember, RawType
 from .langs import LANGUAGES, FileScope, Import
 from .model import IR, External, Location, Relation, Type, Unresolved
-from .typeref import Named, named_refs, parse_type, value_names
+from .typeref import Named, function_types, named_refs, parse_type, value_names
 from .wrappers import Wrappers
 
 PROJECT, EXTERNAL, BUILTIN, TPARAM, ALIAS, UNRESOLVED = (
@@ -287,8 +287,18 @@ class Resolver:
                 return self._not_found(first.target + sep + rest, spec)
             if first.status in (EXTERNAL, BUILTIN):
                 return Resolution(EXTERNAL, (first.target or head) + sep + rest)
-            # a fully qualified name outside the project
-            return Resolution(EXTERNAL, name)
+            if first.status == ALIAS:
+                return Resolution(ALIAS)
+            # a fully qualified name outside the project, when its head is a package
+            # (com.foo.Bar, System.Text.Encoding); otherwise a type this file could not
+            # find (`Outer.Inner` under a star import), which stays unresolved
+            heads = {i.path.split(sep, 1)[0] for i in scope.imports}
+            heads |= {ns.split(sep, 1)[0] for ns in self.namespaces}
+            if scope.namespace:
+                heads.add(scope.namespace.split(sep, 1)[0])
+            if spec.is_package_head(head, heads):
+                return Resolution(EXTERNAL, name)
+            return Resolution(UNRESOLVED, hint=first.hint, candidates=first.candidates)
 
         # nested types of this type and its enclosing types, including inherited ones
         cur: Optional[RawType] = rtype
@@ -352,6 +362,11 @@ class Resolver:
             return Resolution(EXTERNAL, library)
         if spec.is_builtin(name):
             return Resolution(BUILTIN, spec.builtin_id(name))
+        # a default import is certain only when no star import of an outside package
+        # could provide the same name
+        default = spec.default_import(name)
+        if default and not external_wildcards:
+            return Resolution(EXTERNAL, default)
 
         hints = []
         candidates = external_wildcards + shared_wildcards
@@ -378,6 +393,8 @@ class Resolver:
                 else:
                     parts.append(f"{origin} ({len(paths)} namespace{'s' if len(paths) > 1 else ''})")
             hints.append("may come from a project-wide wildcard import: " + ", ".join(parts))
+        if default:
+            hints.append(f"may be the default import {default}")
         if inherit:
             ext = self._external_supers(rtype)
             if ext:
@@ -413,6 +430,11 @@ def _share_project_imports(scopes: list[FileScope]) -> None:
                 have.add(key(imp))
 
 
+def _signature(rm: RawMember) -> tuple:
+    m = rm.member
+    return (m.kind, m.receiver, m.name, tuple(p.type_ref for p in m.params))
+
+
 class _Builder:
     def __init__(self, root: str, files: list[RawFile], wrappers: Wrappers):
         self.ir = IR(root=root, files=len(files))
@@ -433,17 +455,39 @@ class _Builder:
         if existing is None:
             self.types[t.qualified_name] = t
             return
-        # partial declarations (C# partial, TS declaration merging) merge by name;
-        # a class declaration wins over an interface of the same name
-        if _KIND_STRENGTH.get(t.kind, 2) > _KIND_STRENGTH.get(existing.kind, 2):
-            existing.kind, existing.location = t.kind, t.location
+        # partial declarations (C# partial, TS declaration merging, Kotlin expect/actual)
+        # merge by name; a class declaration wins over an interface of the same name,
+        # and a Kotlin `expect` declaration is where the type is said to live
+        here = lambda rm: rm.member.file or existing.location.file   # noqa: E731
+        expect = "expect" in t.modifiers and "expect" not in existing.modifiers
+        if expect or _KIND_STRENGTH.get(t.kind, 2) > _KIND_STRENGTH.get(existing.kind, 2):
+            for rm in existing.members:
+                rm.member.file = here(rm)
+            if _KIND_STRENGTH.get(t.kind, 2) > _KIND_STRENGTH.get(existing.kind, 2):
+                existing.kind = t.kind
+            existing.location = t.location
+            for rm in existing.members:
+                if rm.member.file == existing.location.file:
+                    rm.member.file = None
         names = {(m.member.name, m.member.kind) for m in existing.members}
+        # the same method declared again in another file is one method (an expect and
+        # its actuals, a partial method and its implementation). Same-file look-alikes
+        # are overloads and stay.
+        signatures: dict[tuple, int] = {}
+        for i, rm in enumerate(existing.members):
+            if rm.member.kind in ("method", "constructor"):
+                signatures.setdefault(_signature(rm), i)
         for rm in t.members:
             if rm.member.kind in ("field", "property") and \
                     (rm.member.name, rm.member.kind) in names:
                 continue
-            if t.location.file != existing.location.file:
-                rm.member.file = t.location.file
+            rm.member.file = None if t.location.file == existing.location.file else t.location.file
+            if rm.member.kind in ("method", "constructor"):
+                i = signatures.get(_signature(rm))
+                if i is not None and here(existing.members[i]) != t.location.file:
+                    if "expect" in t.modifiers:   # keep the expect declaration's member
+                        existing.members[i] = rm
+                    continue
             existing.members.append(rm)
         existing.supers.extend(t.supers)
         existing.generics += [g for g in t.generics if g not in existing.generics]
@@ -539,7 +583,9 @@ class _Builder:
         ref = parse_type(m.type_ref)
         loc = Location(m.file or rtype.location.file, m.line)
         cpp = rtype.language == "cpp"
-        for leaf in self.wrappers.leaves(ref, self._is_project(rtype, rm), track_ownership=cpp):
+        others: list = []   # container arguments that are not the element: Map<K, V>'s K
+        for leaf in self.wrappers.leaves(ref, self._is_project(rtype, rm), track_ownership=cpp,
+                                         dropped=others):
             res = self.resolver.resolve(leaf.name, rtype, rm, arity=len(leaf.args))
             if res.status == PROJECT:
                 self.relations.append(Relation(
@@ -552,11 +598,16 @@ class _Builder:
             # depends on them, as a signature does
             for arg in leaf.args:
                 self._depend_on(rtype, rm, arg, loc)
+        # a function-typed field (`config: HttpClientConfig.() -> Unit`, also inside a
+        # container) holds no instance of those types; it depends on them, as on the
+        # container arguments that are not its elements
+        for other in [*function_types(ref), *others]:
+            self._depend_on(rtype, rm, other, loc)
 
     def _dependencies(self, rtype: RawType, rm: RawMember) -> None:
         m = rm.member
         loc = Location(m.file or rtype.location.file, m.line)
-        for text in [m.type_ref] + [p.type_ref for p in m.params]:
+        for text in [m.type_ref, m.receiver] + [p.type_ref for p in m.params]:
             self._depend_on(rtype, rm, parse_type(text), loc)
 
     def _depend_on(self, rtype: RawType, rm: RawMember, ref, loc: Location) -> None:

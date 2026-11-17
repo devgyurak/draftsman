@@ -47,7 +47,8 @@ header/source).
 | `static`, `abstract` | language rules applied (interface methods without body are abstract, interface fields static, ...) |
 | `params` | methods and constructors: `[{name, type_ref}]` |
 | `modifiers`, `annotations` | omitted when empty (Python decorators and C# attributes are annotations) |
-| `file` | only when the member is declared in another file than the type (C# partial classes) |
+| `file` | only when the member is declared in another file than the type (C# partial classes, Kotlin expect/actual) |
+| `receiver` | Kotlin member extensions only: the receiver type of `fun Grammar.unaryPlus()` |
 | `line` | 1-based |
 
 ## Relation
@@ -68,7 +69,10 @@ How each kind is derived:
   containers from `config/wrappers.yaml` and `T[]`/`T?`/`T | None`, names a project type.
   One relation per field; `multiplicity` comes from the unwrapping. When that type is a
   generic that is not a container (`Repository<User>`, `Type<Factory>`), the field also
-  gets a **dependency** on each project type among its arguments.
+  gets a **dependency** on each project type among its arguments, and so do the container
+  arguments a wrapper rule does not follow (the key of `Map<K, V>`). A function type
+  (`Config.() -> Unit`, `(req: Req) => Res`, `Callable[[Event], Result]`) is no
+  association: the field depends on every project type it names.
 - **dependency** — a project type mentioned anywhere in a method or constructor signature
   (parameters, return type, type arguments), or in the type of a **static** field
   (constants and singletons are not instance structure). One relation per member, never
