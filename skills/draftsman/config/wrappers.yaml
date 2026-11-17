@@ -1,0 +1,76 @@
+# Container/wrapper types that Draftsman "sees through" when turning a field type
+# into an association. `List<OrderLine> lines` becomes an association to
+# OrderLine with multiplicity "*".
+#
+#   names:         type names, matched against the full written name
+#                  (e.g. "std::vector", "java.util.List") or its last segment.
+#   arg:           which type argument holds the element: 0, 1, ... or "last".
+#   multiplicity:  "*" or "0..1"; omit for transparent wrappers (Future<T>).
+#   ownership:     C++ only, "owned" or "shared".
+#
+# Project types always win: if your code defines its own `List`, it is not
+# treated as a wrapper. Add your own wrappers to a file passed with
+# `extract.py --wrappers my-wrappers.yaml`; its rules are appended to these.
+#
+# Syntax-level wrappers need no entry here: T[], T..., T?, T | None,
+# T | undefined, T | null, and C++ pointers/references.
+
+wrappers:
+  # ---- collections: element is the first argument
+  - names: [
+      # Java / Kotlin
+      List, ArrayList, LinkedList, Set, HashSet, LinkedHashSet, TreeSet, SortedSet,
+      NavigableSet, EnumSet, Collection, Iterable, Iterator, Queue, Deque, ArrayDeque,
+      PriorityQueue, Stack, Vector, Stream, CopyOnWriteArrayList,
+      MutableList, MutableSet, MutableCollection, Sequence, Flow, Flux, Page, Slice,
+      # C#
+      IEnumerable, ICollection, IList, IReadOnlyList, IReadOnlyCollection, ISet,
+      ImmutableList, ImmutableArray, ObservableCollection, IQueryable, DbSet,
+      # TypeScript
+      Array, ReadonlyArray, ReadonlySet, Observable,
+      # Python
+      list, set, frozenset, tuple, deque, MutableSequence, AbstractSet,
+      Generator, AsyncIterator, AsyncIterable, FrozenSet, Tuple,
+      # C++
+      "std::vector", "std::list", "std::deque", "std::set", "std::unordered_set",
+      "std::multiset", "std::array", "std::forward_list", "std::span",
+    ]
+    arg: 0
+    multiplicity: "*"
+
+  # ---- maps: element is the value (last argument)
+  - names: [
+      Map, HashMap, LinkedHashMap, TreeMap, SortedMap, NavigableMap, ConcurrentHashMap,
+      EnumMap, MutableMap, Multimap,
+      Dictionary, IDictionary, IReadOnlyDictionary, ConcurrentDictionary, ImmutableDictionary,
+      Record, ReadonlyMap, WeakMap,
+      dict, Dict, Mapping, MutableMapping, OrderedDict, defaultdict, DefaultDict,
+      "std::map", "std::unordered_map", "std::multimap",
+    ]
+    arg: last
+    multiplicity: "*"
+
+  # ---- optional values
+  - names: [Optional, Nullable, Maybe, "std::optional"]
+    arg: 0
+    multiplicity: "0..1"
+
+  # ---- transparent wrappers (same multiplicity as the inner type)
+  - names: [
+      Future, CompletableFuture, CompletionStage, Mono, Supplier, Provider, Lazy,
+      ObjectProvider, AtomicReference, WeakReference, SoftReference, ThreadLocal,
+      Deferred, StateFlow, MutableStateFlow, LiveData, MutableLiveData,
+      Task, ValueTask,
+      Promise, Readonly, Partial, Required, NonNullable, Awaited,
+      Final, ClassVar, Annotated, Awaitable, Type, type,
+      "std::reference_wrapper", "std::atomic",
+    ]
+    arg: 0
+
+  # ---- C++ smart pointers
+  - names: ["std::unique_ptr"]
+    arg: 0
+    ownership: owned
+  - names: ["std::shared_ptr", "std::weak_ptr"]
+    arg: 0
+    ownership: shared

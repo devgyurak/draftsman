@@ -1,0 +1,113 @@
+# ir.json
+
+Produced by `scripts/extract.py`; never edited by hand. Lists are sorted, so the same
+sources always give byte-identical output.
+
+```jsonc
+{
+  "version": 1,
+  "root": "path/given/to/extract",
+  "languages": ["java"],          // java csharp kotlin typescript tsx python cpp
+  "files": 11,
+  "types": [Type],
+  "relations": [Relation],
+  "externals": [External],
+  "unresolved": [Unresolved],
+  "diagnostics": [Diagnostic]
+}
+```
+
+## Type
+
+| field | notes |
+|---|---|
+| `id` | qualified name, unique in the IR. Separator is the language's own: `com.shop.Order.Status` (Java, C#, Kotlin), `shop::pay::Receipt` (C++), `src.shop.order.models.Order` (Python module path), `src/order/order.Order` (TypeScript file path without extension) |
+| `name` | simple name (`Status`) |
+| `qualified_name` | same as `id` for now; kept separate for languages that need disambiguation |
+| `kind` | `class` `interface` `abstract_class` `enum` `record` `struct` `object` `trait` `mixin` `annotation` |
+| `language` | `java`, ... |
+| `namespace` | package / namespace / module, or `null` |
+| `outer` | id of the enclosing type for nested types, else `null` |
+| `modifiers` | keywords as written (`public`, `abstract`, `sealed`, ...) |
+| `annotations` | annotation/decorator names (`Entity`, `Service`) — useful for grouping and noise |
+| `generics` | type parameter names (`["T"]`) |
+| `location` | `{file, line}`, file relative to `root` |
+| `members` | list of Member, source order |
+
+Declarations of the same qualified name in several files are merged (C# `partial`, C++
+header/source).
+
+## Member
+
+| field | notes |
+|---|---|
+| `name`, `kind` | kind: `field` `method` `property` `constructor` `enum_constant` |
+| `visibility` | `public` `protected` `package` `internal` `private`, with the language's default applied |
+| `type_ref` | the type as written (field type / return type), or `null` |
+| `static`, `abstract` | language rules applied (interface methods without body are abstract, interface fields static, ...) |
+| `params` | methods and constructors: `[{name, type_ref}]` |
+| `modifiers`, `annotations` | omitted when empty (Python decorators and C# attributes are annotations) |
+| `file` | only when the member is declared in another file than the type (C# partial classes) |
+| `line` | 1-based |
+
+## Relation
+
+| field | notes |
+|---|---|
+| `from`, `to` | type ids; `to` may be an `externals` id for `extends`/`implements` |
+| `kind` | see below |
+| `multiplicity` | associations only: `"1"`, `"0..1"`, `"*"` |
+| `ownership` | C++ associations only: `owned` (value, `unique_ptr`) or `shared` (pointer, `shared_ptr`) |
+| `via` | member that produced it (field name for associations, method name for dependencies) |
+| `source_location` | `{file, line}` of the declaration that produced it |
+
+How each kind is derived:
+
+- **extends / implements** — the type's own supertype clauses.
+- **association** — an instance field (or property) whose type, after unwrapping
+  containers from `config/wrappers.yaml` and `T[]`/`T?`/`T | None`, names a project type.
+  One relation per field; `multiplicity` comes from the unwrapping. When that type is a
+  generic that is not a container (`Repository<User>`, `Type<Factory>`), the field also
+  gets a **dependency** on each project type among its arguments.
+- **dependency** — a project type mentioned anywhere in a method or constructor signature
+  (parameters, return type, type arguments), or in the type of a **static** field
+  (constants and singletons are not instance structure). One relation per member, never
+  to the type itself. The renderer collapses these to one arrow per pair and drops them
+  where an association or inheritance already connects the pair.
+
+Composition vs. aggregation is not inferred (except C++ `ownership`), and nothing from
+method bodies is used.
+
+Type aliases (`type X = ...`, `typedef`, `typealias`, `using X = ...`, module-level
+Python aliases) are not types in the IR; references to them are resolved silently and
+produce no relation. A TypeScript `typeof x` is a relation when `x` is a class and is
+otherwise a value: never unresolved.
+
+## External
+
+`{id, name}` — a type outside the sources that a project type extends or implements, e.g.
+`org.springframework.data.repository.CrudRepository` or `RuntimeException`. Field and
+signature references to external types produce no relation.
+
+## Unresolved
+
+A type reference that is neither a project type, a type alias, a builtin, nor an
+explicitly imported external. These are the only names `inferred_edges` may introduce.
+Fully qualified names into unknown namespaces (`stripe::Client`, `java.util.Date`) and
+names imported from packages (`import { X } from 'lib'`) are externals, not unresolved.
+
+| field | notes |
+|---|---|
+| `from` | type containing the reference |
+| `raw_type` | the name as written |
+| `via` | member it appeared in, if any |
+| `candidates` | project types with the same simple name (not linked automatically) |
+| `hint` | e.g. `may come from wildcard import com.stripe.*` |
+| `location` | `{file, line}` |
+
+## Diagnostic
+
+`{file, line, message, end_line?}` — one per syntax-error span: every ERROR/MISSING region
+tree-sitter found, merged when adjacent; `end_line` is present when the span covers more
+than one line. Declarations inside a span may be missing or partial; the rest of the file
+is reliable. At most 20 spans per file; a 21st diagnostic counts the remainder.

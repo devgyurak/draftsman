@@ -1,0 +1,36 @@
+{
+  "brand": "Draftsman",
+  "tagline": "Class diagrams drawn from parser facts, not guesses",
+  "brief": "A Claude Code and Codex plugin that extracts classes and relations with tree-sitter and lets the agent decide only what to show. The mark must feel precise, honest and crafted, stand apart from blue developer-tool marks, and survive at 16 px in a plugin directory, a favicon and a terminal.",
+  "adjectives": ["precise", "honest", "crafted", "calm", "technical"],
+  "criteria": "Success: one idea in one sentence, distinct from triangle marks in the category, recognisable at 16 px, works in one colour and reversed.",
+  "industry": "developer-tools",
+  "nav": ["Docs", "Languages", "GitHub"],
+  "brand_color": "#D96A00",
+  "tile_color": "#15181D",
+  "greyscale": false,
+  "final": true,
+  "designer": "Draftsman",
+  "round": 2,
+  "concepts": [
+    {
+      "name": "Set Square",
+      "symbol": "../draftsman-symbol.svg",
+      "lockup": "../draftsman-horizontal.svg",
+      "stacked": "../draftsman-stacked.svg",
+      "avatar": "../../icon.svg",
+      "symbol_on_tile": "../draftsman-symbol-reversed.svg",
+      "symbol_on_dark": "../draftsman-symbol-reversed.svg",
+      "lockup_on_dark": "../draftsman-horizontal-reversed.svg",
+      "stacked_on_dark": "../draftsman-stacked-reversed.svg",
+      "idea": "The UML inheritance arrowhead is a draftsman's set square.",
+      "rationale": [
+        "Name and product in one shape: the draftsman's tool and the diagram's arrow",
+        "Drafting Amber, the tinted acrylic of a set square, stands apart from blue developer tools",
+        "Heavy object line, light connecting line: drafting convention, and it keeps the mark from reading as a sign post",
+        "Small-size cut keeps the set-square opening visible at 16 px"
+      ]
+    }
+  ],
+  "recommendation": "Set Square — use the two-tone mark on Ink tiles for plugin and app icons, the horizontal lockup in the README, and the small cut for favicons."
+}

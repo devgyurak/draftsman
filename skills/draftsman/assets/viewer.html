@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DRAFTSMAN_TITLE</title>
+<style>
+/* Draftsman viewer: a drafting sheet. Ink on paper, a ruled title block, graph
+   paper in non-photo blue, amber for the focus and the selection, red pencil
+   for markup, blue pencil for inferred construction lines. Same tokens as the
+   diagram (assets/draw.js) and the logo (assets/logo/GUIDELINES.md). */
+:root {
+  --paper: #faf8f3; --sheet: #f3f0e8; --box: #ffffff;
+  --ink: #15181d; --ink2: #4a4f57; --ink3: #8a8f96;
+  --rule: rgba(21, 24, 29, .14); --rule2: rgba(21, 24, 29, .28);
+  --amber: #d96a00; --amber-text: #b35400; --amber-wash: rgba(217, 106, 0, .08);
+  --red: #c23b2a; --blue: #3a7fb0;
+  --grid-min: rgba(58, 127, 176, .07); --grid-maj: rgba(58, 127, 176, .15);
+  --ruler: #f3f0e8; --shade: rgba(21, 24, 29, .035);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #15181d; --sheet: #111418; --box: #1b1f25;
+    --ink: #ece8df; --ink2: #a8adb5; --ink3: #6c727b;
+    --rule: rgba(250, 248, 243, .12); --rule2: rgba(250, 248, 243, .26);
+    --amber: #ee8a2e; --amber-text: #f2a052; --amber-wash: rgba(238, 138, 46, .1);
+    --red: #e0614f; --blue: #6fa8d6;
+    --grid-min: rgba(111, 168, 214, .05); --grid-maj: rgba(111, 168, 214, .11);
+    --ruler: #111418; --shade: rgba(250, 248, 243, .035);
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #15181d; --sheet: #111418; --box: #1b1f25;
+  --ink: #ece8df; --ink2: #a8adb5; --ink3: #6c727b;
+  --rule: rgba(250, 248, 243, .12); --rule2: rgba(250, 248, 243, .26);
+  --amber: #ee8a2e; --amber-text: #f2a052; --amber-wash: rgba(238, 138, 46, .1);
+  --red: #e0614f; --blue: #6fa8d6;
+  --grid-min: rgba(111, 168, 214, .05); --grid-maj: rgba(111, 168, 214, .11);
+  --ruler: #111418; --shade: rgba(250, 248, 243, .035);
+}
+:root {
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--paper); color: var(--ink); font: 13px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased; display: grid; grid-template-rows: auto 1fr;
+  grid-template-columns: minmax(0, 1fr); overflow: hidden;
+}
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--rule2); border: 2px solid var(--paper); }
+::-webkit-scrollbar-track { background: transparent; }
+.k { font: 600 9.5px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink3); }
+
+/* ---------------------------------------------------------------- bar */
+.bar {
+  display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 12px 0 14px;
+  border-bottom: 1px solid var(--rule2); background: var(--paper); min-width: 0;
+}
+.ident { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 0 1 auto; }
+.ident svg { width: 20px; height: 20px; flex: none; }
+.ident .wm { font: 700 10.5px var(--mono); letter-spacing: .18em; color: var(--ink2); flex: none; }
+.ident .sl { color: var(--rule2); flex: none; }
+.ident h1 {
+  margin: 0; font: 700 14px/1.2 var(--mono); letter-spacing: -.01em; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.search { position: relative; flex: 1 1 240px; min-width: 0; max-width: 520px; margin-left: auto; }
+.search svg { position: absolute; left: 9px; top: 50%; translate: 0 -50%; width: 13px; height: 13px; color: var(--ink3); pointer-events: none; }
+.search input {
+  width: 100%; height: 30px; padding: 0 34px 0 29px; border-radius: 2px; font: 12.5px var(--mono);
+  background: var(--box); color: var(--ink); border: 1px solid var(--rule2);
+}
+.search input::placeholder { color: var(--ink3); }
+.search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.search input:focus { outline: none; border-color: var(--ink2); }
+kbd { font: 600 10px var(--mono); color: var(--ink2); border: 1px solid var(--rule2); border-bottom-width: 2px; border-radius: 2px; padding: 0 5px; background: var(--paper); }
+.search kbd { position: absolute; right: 7px; top: 50%; translate: 0 -50%; pointer-events: none; }
+.results {
+  position: absolute; z-index: 30; left: 0; right: 0; top: 34px; max-height: 360px; overflow-y: auto;
+  background: var(--box); border: 1px solid var(--ink2); box-shadow: 4px 4px 0 var(--shade);
+}
+.results button {
+  display: grid; grid-template-columns: 18px auto 1fr; align-items: center; gap: 8px; width: 100%;
+  text-align: left; cursor: pointer; border: 0; border-bottom: 1px solid var(--rule); background: transparent; padding: 6px 10px;
+}
+.results button:last-child { border-bottom: 0; }
+.results button[aria-selected="true"], .results button:hover { background: var(--amber-wash); }
+.results .rn { font: 600 12.5px var(--mono); }
+.results .rn mark { background: none; color: inherit; text-decoration: underline 2px var(--amber); text-underline-offset: 3px; }
+.results .rs { font: 11px var(--mono); color: var(--ink3); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.results .none { padding: 10px; color: var(--ink3); font: 12px var(--mono); }
+.badge {
+  display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%;
+  border: 1px solid var(--ink3); font: 700 9px/1 var(--mono); color: var(--ink2); flex: none;
+}
+.badge.ext { border-style: dashed; }
+.badge.inf { border-style: dashed; border-color: var(--blue); color: var(--blue); }
+.tools { display: flex; align-items: center; gap: 6px; flex: none; }
+.seg { display: inline-flex; border: 1px solid var(--rule2); border-radius: 2px; }
+.seg button {
+  border: 0; background: transparent; padding: 0 10px; height: 28px; cursor: pointer;
+  font: 600 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink3);
+}
+.seg button + button { border-left: 1px solid var(--rule2); }
+.seg button:hover:not(:disabled) { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.seg button:disabled { opacity: .4; cursor: default; }
+.stepper { display: inline-flex; align-items: center; height: 30px; border: 1px solid var(--rule2); border-radius: 2px; }
+.stepper .k { padding: 0 6px 0 8px; }
+.stepper button { width: 24px; height: 100%; border: 0; border-left: 1px solid var(--rule); background: transparent; cursor: pointer; color: var(--ink2); font: 14px var(--mono); }
+.stepper button:hover:not(:disabled) { color: var(--amber-text); }
+.stepper button:disabled { opacity: .3; cursor: default; }
+.stepper output { min-width: 22px; text-align: center; font: 700 12.5px var(--mono); border-left: 1px solid var(--rule); align-self: stretch; display: grid; place-items: center; }
+.vsep { width: 1px; height: 20px; background: var(--rule2); margin: 0 4px; }
+.tog {
+  display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 9px; cursor: pointer;
+  border: 1px solid transparent; border-radius: 2px; background: transparent;
+  font: 600 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink3);
+}
+.tog svg { width: 22px; height: 8px; opacity: .45; }
+.tog:hover { color: var(--ink); }
+.tog[aria-pressed="true"] { color: var(--ink); border-color: var(--rule2); background: var(--box); }
+.tog[aria-pressed="true"] svg { opacity: 1; }
+.iconbtn {
+  display: inline-grid; place-items: center; width: 30px; height: 30px; cursor: pointer; flex: none;
+  border: 1px solid var(--rule2); border-radius: 2px; background: transparent; color: var(--ink2);
+}
+.iconbtn:hover { color: var(--ink); border-color: var(--ink2); }
+.iconbtn svg { width: 14px; height: 14px; }
+
+/* ---------------------------------------------------------------- stage */
+main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0; min-width: 0; }
+.stage {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr); grid-template-rows: 22px minmax(0, 1fr);
+  min-height: 0; min-width: 0; position: relative;
+}
+.corner { background: var(--ruler); border-right: 1px solid var(--rule2); border-bottom: 1px solid var(--rule2); }
+canvas.ruler { display: block; width: 100%; height: 100%; background: var(--ruler); }
+#rulerX { border-bottom: 1px solid var(--rule2); }
+#rulerY { border-right: 1px solid var(--rule2); }
+#canvas {
+  position: relative; overflow: hidden; min-height: 0; cursor: grab; touch-action: none; background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid-maj) 1px, transparent 1px), linear-gradient(90deg, var(--grid-maj) 1px, transparent 1px),
+    linear-gradient(var(--grid-min) 1px, transparent 1px), linear-gradient(90deg, var(--grid-min) 1px, transparent 1px);
+}
+#canvas.dragging { cursor: grabbing; }
+#canvas > svg { position: absolute; left: 0; top: 0; overflow: visible; }
+.dock {
+  position: absolute; left: 12px; bottom: 12px; z-index: 5; display: flex; align-items: stretch;
+  background: var(--box); border: 1px solid var(--ink2); border-radius: 2px; box-shadow: 3px 3px 0 var(--shade);
+}
+.dock button { width: 30px; height: 30px; display: grid; place-items: center; border: 0; background: transparent; color: var(--ink2); cursor: pointer; }
+.dock button + button, .dock .scale { border-left: 1px solid var(--rule2); }
+.dock button:hover { color: var(--amber-text); background: var(--amber-wash); }
+.dock svg { width: 13px; height: 13px; }
+.dock .scale { display: flex; flex-direction: column; justify-content: center; padding: 0 10px; min-width: 76px; }
+.dock .scale b { font: 700 12px/1.1 var(--mono); }
+#keyplan {
+  position: absolute; right: 12px; bottom: 12px; z-index: 5; width: 196px;
+  background: var(--box); border: 1px solid var(--ink2); border-radius: 2px; box-shadow: 3px 3px 0 var(--shade);
+}
+#keyplan .k { display: block; padding: 5px 8px; border-bottom: 1px solid var(--rule2); }
+#keyplan svg { display: block; width: 196px; height: 118px; cursor: pointer; }
+#keyplan .kp-node { fill: var(--ink3); opacity: .55; }
+#keyplan .kp-node.on { fill: var(--amber); opacity: 1; }
+#keyplan .kp-view { fill: var(--amber-wash); stroke: var(--amber); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+#status {
+  position: absolute; left: 50%; top: 14px; translate: -50% 0; z-index: 6; display: flex; align-items: center; gap: 8px;
+  background: var(--box); border: 1px solid var(--ink2); border-radius: 2px; padding: 5px 11px; box-shadow: 3px 3px 0 var(--shade);
+  font: 600 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink2);
+}
+#status[hidden] { display: none; }
+#status i { width: 7px; height: 7px; background: var(--amber); animation: blink 1s steps(2) infinite; }
+#status.err { color: var(--red); border-color: var(--red); }
+#status.err i { background: var(--red); animation: none; }
+
+/* ---------------------------------------------------------------- title block */
+aside {
+  border-left: 1px solid var(--rule2); background: var(--sheet); overflow-y: auto; min-height: 0;
+  padding: 16px 16px 36px;
+}
+.tb { border: 1.5px solid var(--ink); background: var(--paper); }
+.tb .row { display: grid; grid-template-columns: 1fr 1fr; }
+.tb .row + .row, .tb .head + .row { border-top: 1px solid var(--rule2); }
+.tb .cell { padding: 7px 10px 8px; min-width: 0; text-align: left; border: 0; background: transparent; }
+.tb .cell + .cell { border-left: 1px solid var(--rule2); }
+.tb .cell.wide { grid-column: span 2; }
+.tb .cell .v { display: block; margin-top: 5px; font: 700 15px/1.2 var(--mono); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.tb .cell .v small { font-size: 11px; font-weight: 500; color: var(--ink3); }
+.tb .cell .v.s { font-size: 12px; font-weight: 500; color: var(--ink2); }
+.tb button.cell { cursor: pointer; }
+.tb button.cell:hover { background: var(--amber-wash); }
+.tb .cell.red .v { color: var(--red); }
+.tb .head { display: grid; grid-template-columns: 52px 1fr; }
+.tb .head .mark { display: grid; place-items: center; border-right: 1px solid var(--rule2); }
+.tb .head .mark svg { width: 30px; height: 30px; }
+.tb .head .cell .v { font-size: 18px; }
+.sec { margin-top: 22px; }
+.sec > .k { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.sec > .k::after { content: ""; flex: 1; height: 1px; background: var(--rule2); }
+.sec > .k .n { color: var(--ink2); }
+ol.notes { margin: 0; padding: 0; list-style: none; counter-reset: n; }
+ol.notes li { counter-increment: n; }
+ol.notes button {
+  display: grid; grid-template-columns: 22px 1fr; gap: 4px; width: 100%; text-align: left; cursor: pointer;
+  border: 0; background: transparent; padding: 6px 4px; border-bottom: 1px dashed var(--rule2);
+}
+ol.notes button::before { content: counter(n) "."; font: 700 12px var(--mono); color: var(--amber-text); }
+ol.notes button:hover { background: var(--amber-wash); }
+ol.notes .t { font: 700 12px var(--mono); display: block; overflow-wrap: anywhere; }
+ol.notes .d { color: var(--ink2); text-wrap: pretty; }
+.markup button {
+  display: block; width: 100%; text-align: left; cursor: pointer; padding: 7px 9px 7px 12px; margin-bottom: 6px;
+  border: 1px dashed var(--red); border-radius: 2px; background: transparent;
+}
+.markup button:hover, .markup button[aria-pressed="true"] { border-style: solid; background: var(--box); }
+.markup .k { color: var(--red); }
+.markup .t { display: block; margin-top: 4px; font: 600 12px var(--mono); overflow-wrap: anywhere; }
+.markup .t .more { color: var(--ink3); font-weight: 400; }
+.markup .d { display: block; color: var(--ink2); margin-top: 2px; }
+table.kinds, table.legend { width: 100%; border-collapse: collapse; font: 12px var(--mono); }
+table.kinds td, table.legend td { padding: 5px 4px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+table.kinds tr { cursor: pointer; }
+table.kinds tr:hover td { background: var(--amber-wash); }
+table.kinds tr[aria-pressed="true"] td { background: var(--amber-wash); font-weight: 700; }
+table.kinds td:first-child { width: 26px; }
+table.kinds td.n { text-align: right; color: var(--ink3); font-variant-numeric: tabular-nums; }
+table.legend td:first-child { width: 58px; }
+table.legend svg { width: 50px; height: 12px; display: block; }
+table.legend td:last-child { color: var(--ink2); }
+.unres { padding: 7px 0; border-bottom: 1px dashed var(--rule2); }
+.unres .t { font: 700 12px var(--mono); }
+.unres .d { color: var(--ink2); }
+.unres .s { font: 11px var(--mono); color: var(--ink3); overflow-wrap: anywhere; }
+a.go { color: var(--amber-text); cursor: pointer; text-decoration: underline; text-decoration-color: var(--rule2); text-underline-offset: 2px; }
+a.go:hover { text-decoration-color: var(--amber); }
+details.more > summary { cursor: pointer; font: 600 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink2); padding: 8px 0; }
+.back { border: 0; background: transparent; padding: 0; margin-bottom: 10px; cursor: pointer; }
+.back:hover .k { color: var(--amber-text); }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+.btn {
+  height: 32px; border-radius: 2px; cursor: pointer; border: 1px solid var(--ink2); background: var(--paper);
+  font: 700 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink);
+}
+.btn:hover:not(:disabled) { background: var(--box); }
+.btn.primary { border-color: var(--amber); color: var(--amber-text); }
+.btn.primary:hover:not(:disabled) { background: var(--amber-wash); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn:only-child { grid-column: span 2; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.chip { font: 11.5px var(--mono); color: var(--ink2); border: 1px solid var(--rule2); border-radius: 2px; padding: 0 6px; }
+.notecard { border: 1px solid var(--rule2); background: var(--paper); padding: 8px 10px; color: var(--ink2); text-wrap: pretty; }
+.notecard + .notecard { margin-top: 6px; }
+.notecard.hl { border: 1px dashed var(--red); }
+.notecard .k { display: block; margin-bottom: 4px; }
+.notecard.hl .k { color: var(--red); }
+ul.members { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+ul.members li { font: 11.5px/1.5 var(--mono); padding: 4px 2px; border-bottom: 1px solid var(--rule); overflow-wrap: anywhere; color: var(--ink); }
+ul.members .vis, ul.members .mt { color: var(--ink3); }
+ul.members li.static { text-decoration: underline; text-decoration-color: var(--ink3); }
+ul.members li.abstract { font-style: italic; }
+.rel {
+  display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 8px; width: 100%;
+  text-align: left; border: 0; border-bottom: 1px solid var(--rule); background: transparent; padding: 6px 2px; cursor: pointer;
+}
+.rel:hover { background: var(--amber-wash); }
+.rel svg { width: 34px; height: 10px; }
+.rel .rn { font: 600 12px var(--mono); overflow-wrap: anywhere; }
+.rel .rm { font: 11px var(--mono); color: var(--ink3); text-align: right; }
+.rel .inf { color: var(--blue); font: 10.5px var(--mono); margin-left: 6px; }
+.sub { font: 600 9px var(--mono); letter-spacing: .14em; color: var(--ink3); margin: 10px 0 2px; }
+.colophon { margin-top: 26px; font: 10.5px/1.6 var(--mono); color: var(--ink3); overflow-wrap: anywhere; }
+
+@keyframes blink { 50% { opacity: .15; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+
+@media (max-width: 1180px) {
+  .tog span { display: none; }
+  .tog { padding: 0 7px; }
+  main { grid-template-columns: minmax(0, 1fr) 320px; }
+}
+@media (max-width: 860px) {
+  .bar { height: auto; flex-wrap: wrap; padding: 8px 12px; row-gap: 8px; }
+  .ident { flex: 1 1 auto; }
+  .search { order: 3; flex-basis: 100%; max-width: none; margin: 0; }
+  .search kbd { display: none; }
+  .tools { order: 4; flex-basis: 100%; overflow-x: auto; scrollbar-width: none; }
+  .tools::-webkit-scrollbar { display: none; }
+  .ident .wm, .ident .sl { display: none; }
+  main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 38vh; }
+  .stage { grid-template-columns: 0 minmax(0, 1fr); grid-template-rows: 0 minmax(0, 1fr); }
+  .stage .ruler, .corner { visibility: hidden; }
+  aside { border-left: 0; border-top: 1px solid var(--rule2); }
+  #keyplan { display: none; }
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="ident">
+    <svg viewBox="22 30 212 206" aria-hidden="true"><path fill="#D96A00" fill-rule="evenodd" d="M128 39 L234 145 L22 145 Z M120.93 77.89 L81.39 117.43 Q74.32 124.5 84.32 124.5 L171.68 124.5 Q181.68 124.5 174.61 117.43 L135.07 77.89 Q128 70.82 120.93 77.89 Z"/><path fill="currentColor" d="M121.5 145 H134.5 V229 H121.5 Z"/></svg>
+    <span class="wm">DRAFTSMAN</span><span class="sl">/</span>
+    <h1 id="title"></h1>
+  </div>
+  <div class="search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
+    <input type="search" id="search" placeholder="Find a class or package" autocomplete="off" spellcheck="false"
+      role="combobox" aria-expanded="false" aria-controls="results" aria-label="Find a class">
+    <kbd>/</kbd>
+    <div class="results" id="results" role="listbox" hidden></div>
+  </div>
+  <div class="tools">
+    <div class="seg" role="group" aria-label="Scope">
+      <button id="modeFocus" aria-pressed="false" title="The focused class and its neighbours">Focus</button>
+      <button id="modeAll" aria-pressed="false" title="Every class">All</button>
+    </div>
+    <div class="stepper" title="How many relations away from the focus to show">
+      <span class="k">Hops</span><button id="hopsDown" aria-label="Fewer hops">−</button><output id="hopsv">2</output><button id="hopsUp" aria-label="More hops">+</button>
+    </div>
+    <span class="vsep"></span>
+    <button class="tog" id="deps" aria-pressed="true" title="Signature dependencies"><svg viewBox="0 0 22 8"><path d="M1 4h20" stroke="var(--ink3)" stroke-width="1.6" stroke-dasharray="4 3"/></svg><span>Deps</span></button>
+    <button class="tog" id="inferred" aria-pressed="true" title="Edges the agent inferred (construction lines)"><svg viewBox="0 0 22 8"><path d="M1.5 4h19" stroke="var(--blue)" stroke-width="2" stroke-dasharray="1 3.5" stroke-linecap="round"/></svg><span>Inferred</span></button>
+    <button class="tog" id="cycles" aria-pressed="true" title="Mark short reference cycles; pick a long one in the title block"><svg viewBox="0 0 22 8"><path d="M1 4h20" stroke="var(--red)" stroke-width="2"/></svg><span>Cycles</span></button>
+    <button class="tog" id="members" aria-pressed="false" title="Members in every class"><svg viewBox="0 0 22 8"><path d="M1 1.5h20M1 4h14M1 6.5h17" stroke="var(--ink2)" stroke-width="1.2"/></svg><span>Members</span></button>
+    <span class="vsep"></span>
+    <button class="iconbtn" id="theme" title="Paper / ink" aria-label="Switch light or dark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></svg>
+    </button>
+  </div>
+</header>
+<main>
+  <section class="stage">
+    <div class="corner"></div>
+    <canvas class="ruler" id="rulerX"></canvas>
+    <canvas class="ruler" id="rulerY"></canvas>
+    <div id="canvas">
+      <div id="status"><i></i><span id="statusText">Drafting</span></div>
+      <div class="dock">
+        <button id="zoomOut" title="Zoom out (−)" aria-label="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14"/></svg></button>
+        <button id="zoomIn" title="Zoom in (+)" aria-label="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button id="fit" title="Fit the drawing (F)" aria-label="Fit the drawing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+        <div class="scale"><span class="k">Scale</span><b id="scalev">1:1</b></div>
+      </div>
+      <div id="keyplan" hidden><span class="k">Key plan</span><div id="keyplanSvg" title="Click or drag to move the view"></div></div>
+    </div>
+  </section>
+  <aside id="side"></aside>
+</main>
+<!--DRAFTSMAN_ELK-->
+<script>/*DRAFTSMAN_DRAW*/</script>
+<script>
+"use strict";
+const GRAPH = /*DRAFTSMAN_DATA*/null;
+const D = window.DraftsmanDraw;
+const elk = new ELK();
+const $ = (id) => document.getElementById(id);
+const byId = new Map(GRAPH.nodes.map((n) => [n.id, n]));
+const notesFor = new Map();
+for (const n of GRAPH.notes || []) {
+  if (!notesFor.has(n.target)) notesFor.set(n.target, []);
+  notesFor.get(n.target).push(n.text);
+}
+const noted = new Set(notesFor.keys());
+
+// kind rows of the title block: [key, label, ir kinds]
+const KINDS = [
+  ["class", "class", ["class"]],
+  ["interface", "interface", ["interface"]],
+  ["abstract", "abstract", ["abstract_class"]],
+  ["enum", "enum", ["enum"]],
+  ["record", "record / struct", ["record", "struct"]],
+  ["object", "object", ["object"]],
+  ["trait", "trait / mixin", ["trait", "mixin"]],
+  ["annotation", "annotation", ["annotation"]],
+  ["external", "external", ["external"]],
+  ["inferred", "inferred", ["inferred"]],
+];
+function badge(kind) {
+  if (kind === "external") return `<span class="badge ext">X</span>`;
+  if (kind === "inferred") return `<span class="badge inf">?</span>`;
+  return `<span class="badge">${D.BADGES[kind] || "C"}</span>`;
+}
+
+// line-type swatches, as drawn on the sheet
+const LINE = {
+  extends: `<svg viewBox="0 0 50 12"><path d="M2 6h38" stroke="var(--ink2)" stroke-width="1.2"/><path d="M40 1.5 48 6l-8 4.5z" fill="var(--paper)" stroke="var(--ink2)"/></svg>`,
+  implements: `<svg viewBox="0 0 50 12"><path d="M2 6h38" stroke="var(--ink2)" stroke-width="1.2" stroke-dasharray="5 3.5"/><path d="M40 1.5 48 6l-8 4.5z" fill="var(--paper)" stroke="var(--ink2)"/></svg>`,
+  association: `<svg viewBox="0 0 50 12"><path d="M2 6h45M41 2l6 4-6 4" fill="none" stroke="var(--ink2)" stroke-width="1.2"/></svg>`,
+  composition: `<svg viewBox="0 0 50 12"><path d="M2 6l6-4 6 4-6 4z" fill="var(--ink2)"/><path d="M14 6h33M41 2l6 4-6 4" fill="none" stroke="var(--ink2)" stroke-width="1.2"/></svg>`,
+  dependency: `<svg viewBox="0 0 50 12"><path d="M2 6h45" stroke="var(--ink3)" stroke-width="1.2" stroke-dasharray="5 3.5"/><path d="M41 2l6 4-6 4" fill="none" stroke="var(--ink3)" stroke-width="1.2"/></svg>`,
+  inferred: `<svg viewBox="0 0 50 12"><path d="M3 6h43" stroke="var(--blue)" stroke-width="1.8" stroke-dasharray="1 4" stroke-linecap="round"/><path d="M41 2l6 4-6 4" fill="none" stroke="var(--blue)" stroke-width="1.2"/></svg>`,
+  cycle: `<svg viewBox="0 0 50 12"><path d="M2 6h45M41 2l6 4-6 4" fill="none" stroke="var(--red)" stroke-width="1.6"/></svg>`,
+};
+const lineFor = (e) => e.inferred ? LINE.inferred
+  : e.kind === "association" && e.ownership === "owned" ? LINE.composition : LINE[e.kind] || LINE.association;
+
+const state = {
+  focus: GRAPH.focus,
+  hops: Math.max(1, GRAPH.hops || 2),
+  deps: true, inferred: true, cycles: true,
+  allMembers: GRAPH.nodes.length <= 40,
+  expanded: new Set(),
+  selected: null,
+  kind: null,
+  match: null,
+  cycle: null,      // index of the cycle picked in the title block
+  view: { x: 0, y: 0, k: 1 },
+  laid: null,
+  pos: new Map(),
+};
+
+function esc(s) {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+const label = (id) => byId.get(id)?.label || id;
+
+function shownEdges() {
+  return GRAPH.edges.filter((e) =>
+    (state.deps || e.kind !== "dependency" || e.inferred) && (state.inferred || !e.inferred));
+}
+
+function visibleSet() {
+  if (!state.focus || !byId.has(state.focus)) return null;
+  const adj = new Map();
+  for (const e of shownEdges()) {
+    if (!adj.has(e.from)) adj.set(e.from, []);
+    if (!adj.has(e.to)) adj.set(e.to, []);
+    adj.get(e.from).push(e.to);
+    adj.get(e.to).push(e.from);
+  }
+  const seen = new Set([state.focus]);
+  let frontier = [state.focus];
+  for (let d = 0; d < state.hops; d++) {
+    const next = [];
+    for (const id of frontier) for (const m of adj.get(id) || []) {
+      if (!seen.has(m)) { seen.add(m); next.push(m); }
+    }
+    frontier = next;
+  }
+  return seen;
+}
+
+const isExpanded = (id) => state.allMembers ? !state.expanded.has(id) : state.expanded.has(id);
+
+function status(text, err) {
+  $("statusText").textContent = text;
+  $("status").classList.toggle("err", !!err);
+  $("status").hidden = false;
+}
+
+let layoutToken = 0;
+async function relayout(fit) {
+  const token = ++layoutToken;
+  const visible = visibleSet();
+  const count = visible ? visible.size : GRAPH.nodes.length;
+  status(`Drafting ${count} classes`);
+  const input = D.toElk(GRAPH, {
+    visible, expanded: isExpanded, showInferred: state.inferred,
+    showDependencies: state.deps, notes: false,
+  });
+  let laid;
+  try {
+    laid = await elk.layout(input);
+  } catch (err) {
+    status("Layout failed: " + err.message, true);
+    return;
+  }
+  if (token !== layoutToken) return;
+  state.laid = laid;
+  state.pos = positions(laid);
+  draw();
+  if (fit) {
+    fitView();
+    // a wide graph fitted to the window is unreadable: zoom to the focus instead
+    const f = state.focus && state.pos.get(state.focus);
+    if (f && state.view.k < 0.6) {
+      state.view.k = Math.max(0.35, Math.min(0.8, ($("canvas").clientWidth - 40) / f.w));
+      centerOn(state.focus);
+    }
+  }
+  $("status").hidden = true;
+  syncControls();
+  if (!state.selected) renderSide();
+}
+
+function positions(laid) {
+  const pos = new Map();
+  (function walk(node, ox, oy) {
+    for (const c of node.children || []) {
+      const x = ox + (c.x || 0), y = oy + (c.y || 0);
+      pos.set(c.id, { x, y, w: c.width, h: c.height });
+      walk(c, x, y);
+    }
+  })(laid, 0, 0);
+  return pos;
+}
+
+// nodes to fade: everything but the selection and its neighbours, a picked
+// cycle, or one kind
+function dimmedSet() {
+  const dim = new Set();
+  let keep = null;
+  if (state.selected && state.pos.has(state.selected)) {
+    keep = new Set([state.selected]);
+    for (const e of shownEdges()) {
+      if (e.from === state.selected) keep.add(e.to);
+      if (e.to === state.selected) keep.add(e.from);
+    }
+  } else if (state.cycle !== null) {
+    keep = new Set(GRAPH.cycles[state.cycle]);
+  } else if (state.kind) {
+    const kinds = KINDS.find((k) => k[0] === state.kind)[2];
+    keep = new Set([...state.pos.keys()].filter((id) => byId.has(id) && kinds.includes(byId.get(id).kind)));
+  }
+  if (keep) for (const id of state.pos.keys()) if (byId.has(id) && !keep.has(id)) dim.add(id);
+  return dim;
+}
+
+// a cycle through dozens of classes would colour half the sheet: only short ones
+// are marked by default, a long one when it is picked in the title block
+const SHORT_CYCLE = 6;
+function drawnCycles() {
+  const all = GRAPH.cycles || [];
+  if (state.cycle !== null) return [all[state.cycle]];
+  return state.cycles ? all.filter((c) => c.length <= SHORT_CYCLE) : [];
+}
+
+function draw() {
+  if (!state.laid) return;
+  const dimmed = dimmedSet();
+  const cycles = drawnCycles();
+  const svg = D.toSvg(Object.assign({}, GRAPH, { cycles }), state.laid, {
+    expanded: isExpanded, focus: state.focus, selected: state.selected,
+    theme: document.documentElement.dataset.theme || undefined,
+    highlightCycles: cycles.length > 0, noted, dimmed: dimmed.size ? dimmed : null,
+  });
+  const canvas = $("canvas");
+  const old = canvas.querySelector(":scope > svg");
+  if (old) old.remove();
+  canvas.insertAdjacentHTML("afterbegin", svg);
+  let hot = 0;
+  if (state.selected) {
+    for (const el of canvas.querySelectorAll(":scope > svg [data-from]")) {
+      if (el.dataset.from === state.selected || el.dataset.to === state.selected) {
+        el.classList.add("hot"); el.classList.remove("dim"); hot++;
+      }
+    }
+  }
+  // a hub's edges would paint the sheet solid amber: keep them thin
+  canvas.querySelector(":scope > svg").classList.toggle("hub", hot > 40);
+  if (state.match) canvas.querySelector(`:scope > svg .node[data-id="${CSS.escape(state.match)}"]`)?.classList.add("match");
+  applyView();
+  drawKeyplan();
+}
+
+function scaleText(k) {
+  const r = (v) => (v >= 10 ? Math.round(v) : Math.round(v * 10) / 10);
+  return k >= 1 ? `${r(k)} : 1` : `1 : ${r(1 / k)}`;
+}
+
+function applyView() {
+  const canvas = $("canvas");
+  const svg = canvas.querySelector(":scope > svg");
+  const vp = svg && svg.querySelector(".viewport");
+  const { x, y, k } = state.view;
+  if (vp) vp.setAttribute("transform", `translate(${x},${y}) scale(${k})`);
+  if (svg) { svg.setAttribute("width", canvas.clientWidth); svg.setAttribute("height", canvas.clientHeight); svg.removeAttribute("viewBox"); }
+  // graph paper: 10-unit squares, 50-unit majors; coarser when zoomed out
+  let minor = 10 * k, major = 50 * k;
+  while (minor < 6) { minor *= 5; major *= 5; }
+  canvas.style.backgroundSize = `${major}px ${major}px, ${major}px ${major}px, ${minor}px ${minor}px, ${minor}px ${minor}px`;
+  canvas.style.backgroundPosition = `${x}px ${y}px`;
+  $("scalev").textContent = scaleText(k);
+  drawRulers();
+  updateKeyplanView();
+}
+
+// ------------------------------------------------------------------ rulers
+const STEPS = [5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
+function drawRulers() {
+  const css = getComputedStyle(document.documentElement);
+  const ink = css.getPropertyValue("--ink2").trim(), faint = css.getPropertyValue("--ink3").trim();
+  const amber = css.getPropertyValue("--amber").trim(), mono = css.getPropertyValue("--mono");
+  const { x: vx, y: vy, k } = state.view;
+  const step = STEPS.find((s) => s * k >= 64) || STEPS[STEPS.length - 1];
+  const minor = [step / 10, step / 5, step / 2].find((m) => m * k >= 6) || step;
+  const sel = state.selected && state.pos.get(state.selected);
+  for (const horiz of [true, false]) {
+    const c = $(horiz ? "rulerX" : "rulerY");
+    const dpr = window.devicePixelRatio || 1;
+    const w = c.clientWidth, h = c.clientHeight;
+    if (!w || !h) continue;
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+    const g = c.getContext("2d");
+    if (!g) continue;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    const len = horiz ? w : h, depth = horiz ? h : w, off = horiz ? vx : vy;
+    if (sel) {
+      // the selected class's extent, as a band on each ruler
+      const a = (horiz ? sel.x : sel.y) * k + off, b = a + (horiz ? sel.w : sel.h) * k;
+      g.fillStyle = amber; g.globalAlpha = .22;
+      if (horiz) g.fillRect(a, 0, b - a, depth); else g.fillRect(0, a, depth, b - a);
+      g.globalAlpha = 1;
+    }
+    g.lineWidth = 1;
+    g.font = `600 9px ${mono}`;
+    const first = Math.floor(-off / k / minor) * minor, last = (len - off) / k;
+    for (let i = 0, u = first; u <= last && i < 2000; i++, u = first + i * minor) {
+      const p = Math.round(u * k + off) + .5;
+      const isMajor = Math.abs(u / step - Math.round(u / step)) < 1e-6;
+      const half = !isMajor && Math.abs((u * 2) / step - Math.round((u * 2) / step)) < 1e-6;
+      const t = isMajor ? depth : half ? depth * .5 : depth * .28;
+      g.strokeStyle = isMajor ? ink : faint;
+      g.beginPath();
+      if (horiz) { g.moveTo(p, depth); g.lineTo(p, depth - t); }
+      else { g.moveTo(depth, p); g.lineTo(depth - t, p); }
+      g.stroke();
+      if (isMajor) {
+        g.fillStyle = ink;
+        const text = String(Math.round(u));
+        if (horiz) g.fillText(text, p + 3, 10);
+        else { g.save(); g.translate(10, p - 3); g.rotate(-Math.PI / 2); g.fillText(text, 0, 0); g.restore(); }
+      }
+    }
+  }
+}
+
+function fitView() {
+  const c = $("canvas"), l = state.laid;
+  if (!l || !c.clientWidth || !c.clientHeight) return;   // not laid out on screen yet
+  const k = Math.min(1.2, (c.clientWidth - 40) / l.width, (c.clientHeight - 40) / l.height);
+  state.view = { k, x: (c.clientWidth - l.width * k) / 2, y: Math.max(20, (c.clientHeight - l.height * k) / 2) };
+  applyView();
+}
+
+function centerOn(id) {
+  const p = state.pos.get(id);
+  if (!p) return;
+  const c = $("canvas");
+  state.view.x = c.clientWidth / 2 - (p.x + p.w / 2) * state.view.k;
+  state.view.y = c.clientHeight / 2 - (p.y + p.h / 2) * state.view.k;
+  applyView();
+}
+
+// frame a set of classes, never closer than 1:1
+function frame(ids) {
+  const ps = ids.map((id) => state.pos.get(id)).filter(Boolean);
+  if (!ps.length) return;
+  const x0 = Math.min(...ps.map((p) => p.x)), y0 = Math.min(...ps.map((p) => p.y));
+  const x1 = Math.max(...ps.map((p) => p.x + p.w)), y1 = Math.max(...ps.map((p) => p.y + p.h));
+  const c = $("canvas");
+  const k = Math.max(0.1, Math.min(1, (c.clientWidth - 80) / (x1 - x0), (c.clientHeight - 80) / (y1 - y0)));
+  state.view = { k, x: c.clientWidth / 2 - (x0 + x1) / 2 * k, y: c.clientHeight / 2 - (y0 + y1) / 2 * k };
+  applyView();
+}
+
+function zoomBy(f, mx, my) {
+  const c = $("canvas");
+  if (mx === undefined) { mx = c.clientWidth / 2; my = c.clientHeight / 2; }
+  const k = Math.min(4, Math.max(0.05, state.view.k * f));
+  state.view.x = mx - (mx - state.view.x) * (k / state.view.k);
+  state.view.y = my - (my - state.view.y) * (k / state.view.k);
+  state.view.k = k;
+  applyView();
+}
+
+// ------------------------------------------------------------------ key plan
+const KP = { w: 196, h: 118, s: 1, ox: 0, oy: 0 };
+function drawKeyplan() {
+  const l = state.laid;
+  if (!l) return;
+  KP.s = Math.min((KP.w - 16) / l.width, (KP.h - 16) / l.height);
+  KP.ox = (KP.w - l.width * KP.s) / 2; KP.oy = (KP.h - l.height * KP.s) / 2;
+  const rects = [];
+  for (const [id, p] of state.pos) {
+    if (!byId.has(id)) continue;
+    const on = id === state.selected || id === state.focus;
+    rects.push(`<rect class="kp-node${on ? " on" : ""}" x="${(KP.ox + p.x * KP.s).toFixed(1)}" y="${(KP.oy + p.y * KP.s).toFixed(1)}" width="${Math.max(1.5, p.w * KP.s).toFixed(1)}" height="${Math.max(1.5, p.h * KP.s).toFixed(1)}"/>`);
+  }
+  $("keyplanSvg").innerHTML = `<svg viewBox="0 0 ${KP.w} ${KP.h}">${rects.join("")}<rect class="kp-view" id="kpView"/></svg>`;
+  updateKeyplanView();
+}
+function updateKeyplanView() {
+  const v = $("kpView"), l = state.laid, c = $("canvas");
+  if (!v || !l) return;
+  const { x, y, k } = state.view;
+  const vx = -x / k, vy = -y / k, vw = c.clientWidth / k, vh = c.clientHeight / k;
+  $("keyplan").hidden = vx <= 0 && vy <= 0 && vx + vw >= l.width && vy + vh >= l.height;
+  v.setAttribute("x", (KP.ox + vx * KP.s).toFixed(1));
+  v.setAttribute("y", (KP.oy + vy * KP.s).toFixed(1));
+  v.setAttribute("width", Math.max(2, vw * KP.s).toFixed(1));
+  v.setAttribute("height", Math.max(2, vh * KP.s).toFixed(1));
+}
+function keyplanPan(ev) {
+  const r = $("keyplanSvg").getBoundingClientRect(), c = $("canvas");
+  const gx = (ev.clientX - r.left - KP.ox) / KP.s, gy = (ev.clientY - r.top - KP.oy) / KP.s;
+  state.view.x = c.clientWidth / 2 - gx * state.view.k;
+  state.view.y = c.clientHeight / 2 - gy * state.view.k;
+  applyView();
+}
+
+// ------------------------------------------------------------------ title block
+function memberHtml(m) {
+  const p = /^([-+#~] )?([^(:]*)(.*)$/.exec(m.text);
+  const body = (p[1] ? `<span class="vis">${esc(p[1])}</span>` : "") + esc(p[2]) + (p[3] ? `<span class="mt">${esc(p[3])}</span>` : "");
+  return `<li class="${m.static ? "static " : ""}${m.abstract ? "abstract" : ""}">${body}</li>`;
+}
+
+function relRow(e, other) {
+  const meta = [e.via, e.multiplicity].filter(Boolean).join(" ");
+  const tag = e.inferred ? `<span class="inf">inferred</span>` : "";
+  const tip = e.inferred ? e.rationale : e.kind + (e.location ? " — " + e.location : "");
+  return `<button class="rel" data-goto="${esc(other)}" title="${esc(tip)}">
+    ${lineFor(e)}<span class="rn">${esc(label(other))}${tag}</span><span class="rm">${esc(meta)}</span></button>`;
+}
+
+const sec = (title, n, body, id) =>
+  `<section class="sec"${id ? ` id="${id}"` : ""}><div class="k">${esc(title)}${n !== undefined ? ` <span class="n">${n}</span>` : ""}</div>${body}</section>`;
+
+const MARK = document.querySelector(".ident svg").outerHTML;
+
+function renderDetail(sel) {
+  const out = GRAPH.edges.filter((e) => e.from === sel.id);
+  const inc = GRAPH.edges.filter((e) => e.to === sel.id);
+  const focused = state.focus === sel.id && visibleSet();
+  const p = [];
+  p.push(`<button class="back" data-overview><span class="k">← Sheet</span></button>`);
+  p.push(`<div class="tb">
+    <div class="head"><div class="mark">${badge(sel.kind)}</div>
+      <div class="cell"><span class="k">Detail</span><span class="v">${esc(sel.label)}</span></div></div>
+    <div class="row"><div class="cell"><span class="k">Kind</span><span class="v s">${esc(sel.stereotype ? "«" + sel.stereotype + "»" : sel.kind)}</span></div>
+      <div class="cell"><span class="k">Members</span><span class="v">${sel.members.length}</span></div></div>
+    ${sel.namespace ? `<div class="row"><div class="cell wide"><span class="k">Package</span><span class="v s">${esc(sel.namespace)}</span></div></div>` : ""}
+    ${sel.location ? `<div class="row"><div class="cell wide"><span class="k">Source</span><span class="v s">${esc(sel.location)}</span></div></div>` : ""}
+    ${(sel.annotations || []).length ? `<div class="row"><div class="cell wide"><span class="k">Annotations</span><div class="chips">${sel.annotations.map((a) => `<span class="chip">@${esc(a)}</span>`).join("")}</div></div></div>` : ""}
+  </div>`);
+  p.push(`<div class="actions"><button class="btn primary" data-focus="${esc(sel.id)}"${focused ? " disabled" : ""}>${focused ? "Focused" : "Focus here"}</button>` +
+    (sel.members.length ? `<button class="btn" data-toggle="${esc(sel.id)}">${isExpanded(sel.id) ? "Hide" : "Show"} members</button>` : "") + `</div>`);
+  const notes = notesFor.get(sel.id) || [];
+  const hls = (GRAPH.highlights || []).filter((h) => h.target === sel.id);
+  if (notes.length || hls.length) p.push(sec("Notes", undefined,
+    notes.map((t) => `<div class="notecard"><span class="k">Note</span>${esc(t)}</div>`).join("") +
+    hls.map((h) => `<div class="notecard hl"><span class="k">Markup</span>${esc(h.reason)}</div>`).join("")));
+  if (sel.members.length) p.push(sec("Members", sel.members.length, `<ul class="members">${sel.members.map(memberHtml).join("")}</ul>`));
+  if (out.length || inc.length) p.push(sec("Relations", out.length + inc.length,
+    (out.length ? `<div class="sub">OUTGOING</div>${out.map((e) => relRow(e, e.to)).join("")}` : "") +
+    (inc.length ? `<div class="sub">INCOMING</div>${inc.map((e) => relRow(e, e.from)).join("")}` : "")));
+  const unres = (GRAPH.unresolved || []).filter((u) => u.from === sel.id);
+  if (unres.length) p.push(sec("Unresolved", unres.length, unres.map(unresolvedItem).join("")));
+  return p.join("");
+}
+
+function unresolvedItem(u) {
+  return `<div class="unres"><div class="t">${esc(u.raw_type)}</div>
+    <div class="d">in <a class="go" data-goto="${esc(u.from)}">${esc(label(u.from))}</a>${u.via ? "." + esc(u.via) : ""}${u.hint ? " — " + esc(u.hint) : ""}</div>
+    <div class="s">${esc(u.location)}</div></div>`;
+}
+
+function renderOverview() {
+  const p = [];
+  const vis = visibleSet();
+  const shown = vis ? vis.size : GRAPH.nodes.length;
+  const cycles = GRAPH.cycles || [];
+  const unresolved = GRAPH.unresolved || [];
+  const inferred = GRAPH.edges.filter((e) => e.inferred).length;
+  const langs = (GRAPH.source?.languages || []).join(", ");
+  p.push(`<div class="tb">
+    <div class="head"><div class="mark">${MARK}</div>
+      <div class="cell"><span class="k">Drawing</span><span class="v">${esc(GRAPH.title || "Class diagram")}</span></div></div>
+    <div class="row"><div class="cell"><span class="k">Classes</span><span class="v">${shown}${shown !== GRAPH.nodes.length ? `<small> / ${GRAPH.nodes.length}</small>` : ""}</span></div>
+      <div class="cell"><span class="k">Relations</span><span class="v">${GRAPH.edges.length - inferred}${inferred ? `<small> +${inferred} inferred</small>` : ""}</span></div></div>
+    <div class="row"><button class="cell${cycles.length ? " red" : ""}" data-jump="cycles"><span class="k">Cycles</span><span class="v">${cycles.length}</span></button>
+      <button class="cell" data-jump="unresolved"><span class="k">Unresolved</span><span class="v">${unresolved.length}</span></button></div>
+    <div class="row"><div class="cell"><span class="k">Scope</span><span class="v s">${state.focus && vis
+      ? `<a class="go" data-goto="${esc(state.focus)}">${esc(label(state.focus))}</a> ±${state.hops}` : "all classes"}</span></div>
+      <div class="cell"><span class="k">Language</span><span class="v s">${esc(langs || "—")}</span></div></div>
+  </div>`);
+
+  const notes = GRAPH.notes || [];
+  if (notes.length) p.push(sec("General notes", notes.length, `<ol class="notes">${notes.map((n) =>
+    `<li><button data-goto="${esc(n.target)}"><span><span class="t">${esc(label(n.target))}</span><span class="d">${esc(n.text)}</span></span></button></li>`).join("")}</ol>`));
+
+  const hls = GRAPH.highlights || [];
+  if (hls.length || cycles.length) p.push(sec("Markup", hls.length + cycles.length, `<div class="markup">` +
+    hls.map((h) => `<button data-goto="${esc(h.target)}"><span class="k">Highlight</span><span class="t">${esc(label(h.target))}</span><span class="d">${esc(h.reason)}</span></button>`).join("") +
+    cycles.map((c, i) => {
+      const names = c.slice(0, 5).map((id) => esc(label(id))).join(" ↔ ");
+      return `<button data-cycle="${i}" aria-pressed="${state.cycle === i}"><span class="k">Cycle · ${c.length} classes</span>` +
+        `<span class="t">${names}${c.length > 5 ? ` <span class="more">+${c.length - 5} more</span>` : ""}</span></button>`;
+    }).join("") + `</div>`, "sec-cycles"));
+
+  const counts = new Map();
+  for (const n of GRAPH.nodes) {
+    const k = KINDS.find((k) => k[2].includes(n.kind)) || KINDS[0];
+    counts.set(k[0], (counts.get(k[0]) || 0) + 1);
+  }
+  p.push(sec("Kinds", undefined, `<table class="kinds">${KINDS.filter((k) => counts.has(k[0])).map((k) =>
+    `<tr data-kind="${k[0]}" aria-pressed="${state.kind === k[0]}" title="Emphasise this kind"><td>${badge(k[2][0])}</td><td>${esc(k[1])}</td><td class="n">${counts.get(k[0])}</td></tr>`).join("")}</table>`));
+
+  const used = new Set(GRAPH.edges.map((e) => e.inferred ? "inferred"
+    : e.kind === "association" && e.ownership === "owned" ? "composition" : e.kind));
+  const legend = [["extends", "extends"], ["implements", "implements"], ["association", "association (field)"],
+    ["composition", "composition (owned value)"], ["dependency", "dependency (signature)"],
+    ["inferred", "inferred by the agent"]].filter(([k]) => used.has(k));
+  if (cycles.length) legend.push(["cycle", "reference cycle"]);
+  p.push(sec("Legend", undefined, `<table class="legend">${legend.map(([k, t]) => `<tr><td>${LINE[k]}</td><td>${esc(t)}</td></tr>`).join("")}</table>`));
+
+  if (unresolved.length) {
+    const first = unresolved.slice(0, 5), rest = unresolved.slice(5);
+    p.push(sec("Unresolved", unresolved.length, first.map(unresolvedItem).join("") +
+      (rest.length ? `<details class="more"><summary>+ ${rest.length} more</summary>${rest.map(unresolvedItem).join("")}</details>` : ""), "sec-unresolved"));
+  }
+  if (GRAPH.source) p.push(`<div class="colophon">${esc(GRAPH.source.root)}<br>${GRAPH.source.types} types extracted · drawn by draftsman</div>`);
+  return p.join("");
+}
+
+function renderSide() {
+  const sel = state.selected && byId.get(state.selected);
+  const side = $("side");
+  side.innerHTML = sel ? renderDetail(sel) : renderOverview();
+  side.scrollTop = 0;
+}
+
+function select(id, center) {
+  state.selected = id;
+  state.match = null;
+  renderSide();
+  draw();
+  if (center && id) centerOn(id);
+}
+
+function goTo(id) {
+  if (!byId.has(id)) return;
+  const vis = visibleSet();
+  if (vis && !vis.has(id)) { state.focus = id; state.selected = id; renderSide(); relayout(true); return; }
+  select(id, true);
+}
+
+function syncControls() {
+  const focusable = state.focus || state.selected;
+  $("modeFocus").setAttribute("aria-pressed", String(!!visibleSet()));
+  $("modeAll").setAttribute("aria-pressed", String(!visibleSet()));
+  $("modeFocus").disabled = !focusable;
+  $("hopsv").textContent = state.hops;
+  $("hopsDown").disabled = state.hops <= 1;
+  $("hopsUp").disabled = state.hops >= 6;
+  for (const [id, on] of [["deps", state.deps], ["inferred", state.inferred], ["cycles", state.cycles], ["members", state.allMembers]])
+    $(id).setAttribute("aria-pressed", String(on));
+}
+
+// ------------------------------------------------------------------ events
+$("side").addEventListener("click", (ev) => {
+  const t = ev.target.closest("[data-goto],[data-focus],[data-toggle],[data-overview],[data-jump],[data-cycle],[data-kind]");
+  if (!t) return;
+  if (t.dataset.cycle) pickCycle(Number(t.dataset.cycle));
+  else if (t.dataset.kind) { state.kind = state.kind === t.dataset.kind ? null : t.dataset.kind; renderSide(); draw(); }
+  else if (t.dataset.focus) { state.focus = t.dataset.focus; relayout(true); renderSide(); }
+  else if (t.dataset.toggle) toggleMembers(t.dataset.toggle);
+  else if ("overview" in t.dataset) select(null);
+  else if (t.dataset.jump) { const s = $("sec-" + t.dataset.jump); if (s) $("side").scrollTop = s.offsetTop - 60; }
+  else goTo(t.dataset.goto);
+});
+
+function pickCycle(i) {
+  state.cycle = state.cycle === i ? null : i;
+  for (const b of $("side").querySelectorAll("[data-cycle]")) b.setAttribute("aria-pressed", String(Number(b.dataset.cycle) === state.cycle));
+  if (state.cycle === null) { draw(); return; }
+  // a cycle can reach past the focus neighbourhood: show every class to see all of it
+  const vis = visibleSet();
+  if (vis && GRAPH.cycles[i].some((id) => !vis.has(id))) {
+    state.focus = null;
+    relayout(false).then(() => frame(GRAPH.cycles[i]));
+    renderSide();
+    return;
+  }
+  draw();
+  frame(GRAPH.cycles[i]);
+}
+
+function toggleMembers(id) {
+  if (state.expanded.has(id)) state.expanded.delete(id); else state.expanded.add(id);
+  renderSide();
+  relayout(false);
+}
+
+const canvas = $("canvas");
+let drag = null, moved = false, kpDrag = false;
+canvas.addEventListener("pointerdown", (ev) => {
+  if (ev.target.closest(".dock, #keyplan")) return;
+  drag = { x: ev.clientX, y: ev.clientY, vx: state.view.x, vy: state.view.y };
+  moved = false;
+});
+window.addEventListener("pointermove", (ev) => {
+  if (kpDrag) { keyplanPan(ev); return; }
+  if (!drag) return;
+  const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+  if (Math.abs(dx) + Math.abs(dy) > 3) { moved = true; canvas.classList.add("dragging"); }
+  state.view.x = drag.vx + dx; state.view.y = drag.vy + dy;
+  applyView();
+});
+window.addEventListener("pointerup", (ev) => {
+  kpDrag = false;
+  canvas.classList.remove("dragging");
+  if (!drag) return;
+  const wasDrag = moved;
+  drag = null;
+  if (wasDrag) return;
+  const node = ev.target.closest && ev.target.closest(".node");
+  if (node && canvas.contains(node)) select(node.dataset.id === state.selected ? null : node.dataset.id, false);
+  else if (state.selected) select(null);
+});
+canvas.addEventListener("dblclick", (ev) => {
+  const node = ev.target.closest(".node");
+  if (node) toggleMembers(node.dataset.id);
+});
+canvas.addEventListener("wheel", (ev) => {
+  ev.preventDefault();
+  const r = canvas.getBoundingClientRect();
+  zoomBy(Math.exp(-ev.deltaY * 0.0015), ev.clientX - r.left, ev.clientY - r.top);
+}, { passive: false });
+$("keyplanSvg").addEventListener("pointerdown", (ev) => { kpDrag = true; keyplanPan(ev); ev.stopPropagation(); });
+window.addEventListener("resize", applyView);
+
+$("zoomIn").addEventListener("click", () => zoomBy(1.25));
+$("zoomOut").addEventListener("click", () => zoomBy(0.8));
+$("fit").addEventListener("click", fitView);
+$("hopsDown").addEventListener("click", () => setHops(state.hops - 1));
+$("hopsUp").addEventListener("click", () => setHops(state.hops + 1));
+function setHops(h) {
+  state.hops = Math.min(6, Math.max(1, h));
+  syncControls();
+  if (visibleSet()) relayout(true);
+}
+$("modeAll").addEventListener("click", () => { state.focus = null; relayout(true); renderSide(); });
+$("modeFocus").addEventListener("click", () => {
+  if (state.selected) state.focus = state.selected;
+  if (state.focus) { relayout(true); renderSide(); }
+});
+const flip = (key, relay) => () => {
+  state[key] = !state[key];
+  if (key === "allMembers") state.expanded.clear();
+  syncControls();
+  if (relay) relayout(false); else draw();
+  if (key === "allMembers" || key === "deps" || key === "inferred") renderSide();
+};
+$("deps").addEventListener("click", flip("deps", true));
+$("inferred").addEventListener("click", flip("inferred", true));
+$("cycles").addEventListener("click", flip("cycles", false));
+$("members").addEventListener("click", flip("allMembers", true));
+
+// theme: follows the system until switched; the choice is remembered per browser
+(function () {
+  const root = document.documentElement;
+  try { const t = localStorage.getItem("draftsman-theme"); if (t) root.dataset.theme = t; } catch (e) { /* storage blocked */ }
+  $("theme").addEventListener("click", () => {
+    const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem("draftsman-theme", root.dataset.theme); } catch (e) { /* storage blocked */ }
+    draw();
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawRulers);
+})();
+
+// search: substring match on name and package, best matches first
+const search = $("search"), results = $("results");
+let hits = [], cursor = 0;
+function runSearch() {
+  const q = search.value.trim().toLowerCase();
+  if (!q) { closeResults(); return; }
+  hits = GRAPH.nodes.map((n) => {
+    const l = n.label.toLowerCase(), i = l.indexOf(q);
+    const score = i === 0 ? 0 : i > 0 ? 1 + i / 100 : (n.id.toLowerCase().includes(q) ? 3 : -1);
+    return { n, i, score };
+  }).filter((h) => h.score >= 0).sort((a, b) => a.score - b.score || a.n.label.length - b.n.label.length).slice(0, 12);
+  cursor = 0;
+  results.innerHTML = hits.length ? hits.map((h, j) => {
+    const l = h.n.label;
+    const name = h.i >= 0 ? esc(l.slice(0, h.i)) + "<mark>" + esc(l.slice(h.i, h.i + q.length)) + "</mark>" + esc(l.slice(h.i + q.length)) : esc(l);
+    return `<button role="option" data-id="${esc(h.n.id)}" aria-selected="${j === 0}">${badge(h.n.kind)}<span class="rn">${name}</span><span class="rs">${esc(h.n.namespace || h.n.kind)}</span></button>`;
+  }).join("") : `<div class="none">No class matches “${esc(search.value)}”.</div>`;
+  results.hidden = false;
+  search.setAttribute("aria-expanded", "true");
+}
+function closeResults() { results.hidden = true; search.setAttribute("aria-expanded", "false"); }
+function pick(id) {
+  closeResults(); search.value = ""; search.blur();
+  goTo(id);
+  state.match = id; draw();
+}
+search.addEventListener("input", runSearch);
+search.addEventListener("focus", () => { if (search.value) runSearch(); });
+search.addEventListener("keydown", (ev) => {
+  const opts = results.querySelectorAll("button");
+  if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+    ev.preventDefault();
+    if (!opts.length) return;
+    cursor = (cursor + (ev.key === "ArrowDown" ? 1 : opts.length - 1)) % opts.length;
+    opts.forEach((o, j) => o.setAttribute("aria-selected", String(j === cursor)));
+  } else if (ev.key === "Enter" && hits[cursor]) { ev.preventDefault(); pick(hits[cursor].n.id); }
+  else if (ev.key === "Escape") { closeResults(); search.blur(); }
+});
+results.addEventListener("mousedown", (ev) => {
+  const b = ev.target.closest("button[data-id]");
+  if (b) { ev.preventDefault(); pick(b.dataset.id); }
+});
+search.addEventListener("blur", () => setTimeout(closeResults, 120));
+
+window.addEventListener("keydown", (ev) => {
+  if (ev.target.closest("input, textarea") || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  if (ev.key === "/") { ev.preventDefault(); search.focus(); }
+  else if (ev.key === "Escape") {
+    if (state.selected) select(null);
+    else if (state.cycle !== null) pickCycle(state.cycle);
+    else if (state.kind) { state.kind = null; renderSide(); draw(); }
+  }
+  else if (ev.key === "f" || ev.key === "F") fitView();
+  else if (ev.key === "+" || ev.key === "=") zoomBy(1.25);
+  else if (ev.key === "-") zoomBy(0.8);
+});
+
+$("title").textContent = GRAPH.title || "Class diagram";
+syncControls();
+renderSide();
+relayout(true);
+</script>
+</body>
+</html>

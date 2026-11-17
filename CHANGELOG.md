@@ -1,0 +1,58 @@
+# Changelog
+
+## Unreleased (first release)
+
+Notes for anyone with `view.json` files written against a development build:
+
+- **Python type ids now carry the package prefix** when the extraction root sits inside a
+  package: extracting `django/db/models` gives `django.db.models.query.QuerySet`, not
+  `query.QuerySet`. `focus`, `hidden`, `groups`, `notes` and `highlights` that used the
+  full old id need the prefix; simple names (`QuerySet`) keep working.
+- **Python and TypeScript no longer resolve a supertype's nested type by its simple
+  name**, as neither language allows it; such names stay unresolved instead of being
+  linked to the base class's member.
+- Syntax diagnostics are reported per error span (`line`, `end_line`), not once per file.
+- TypeScript: barrel `export *` / `export type *` re-exports are followed, imported type
+  aliases are no longer drawn as external types, and a relative import that reaches no
+  class is unresolved instead of silently external. On nest `packages/` this corrected 10
+  relations that pointed at barrel paths as external types (8 now reach the real
+  definition, 2 were type aliases) and found 152 more.
+- TypeScript workspaces: imports by package name (`@nestjs/common`, `@acme/core/sub`) are
+  linked to the package inside the extraction root, by the exact `name` in its
+  package.json. On nest `packages/` the external types dropped from 32 to 9. A package
+  name declared by two package.json files is unresolved with both as candidates, never
+  picked or treated as external.
+- A field whose type is a generic that is not a container (`Repository<User>`,
+  `Type<Factory>`, `Observable<Order>` when not configured as a wrapper) keeps its
+  association to the outer type and now also depends on the project types among its
+  arguments, as method signatures already did. Before, those arguments were dropped,
+  which hid the inner class whenever the outer type turned out to be a project type
+  (nest's `Type<X>`). Relations grew on every measured project (nest 2086 -> 2103, eShopOnWeb
+  +32, leveldb +4, jsoup +3, httpx +1, nowinandroid +1); README numbers are re-measured.
+- TypeScript `typeof x` is a dependency when `x` is a class and a value otherwise, never
+  an unresolved type (`ReturnType<typeof setTimeout>`).
+- C#: SDK implicit usings, `<Using>` items (also from `Directory.Build.props`) and
+  `global using` are imports of every file of their `.csproj`. A `global using` of the
+  project's own namespace now links names that were unresolved; on eShopOnWeb (none) the
+  numbers are unchanged, but `IConfiguration`, `IServiceCollection` and `IUrlHelper` now
+  carry the hint that explains them. A namespace the project shares with a library
+  (`Microsoft.AspNetCore.Mvc`) counts as a possible source in unresolved hints.
+- C#: unresolved hints name where project-wide imports come from
+  (`Microsoft.NET.Sdk.Web implicit usings (16 namespaces)`, `1 global using (Acme.Domain.*)`)
+  instead of two arbitrary examples.
+- C#: every file is read with the first branch of each `#if` (blanked otherwise), so `#if`
+  inside a base list, a parameter list, an expression or around a second method header
+  no longer breaks the parse (Serilog: 34 diagnostics -> 0, `ILogger` and `PropertyBinder`
+  back in the IR; dotnet/eShop: 14 -> 0).
+- C#: library type names are no longer turned into `System.X` by name alone. A name is a
+  library type, with its real namespace, only when the file imports that namespace
+  (`System.Text.Encoding`, `System.Collections.Generic.IEqualityComparer`); `ILogger` is
+  `Microsoft.Extensions.Logging`'s, never `System.ILogger`; generic and non-generic
+  `IComparer`/`IEqualityComparer` are told apart by their type arguments.
+- C#: a file linked into projects with `<Compile Include>` belongs to all of them and gets
+  the imports they share; every SDK a project names counts (an extra `<Sdk Name>` no
+  longer replaces `Microsoft.NET.Sdk`), and `Aspire.AppHost.Sdk` brings Microsoft.NET.Sdk's
+  implicit usings, as does `MSTest.Sdk` (both checked in the SDKs' sources). dotnet/eShop:
+  the names its `src/Shared` files, its AppHost and its MSTest project use resolve again.
+- Comments inside a type (a JSDoc block in an inline object type, `/* … */` in a generic
+  argument) are no longer part of `type_ref`, in every language.

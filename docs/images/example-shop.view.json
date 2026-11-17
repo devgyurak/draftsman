@@ -1,0 +1,12 @@
+{
+  "title": "Shop: ordering",
+  "relations": ["extends", "implements", "association"],
+  "hidden": ["*#get*", "*#toString", "Auditable", "Address", "Listener", "Audit"],
+  "members": "public",
+  "externals": true,
+  "groups": [{"name": "ordering", "members": ["Order", "OrderLine", "Status", "OrderRepository", "OrderService"]}],
+  "notes": [{"target": "PaymentGateway", "text": "Only one implementation: StripeGateway"}],
+  "highlights": [{"target": "Order", "reason": "bidirectional with Customer"}],
+  "inferred_edges": [{"from": "StripeGateway", "to": "StripeClient", "kind": "association",
+                      "rationale": "field type only reachable through import com.stripe.*"}]
+}

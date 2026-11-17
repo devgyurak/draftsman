@@ -1,0 +1,14 @@
+{
+  "name": "draftsman",
+  "owner": {
+    "name": "devgyurak"
+  },
+  "plugins": [
+    {
+      "name": "draftsman",
+      "source": "./",
+      "description": "UML class diagrams whose relations come from a tree-sitter parser, not from an LLM."
+    }
+  ],
+  "description": "Draftsman: UML class diagrams whose relations come from a tree-sitter parser."
+}

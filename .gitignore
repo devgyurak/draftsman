@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+node_modules/
+.ruff_cache/
+
+# logo working renders
+assets/logo/work/renders/
+assets/logo/work/*.html

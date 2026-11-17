@@ -1,0 +1,587 @@
+"""Raw declarations -> IR: name resolution and relation building.
+
+Every relation produced here comes from a written type reference: a
+supertype clause, a field type, or a method/constructor signature. Names
+that cannot be tied to a project type, a builtin, or an explicitly imported
+external type end up in ``IR.unresolved`` for Claude to judge.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Optional
+
+from .extractor import RawFile, RawMember, RawType
+from .langs import LANGUAGES, FileScope, Import
+from .model import IR, External, Location, Relation, Type, Unresolved
+from .typeref import Named, named_refs, parse_type, value_names
+from .wrappers import Wrappers
+
+PROJECT, EXTERNAL, BUILTIN, TPARAM, ALIAS, UNRESOLVED = (
+    "project", "external", "builtin", "tparam", "alias", "unresolved")
+
+_KIND_STRENGTH = {"interface": 0, "annotation": 0, "class": 1}
+
+
+@dataclass
+class Resolution:
+    status: str
+    target: Optional[str] = None      # project type id or external qualified name
+    hint: Optional[str] = None
+    candidates: list[str] = field(default_factory=list)
+
+
+class Resolver:
+    def __init__(self, types: dict[str, RawType], scopes: list[FileScope]):
+        self.index = types
+        self.by_simple: dict[str, list[str]] = {}
+        for qname, t in types.items():
+            self.by_simple.setdefault(t.name, []).append(qname)
+        self.namespaces = {t.namespace for t in types.values() if t.namespace}
+        self.scopes_by_ns: dict[str, list[FileScope]] = {}
+        for s in scopes:
+            if s.namespace:
+                self.scopes_by_ns.setdefault(s.namespace, []).append(s)
+                self.namespaces.add(s.namespace)
+        self.aliases: set[str] = set().union(*(s.aliases for s in scopes)) if scopes else set()
+        # what an import can name: a class or a type alias (`export type X = ...`)
+        self._targets = set(self.index) | self.aliases
+        self._supers_cache: dict[str, list[Resolution]] = {}
+        self._resolving_supers: set[str] = set()
+        self._suffix_cache: dict[str, Optional[str]] = {}
+        self._tail_cache: dict[str, Optional[str]] = {}
+
+    # ------------------------------------------------------------ helpers
+
+    def _type_params(self, rtype: RawType, member: Optional[RawMember]) -> set[str]:
+        names = set(member.tparams) if member else set()
+        names |= rtype.scope.type_params
+        cur: Optional[RawType] = rtype
+        while cur is not None:
+            names.update(cur.generics)
+            cur = self.index.get(cur.outer) if cur.outer else None
+        return names
+
+    def _by_suffix(self, path: str, pool) -> Optional[str]:
+        """The unique entry of ``pool`` that ends with ``path`` on a segment boundary."""
+        hits = [p for p in pool if p == path or p.endswith("." + path) or p.endswith("/" + path)]
+        return hits[0] if len(hits) == 1 else None
+
+    def lookup(self, path: str, spec, depth: int = 0) -> Optional[str]:
+        """Project type or alias id for a fully written path, following re-exports."""
+        if path in self._targets:
+            return path
+        if not spec.import_suffix_match:
+            return None
+        # only top-level answers are cached: a nested call can stop at the depth limit,
+        # and caching that None would make results depend on file order
+        if depth == 0 and path in self._suffix_cache:
+            return self._suffix_cache[path]
+        found = self._by_suffix(path, self._targets)
+        if found is None and depth < 4:
+            # `from pkg import Name` where pkg/__init__ re-exports Name
+            sep = spec.separator
+            if sep in path:
+                mod, name = path.rsplit(sep, 1)
+                ns = mod if mod in self.scopes_by_ns else self._by_suffix(mod, self.scopes_by_ns)
+                scopes = self.scopes_by_ns.get(ns, []) if ns else []
+                for scope in scopes:
+                    for imp in scope.imports:
+                        if not imp.wildcard and not imp.module and imp.local_name == name:
+                            found = self.lookup(imp.path, spec, depth + 1)
+                            if found:
+                                break
+                    if found:
+                        break
+                # then `from pkg.sub import *` in pkg/__init__, followed by its exact path:
+                # the same simple name can live in several packages (Field)
+                for scope in scopes if not found else []:
+                    for imp in scope.imports:
+                        if imp.wildcard and not imp.external:
+                            found = self.lookup(imp.path + sep + name, spec, depth + 1)
+                            if found:
+                                break
+                    if found:
+                        break
+        if depth == 0:
+            self._suffix_cache[path] = found
+        return found
+
+    def _reexported_from(self, path: str, spec, depth: int = 0) -> Optional[str]:
+        """The package path a project module re-exports ``path`` from, if the re-export
+        chain leaves the sources (`export { EventEmitter } from "events"`)."""
+        sep = spec.separator
+        if depth >= 4 or sep not in path:
+            return None
+        mod, name = path.rsplit(sep, 1)
+        ns = mod if mod in self.scopes_by_ns else self._by_suffix(mod, self.scopes_by_ns)
+        for scope in self.scopes_by_ns.get(ns, []) if ns else []:
+            for imp in scope.imports:
+                if imp.wildcard or imp.module or imp.local_name != name:
+                    continue
+                if not imp.local:
+                    return imp.path
+                found = self._reexported_from(imp.path, spec, depth + 1)
+                if found:
+                    return found
+        return None
+
+    def _ambiguous_package(self, imp, rest: str, spec) -> Resolution:
+        """Several workspace packages share the imported package name: never pick one."""
+        sep = spec.separator
+        cands = [f for m in imp.ambiguous if (f := self.lookup(m + sep + rest, spec))]
+        package = imp.path if imp.module else imp.path.rsplit(sep, 1)[0]
+        return Resolution(UNRESOLVED, candidates=cands or list(imp.ambiguous), hint=(
+            f"package name {package} is declared by {len(imp.ambiguous)} package.json "
+            f"files ({', '.join(imp.ambiguous)}); which one is meant is not known"))
+
+    def _found(self, target: str) -> Resolution:
+        return Resolution(ALIAS) if target in self.aliases else Resolution(PROJECT, target)
+
+    def _not_found(self, path: str, spec) -> Resolution:
+        """An import path that names no project type. External, unless it ends with
+        exactly one project id: then the root is probably inside a package Python names
+        differently (a namespace package without __init__.py), so leave it unresolved
+        with that id as a candidate instead of drawing nothing silently."""
+        if spec.import_suffix_match:
+            if path not in self._tail_cache:
+                tails = [t for t in self.index if path.endswith(spec.separator + t)]
+                self._tail_cache[path] = tails[0] if len(tails) == 1 else None
+            near = self._tail_cache[path]
+            if near:
+                return Resolution(UNRESOLVED, candidates=[near], hint=(
+                    f"import path {path} ends with project type {near}; is the extraction "
+                    "root inside a package without __init__.py? Extract from its top"))
+        return Resolution(EXTERNAL, path)
+
+    def _namespace_chain(self, ns: Optional[str], sep: str, parents: bool,
+                         floor: Optional[str] = None) -> list[str]:
+        if not ns:
+            return [""]
+        if parents:
+            parts = ns.split(sep)
+            return [sep.join(parts[:i]) for i in range(len(parts), 0, -1)] + [""]
+        # namespace blocks inside a file see the blocks around them, down to the
+        # file's own namespace (TS `namespace X {}` sees the module)
+        chain = [ns]
+        while floor and ns != floor and ns.startswith(floor + sep):
+            ns = ns.rsplit(sep, 1)[0]
+            chain.append(ns)
+        return chain
+
+    def supertypes(self, rtype: RawType) -> list[Resolution]:
+        """Resolutions of the supertype clauses of ``rtype`` (cached)."""
+        qname = rtype.qualified_name
+        cached = self._supers_cache.get(qname)
+        if cached is not None:
+            return cached
+        if qname in self._resolving_supers:
+            return []  # asked again while resolving them (cyclic declarations)
+        self._resolving_supers.add(qname)
+        try:
+            cached = []
+            for sup in rtype.supers:
+                ref = parse_type(sup.text)
+                if isinstance(ref, Named):
+                    # a supertype clause cannot see the type's *own* inherited member
+                    # types, but it does see those of its enclosing types
+                    cached.append(self.resolve(ref.name, rtype, inherit=False, scope=sup.scope,
+                                               arity=len(ref.args)))
+                else:
+                    cached.append(Resolution(UNRESOLVED))
+        finally:
+            self._resolving_supers.discard(qname)
+        self._supers_cache[qname] = cached
+        return cached
+
+    def _member_type(self, owner: RawType, name: str, sep: str, inherit: bool,
+                     seen: set[str]) -> Optional[str]:
+        """A nested type ``name`` declared in ``owner`` or inherited from its supertypes."""
+        if owner.qualified_name in seen:
+            return None
+        seen.add(owner.qualified_name)
+        cand = owner.qualified_name + sep + name
+        if cand in self.index:
+            return cand
+        if inherit:
+            for sup in self.supertypes(owner):
+                if sup.status == PROJECT:
+                    found = self._member_type(self.index[sup.target], name, sep, inherit, seen)
+                    if found:
+                        return found
+        return None
+
+    def _external_supers(self, rtype: RawType) -> list[str]:
+        """External ancestors of the type and its enclosing types, also those reached
+        through project superclasses (B extends FrameLayout; A extends B)."""
+        out: list[str] = []
+        seen: set[str] = set()
+        cur: Optional[RawType] = rtype
+        while cur is not None:
+            stack = [cur]
+            while stack:
+                t = stack.pop()
+                if t.qualified_name in seen:
+                    continue
+                seen.add(t.qualified_name)
+                for sup in self.supertypes(t):
+                    if sup.status in (EXTERNAL, BUILTIN) and sup.target not in out:
+                        out.append(sup.target)
+                    elif sup.status == PROJECT:
+                        stack.append(self.index[sup.target])
+            cur = self.index.get(cur.outer) if cur.outer else None
+        return out
+
+    def _nested_path(self, target: str, rest: str, sep: str, inherit: bool) -> Optional[str]:
+        for part in rest.split(sep):
+            target = self._member_type(self.index[target], part, sep, inherit, set())
+            if target is None:
+                return None
+        return target
+
+    # ------------------------------------------------------------ resolve
+
+    def resolve(self, name: str, rtype: RawType, member: Optional[RawMember] = None,
+                inherit: bool = True, scope: Optional[FileScope] = None,
+                arity: Optional[int] = None) -> Resolution:
+        spec = LANGUAGES[rtype.language]
+        sep = spec.separator
+        scope = scope or (member.scope if member and member.scope else None) or rtype.scope
+        chain = self._namespace_chain(rtype.namespace, sep, spec.parent_namespace_lookup,
+                                      scope.namespace)
+
+        if name in self._type_params(rtype, member):
+            return Resolution(TPARAM)
+
+        if sep in name:
+            if name in self.index:
+                return Resolution(PROJECT, name)
+            for ns in chain:  # partially qualified: pay::Receipt inside namespace shop
+                if ns and ns + sep + name in self.index:
+                    return Resolution(PROJECT, ns + sep + name)
+                if ns and ns + sep + name in self.aliases:
+                    return Resolution(ALIAS)
+            head, rest = name.split(sep, 1)
+            for imp in scope.imports:  # module alias: pay.Receipt, models.OrderLine
+                if not imp.wildcard and imp.module and imp.ambiguous and imp.local_name == head:
+                    return self._ambiguous_package(imp, rest, spec)
+                if not imp.wildcard and imp.local_name == head:
+                    found = None if imp.external else self.lookup(imp.path + sep + rest, spec)
+                    if found:
+                        return self._found(found)
+                    if imp.module:
+                        return (Resolution(EXTERNAL, imp.path + sep + rest) if imp.external
+                                else self._not_found(imp.path + sep + rest, spec))
+            first = self.resolve(head, rtype, member, inherit, scope)
+            if first.status == PROJECT:
+                found = self._nested_path(first.target, rest, sep, inherit)
+                if found:
+                    return Resolution(PROJECT, found)
+                target = self.index[first.target]
+                if target.kind == "enum" and any(
+                        rm.member.name == rest for rm in target.members):
+                    return Resolution(PROJECT, first.target)  # enum member as a type
+                return Resolution(UNRESOLVED, hint=f"{first.target} has no nested type {rest}",
+                                  candidates=self._candidates(name, sep))
+            if first.status == EXTERNAL and first.target:
+                return self._not_found(first.target + sep + rest, spec)
+            if first.status in (EXTERNAL, BUILTIN):
+                return Resolution(EXTERNAL, (first.target or head) + sep + rest)
+            # a fully qualified name outside the project
+            return Resolution(EXTERNAL, name)
+
+        # nested types of this type and its enclosing types, including inherited ones
+        cur: Optional[RawType] = rtype
+        while cur is not None:
+            found = self._member_type(
+                cur, name, sep,
+                spec.inherited_member_types and (inherit or cur is not rtype), set())
+            if found:
+                return Resolution(PROJECT, found)
+            if cur.qualified_name + sep + name in self.aliases:
+                return Resolution(ALIAS)
+            cur = self.index.get(cur.outer) if cur.outer else None
+
+        for imp in scope.imports:
+            if not imp.wildcard and not imp.module and imp.local_name == name:
+                if imp.ambiguous:
+                    return self._ambiguous_package(imp, imp.path.rsplit(sep, 1)[-1], spec)
+                if not imp.external:
+                    found = self.lookup(imp.path, spec)
+                    if found:
+                        return self._found(found)
+                    outside = self._reexported_from(imp.path, spec)
+                    if outside:
+                        return Resolution(EXTERNAL, outside)
+                    if imp.local:
+                        # a relative or workspace-package import points into the sources
+                        return Resolution(UNRESOLVED, hint=(
+                            f"imported from inside the sources (a relative path or a workspace "
+                            f"package), but {imp.path} is no class or type alias there "
+                            "(a value, or a re-export not followed?)"))
+                    return self._not_found(imp.path, spec)
+                return Resolution(EXTERNAL, imp.path)
+
+        for ns in chain:
+            cand = ns + sep + name if ns else name
+            if cand in self.index:
+                return Resolution(PROJECT, cand)
+            if cand in self.aliases:
+                return Resolution(ALIAS)  # a type alias: not a class, nothing to draw
+
+        external_wildcards: list[Import] = []
+        shared_wildcards: list[Import] = []   # declared in the project too, but not this name
+        for imp in scope.imports:
+            if imp.wildcard:
+                found = None if imp.external else self.lookup(imp.path + sep + name, spec)
+                if found:
+                    return self._found(found)
+                for ns in chain:  # C#/C++: `using Orders;` relative to the namespace
+                    if ns and f"{ns}{sep}{imp.path}{sep}{name}" in self.index:
+                        return Resolution(PROJECT, f"{ns}{sep}{imp.path}{sep}{name}")
+                if imp.external or (imp.path not in self.namespaces
+                                    and imp.path not in self.index):
+                    external_wildcards.append(imp)
+                elif imp.path not in self.index:
+                    # eShopOnWeb declares an extension class in Microsoft.AspNetCore.Mvc;
+                    # the rest of that namespace is still ASP.NET
+                    shared_wildcards.append(imp)
+
+        library = spec.library_type(name, {i.path for i in scope.imports if i.wildcard}, arity)
+        if library:
+            return Resolution(EXTERNAL, library)
+        if spec.is_builtin(name):
+            return Resolution(BUILTIN, spec.builtin_id(name))
+
+        hints = []
+        candidates = external_wildcards + shared_wildcards
+        own = list(dict.fromkeys(i.path for i in candidates if not i.project_wide))
+        if own:   # the file's own imports first: they are what a reader can see
+            shown = ", ".join(f"{w}{sep}*" for w in own[:3])
+            more = f" (+{len(own) - 3} more)" if len(own) > 3 else ""
+            hints.append(f"may come from wildcard import {shown}{more}")
+        # project-wide ones by where they come from, not by example: any one of them may
+        # be the source, and naming two at random misleads
+        origins: dict[str, list[str]] = {}
+        for i in candidates:
+            if i.project_wide and i.path not in own:
+                paths = origins.setdefault(i.origin or "project-wide imports", [])
+                if i.path not in paths:
+                    paths.append(i.path)
+        if origins:
+            parts = []
+            for origin, paths in origins.items():
+                if origin == "global using":   # written in the sources: name them
+                    names = ", ".join(f"{p}{sep}*" for p in paths[:3])
+                    parts.append(f"{len(paths)} global using{'s' if len(paths) > 1 else ''} "
+                                 f"({names}{', ...' if len(paths) > 3 else ''})")
+                else:
+                    parts.append(f"{origin} ({len(paths)} namespace{'s' if len(paths) > 1 else ''})")
+            hints.append("may come from a project-wide wildcard import: " + ", ".join(parts))
+        if inherit:
+            ext = self._external_supers(rtype)
+            if ext:
+                hints.append("may be a nested type inherited from " + ", ".join(ext))
+        return Resolution(UNRESOLVED, hint="; ".join(hints) or None,
+                          candidates=self._candidates(name, sep))
+
+    def _candidates(self, name: str, sep: str) -> list[str]:
+        return sorted(self.by_simple.get(name.rsplit(sep, 1)[-1], []))
+
+
+def _share_project_imports(scopes: list[FileScope]) -> None:
+    """A `global using` in one file is an import of every file of its project; a file
+    linked into several projects gets the ones they all have."""
+    key = lambda i: (i.path, i.alias, i.wildcard)   # noqa: E731
+    by_project: dict[str, list[FileScope]] = {}
+    for s in scopes:
+        if s.project is not None and ";" not in s.project:
+            by_project.setdefault(s.project, []).append(s)
+    shared: dict[str, list[Import]] = {
+        p: [i for s in members for i in s.imports if i.project_wide and i.origin == "global using"]
+        for p, members in by_project.items()}
+    for s in scopes:
+        if s.project is None:
+            continue
+        projects = s.project.split(";")
+        lists = [shared.get(p, []) for p in projects]
+        common = set.intersection(*({key(i) for i in lst} for lst in lists)) if lists else set()
+        have = {key(i) for i in s.imports}
+        for imp in lists[0] if lists else []:
+            if key(imp) in common and key(imp) not in have:
+                s.imports.append(imp)
+                have.add(key(imp))
+
+
+class _Builder:
+    def __init__(self, root: str, files: list[RawFile], wrappers: Wrappers):
+        self.ir = IR(root=root, files=len(files))
+        self.wrappers = wrappers
+        self.types: dict[str, RawType] = {}
+        for f in files:
+            self.ir.diagnostics.extend(f.diagnostics)
+            for t in f.types:
+                self._add(t)
+        _share_project_imports([f.scope for f in files])
+        self.resolver = Resolver(self.types, [f.scope for f in files])
+        self.externals: dict[str, External] = {}
+        self.unresolved: dict[tuple, Unresolved] = {}
+        self.relations: list[Relation] = []
+
+    def _add(self, t: RawType) -> None:
+        existing = self.types.get(t.qualified_name)
+        if existing is None:
+            self.types[t.qualified_name] = t
+            return
+        # partial declarations (C# partial, TS declaration merging) merge by name;
+        # a class declaration wins over an interface of the same name
+        if _KIND_STRENGTH.get(t.kind, 2) > _KIND_STRENGTH.get(existing.kind, 2):
+            existing.kind, existing.location = t.kind, t.location
+        names = {(m.member.name, m.member.kind) for m in existing.members}
+        for rm in t.members:
+            if rm.member.kind in ("field", "property") and \
+                    (rm.member.name, rm.member.kind) in names:
+                continue
+            if t.location.file != existing.location.file:
+                rm.member.file = t.location.file
+            existing.members.append(rm)
+        existing.supers.extend(t.supers)
+        existing.generics += [g for g in t.generics if g not in existing.generics]
+        for m in t.modifiers:
+            if m not in existing.modifiers:
+                existing.modifiers.append(m)
+        for a in t.annotations:
+            if a not in existing.annotations:
+                existing.annotations.append(a)
+
+    def _is_project(self, rtype: RawType, member: Optional[RawMember]):
+        return lambda name: self.resolver.resolve(name, rtype, member).status == PROJECT
+
+    def _unresolved(self, rtype: RawType, raw: str, res: Resolution, loc: Location,
+                    via: Optional[str]) -> None:
+        key = (rtype.qualified_name, raw)
+        if key not in self.unresolved:
+            self.unresolved[key] = Unresolved(
+                rtype.qualified_name, raw, loc, via=via,
+                candidates=res.candidates, hint=res.hint)
+
+    # ------------------------------------------------------------------
+
+    def build(self) -> IR:
+        for rtype in self.types.values():
+            self._supers(rtype)
+            for rm in rtype.members:
+                m = rm.member
+                if m.kind in ("field", "property") and m.static:
+                    # class-level constants/singletons are not part of an instance's
+                    # structure; record them as a dependency instead
+                    self._dependencies(rtype, rm)
+                elif m.kind in ("field", "property"):
+                    self._association(rtype, rm)
+                elif m.kind in ("method", "constructor"):
+                    self._dependencies(rtype, rm)
+
+        self.ir.types = sorted((self._to_type(t) for t in self.types.values()),
+                               key=lambda t: t.id)
+        self.ir.languages = sorted({t.language for t in self.ir.types})
+        self.ir.relations = self._finalize_relations()
+        self.ir.externals = sorted(self.externals.values(), key=lambda e: e.id)
+        self.ir.unresolved = sorted(self.unresolved.values(),
+                                    key=lambda u: (u.from_, u.raw_type))
+        self.ir.diagnostics.sort(key=lambda d: (d.file, d.line))
+        return self.ir
+
+    def _to_type(self, t: RawType) -> Type:
+        return Type(
+            id=t.qualified_name,
+            name=t.name,
+            qualified_name=t.qualified_name,
+            kind=t.kind,
+            language=t.language,
+            location=t.location,
+            namespace=t.namespace,
+            outer=t.outer,
+            modifiers=t.modifiers,
+            annotations=t.annotations,
+            generics=t.generics,
+            members=[rm.member for rm in t.members],
+        )
+
+    def _supers(self, rtype: RawType) -> None:
+        spec = LANGUAGES[rtype.language]
+        for sup, res in zip(rtype.supers, self.resolver.supertypes(rtype)):
+            ref = parse_type(sup.text)
+            if not isinstance(ref, Named):
+                continue
+            loc = Location(sup.scope.file if sup.scope else rtype.location.file, sup.line)
+            if res.status == PROJECT:
+                if res.target == rtype.qualified_name:
+                    continue
+                kind = sup.kind
+                if kind == "inherits":
+                    target_kind = self.types[res.target].kind
+                    if rtype.kind == "interface" or target_kind != "interface":
+                        kind = "extends"
+                    else:
+                        kind = "implements"
+                self.relations.append(Relation(rtype.qualified_name, res.target, kind, loc))
+            elif res.status in (EXTERNAL, BUILTIN):
+                ext_id = res.target or ref.name
+                name = ext_id.rsplit("::", 1)[-1].rsplit("/", 1)[-1].rsplit(".", 1)[-1]
+                self.externals.setdefault(ext_id, External(ext_id, name))
+                kind = spec.external_super_kind(rtype.kind, sup.kind, name)
+                self.relations.append(Relation(rtype.qualified_name, ext_id, kind, loc))
+            elif res.status == UNRESOLVED:
+                self._unresolved(rtype, ref.name, res, loc, via=None)
+
+    def _association(self, rtype: RawType, rm: RawMember) -> None:
+        m = rm.member
+        ref = parse_type(m.type_ref)
+        loc = Location(m.file or rtype.location.file, m.line)
+        cpp = rtype.language == "cpp"
+        for leaf in self.wrappers.leaves(ref, self._is_project(rtype, rm), track_ownership=cpp):
+            res = self.resolver.resolve(leaf.name, rtype, rm, arity=len(leaf.args))
+            if res.status == PROJECT:
+                self.relations.append(Relation(
+                    rtype.qualified_name, res.target, "association", loc,
+                    multiplicity=leaf.multiplicity, ownership=leaf.ownership, via=m.name))
+            elif res.status == UNRESOLVED and not leaf.value:   # `typeof fn`: a value
+                self._unresolved(rtype, leaf.name, res, loc, via=m.name)
+            # the arguments of a generic that is not a container (Repository<User>,
+            # Type<Factory>, Observable<Order>) are written in the source too: the field
+            # depends on them, as a signature does
+            for arg in leaf.args:
+                self._depend_on(rtype, rm, arg, loc)
+
+    def _dependencies(self, rtype: RawType, rm: RawMember) -> None:
+        m = rm.member
+        loc = Location(m.file or rtype.location.file, m.line)
+        for text in [m.type_ref] + [p.type_ref for p in m.params]:
+            self._depend_on(rtype, rm, parse_type(text), loc)
+
+    def _depend_on(self, rtype: RawType, rm: RawMember, ref, loc: Location) -> None:
+        """A dependency on every project type named in ``ref``, containers seen through."""
+        m = rm.member
+        values = value_names(ref)   # `typeof setTimeout`: a value, not a missing type
+        for name, arity in named_refs(ref):
+            if self.wrappers.is_wrapper(name) and not self._is_project(rtype, rm)(name):
+                continue
+            res = self.resolver.resolve(name, rtype, rm, arity=arity)
+            if res.status == PROJECT and res.target != rtype.qualified_name:
+                self.relations.append(Relation(
+                    rtype.qualified_name, res.target, "dependency", loc, via=m.name))
+            elif res.status == UNRESOLVED and name not in values:
+                self._unresolved(rtype, name, res, loc, via=m.name)
+
+    def _finalize_relations(self) -> list[Relation]:
+        # keep every fact: one relation per (from, to, kind, via). Collapsing
+        # dependencies per pair is a presentation decision made by the renderer.
+        unique = {r.key(): r for r in reversed(self.relations)}
+        return sorted(unique.values(), key=lambda r: (r.from_, r.to, r.kind, r.via or ""))
+
+
+def build_ir(root: str, files: list[RawFile], wrappers: Wrappers) -> IR:
+    return _Builder(root, files, wrappers).build()
+
+
+__all__ = ["build_ir", "Resolver", "Resolution", "Import"]

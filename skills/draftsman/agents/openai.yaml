@@ -1,0 +1,7 @@
+interface:
+  display_name: "Draftsman"
+  short_description: "UML class diagrams from parser facts"
+  default_prompt: "Draw a class diagram of this repository."
+  brand_color: "#D96A00"
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,11 @@
+{
+  "name": "draftsman-node-tools",
+  "private": true,
+  "type": "module",
+  "description": "Optional: ELK layout for SVG output and the Mermaid syntax check (validate.sh)",
+  "dependencies": {
+    "elkjs": "0.9.3",
+    "jsdom": "^26.1.0",
+    "mermaid": "^11.12.0"
+  }
+}

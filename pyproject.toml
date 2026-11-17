@@ -1,0 +1,21 @@
+[project]
+name = "draftsman"
+version = "0.2.0"
+description = "Class diagrams whose relations come from a parser, not from an LLM"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+dependencies = [
+    "tree-sitter>=0.25",
+    "tree-sitter-language-pack>=0.9",
+    "pyyaml>=6",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["skills/draftsman/scripts"]
+
+[tool.uv]
+package = false

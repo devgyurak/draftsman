@@ -1,0 +1,40 @@
+{
+  "name": "draftsman",
+  "version": "0.2.0",
+  "description": "UML class diagrams for Java, C#, Kotlin, TypeScript, Python and C++ whose relations come from a tree-sitter parser, not from an LLM. Mermaid, SVG or an interactive HTML viewer.",
+  "author": {
+    "name": "devgyurak",
+    "url": "https://github.com/devgyurak"
+  },
+  "homepage": "https://github.com/devgyurak/draftsman",
+  "repository": "https://github.com/devgyurak/draftsman",
+  "license": "Apache-2.0",
+  "keywords": [
+    "uml",
+    "class-diagram",
+    "mermaid",
+    "tree-sitter",
+    "architecture"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Draftsman",
+    "shortDescription": "Class diagrams drawn from parser facts, not guesses",
+    "longDescription": "Draftsman extracts types, members and relations with tree-sitter (Java, C#, Kotlin, TypeScript, Python, C++), lets the agent choose scope, grouping and commentary, and renders Mermaid, a static SVG, or a single-file interactive HTML viewer. Relations the parser did not find are only ever drawn as visibly inferred.",
+    "developerName": "devgyurak",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/devgyurak/draftsman",
+    "defaultPrompt": [
+      "Draw a class diagram of this repository",
+      "Show the classes around OrderService as an interactive diagram",
+      "Which classes form dependency cycles here?"
+    ],
+    "brandColor": "#D96A00",
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/icon.png"
+  }
+}
