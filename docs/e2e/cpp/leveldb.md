@@ -8,7 +8,7 @@ Google's key-value store: plain C++ with a C API, ports and benchmarks.
 | Commit | `29465588d3` (2026-11-12) |
 | Extracted | the whole repository without `*_test.cc` and `third_party/` |
 
-Measured on 2026-11-17 with Draftsman `82118c5` and the change that splits unresolved references by reason (the summary line below).
+Measured on 2026-11-17 with Draftsman `3a4f253`.
 
 ## Run
 

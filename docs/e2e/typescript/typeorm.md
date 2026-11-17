@@ -8,7 +8,7 @@ An ORM for many databases: entity metadata, query builders, drivers, migrations 
 | Commit | `d5b143dd7e` (2026-11-16) |
 | Extracted | `packages/typeorm/src` (tests are under `packages/typeorm/test`) |
 
-Measured on 2026-11-17 with Draftsman `82118c5` and the change that splits unresolved references by reason (the summary line below).
+Measured on 2026-11-17 with Draftsman `3a4f253`.
 
 ## Run
 

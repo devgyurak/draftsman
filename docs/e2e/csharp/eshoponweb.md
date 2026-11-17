@@ -8,7 +8,7 @@ A reference ASP.NET Core application: MVC, Razor Pages, Blazor admin, a public A
 | Commit | `4da8212117` (2025-01-13) |
 | Extracted | `src/` (tests are under `tests/`) |
 
-Measured on 2026-11-17 with Draftsman `82118c5` and the change that splits unresolved references by reason (the summary line below).
+Measured on 2026-11-17 with Draftsman `3a4f253`.
 
 ## Run
 

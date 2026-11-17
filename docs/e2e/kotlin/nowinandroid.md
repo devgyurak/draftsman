@@ -8,7 +8,7 @@ Google's Android sample: Compose, Hilt, Room, DataStore, many Gradle modules.
 | Commit | `2982e63cb6` (2026-10-20) |
 | Extracted | the whole repository without tests, test fixtures and generated `build/` output; `*.gradle.kts` build scripts are never extracted |
 
-Measured on 2026-11-17 with Draftsman `82118c5` and the change that splits unresolved references by reason (the summary line below).
+Measured on 2026-11-17 with Draftsman `3a4f253`.
 
 ## Run
 

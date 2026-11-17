@@ -8,7 +8,7 @@ The successor of eShopOnWeb: a .NET Aspire solution of microservices (catalog, b
 | Commit | `5e526931f7` (2026-11-16) |
 | Extracted | `src/`: 19 projects and the shared `src/Shared` files (tests are under `tests/`) |
 
-Measured on 2026-11-17 with Draftsman `82118c5` and the change that splits unresolved references by reason (the summary line below).
+Measured on 2026-11-17 with Draftsman `3a4f253`.
 
 ## Run
 

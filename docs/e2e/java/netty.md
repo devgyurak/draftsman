@@ -8,7 +8,7 @@ An asynchronous network framework: buffers, channels, pipelines, codecs and nati
 | Commit | `e3cab70052` (2026-11-16) |
 | Extracted | the whole repository without `src/test`, the `testsuite*` and `*-tests` modules, `microbench/` and `example/` |
 
-Measured on 2026-11-17 with Draftsman `82118c5` and the change that splits unresolved references by reason (the summary line below).
+Measured on 2026-11-17 with Draftsman `3a4f253`.
 
 ## Run
 

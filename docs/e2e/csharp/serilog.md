@@ -8,7 +8,7 @@ A structured logging library: the logger pipeline, enrichers, sinks, formatting 
 | Commit | `43105b3509` (2026-10-24) |
 | Extracted | `src/Serilog` (tests are under `test/`) |
 
-Measured on 2026-11-17 with Draftsman `82118c5` and the change that splits unresolved references by reason (the summary line below).
+Measured on 2026-11-17 with Draftsman `3a4f253`.
 
 ## Run
 

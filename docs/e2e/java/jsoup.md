@@ -8,7 +8,7 @@ An HTML parser: a deep node and evaluator hierarchy with many nested types.
 | Commit | `d90d57521d` (2026-11-04) |
 | Extracted | `src/main` (language detected) |
 
-Measured on 2026-11-17 with Draftsman `82118c5` and the change that splits unresolved references by reason (the summary line below).
+Measured on 2026-11-17 with Draftsman `3a4f253`.
 
 ## Run
 
