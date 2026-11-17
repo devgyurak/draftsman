@@ -170,3 +170,21 @@ Notes for anyone with `view.json` files written against a development build:
   (`CodeGenerator::Properties` in a subclass: POCO resolves 31 more references and gains
   115 dependencies on `CodeGenerator`, in 14 classes); a class's own name comes
   before its bases' (POCO: 440 -> 335 unresolved).
+- C++ (POCO: 2062 -> 2065 types, 9953 -> 9976 relations, 335 -> 326 unresolved, 389 -> 385
+  diagnostics; leveldb unchanged):
+  - an attribute macro after a declaration or an enumerator may have a string argument
+    with `;` or parentheses (`E POCO_DEPRECATED("since 4.2; use f() instead") = 4,`,
+    `void old() POCO_DEPRECATED("use bar() instead");`). Before, it stayed and broke the
+    class (`Poco::MongoDB::Database` was missing).
+  - value template parameters (`std::size_t N`, with a default, variadic, `auto V`) and
+    template template parameters are template parameters: no unresolved `N`, and no
+    dependency on a project `struct N` from `Array<P, N>` inside `template <..., std::size_t
+    N>`. They are listed with the class (`Array<T, N>`).
+  - a name a blanked macro is passed, written without its namespace (`XMLException` in
+    `Poco::XML`), gets the "may declare it" hint where that namespace is visible; the
+    places are recorded with their namespace, so other namespaces get no such hint. The
+    reason is unchanged.
+  - every place that passes the name to a macro is kept (bases too: SAXException.h passes
+    `XMLException`), and when there are several the hint lists them as mentions, "one of
+    them may declare it", a file named after the name first (`XMLException.h`). Before,
+    the first in file order was named as the one that may declare it.

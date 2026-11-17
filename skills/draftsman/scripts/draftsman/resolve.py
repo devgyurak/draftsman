@@ -9,10 +9,11 @@ external type end up in ``IR.unresolved`` for Claude to judge.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 from .extractor import RawFile, RawMember, RawType
-from .langs import LANGUAGES, FileScope, Import, spec_for_path
+from .langs import LANGUAGES, FileScope, Import, Unseen, spec_for_path
 from .model import IR, External, Location, Relation, Type, Unresolved
 from .typeref import Named, function_types, named_refs, parse_type, value_names
 from .wrappers import Wrappers, combine
@@ -41,10 +42,11 @@ class Resolver:
             self.by_simple.setdefault(t.name, []).append(qname)
         self.namespaces = {t.namespace for t in types.values() if t.namespace}
         self.type_namespaces = set(self.namespaces)   # namespaces with a type declared in them
-        self.unseen_types: dict[str, str] = {}
+        self.unseen_types: dict[str, dict[str, list[Unseen]]] = {}   # name -> namespace -> places
         for s in scopes:
-            for n, where in s.unseen_types.items():
-                self.unseen_types.setdefault(n, where)
+            for n, by_ns in s.unseen_types.items():
+                for ns, places in by_ns.items():
+                    self.unseen_types.setdefault(n, {}).setdefault(ns, []).extend(places)
         self.scopes_by_ns: dict[str, list[FileScope]] = {}
         for s in scopes:
             if s.namespace:
@@ -265,6 +267,29 @@ class Resolver:
                     return cand
         return None
 
+    def _unseen(self, name: str, namespaces: list[str]) -> Optional[str]:
+        """Where ``name`` may be declared out of the parser's sight, in the first of
+        ``namespaces`` that has it (FileScope.unseen_types). Several places are all
+        mentions, and at most one declares it: a file named after the name comes first
+        (`XMLException.h`, not `SAXException.h` that passes it as a base), then the rest
+        in file order."""
+        by_ns = self.unseen_types.get(name, {})
+        places = next((by_ns[ns] for ns in namespaces if ns in by_ns), None)
+        if not places:
+            return None
+        places = sorted(places, key=lambda p: Path(p.file).stem != name)   # stable
+        if len(places) == 1:
+            (p,) = places
+            if p.macro is None:
+                return f"its declaration in {p.file}:{p.line}-{p.end_line} did not parse"
+            return f"{p.macro}(...) at {p.file}:{p.line} may declare it"
+        shown = ", ".join(
+            f"{p.macro}(...) at {p.file}:{p.line}" if p.macro
+            else f"a class head that did not parse at {p.file}:{p.line}-{p.end_line}"
+            for p in places[:3])
+        more = f" (+{len(places) - 3} more)" if len(places) > 3 else ""
+        return f"mentioned by {shown}{more}; one of them may declare it"
+
     def _base_named(self, rtype: RawType, name: str, sep: str) -> Optional[Resolution]:
         """A base class of ``rtype`` (also through project bases) whose own name is
         ``name``: in C++ it is in the scope of its derived classes."""
@@ -365,13 +390,14 @@ class Resolver:
             # (com.foo.Bar, System.Text.Encoding); otherwise a type this file could not
             # find (`Outer.Inner` under a star import), which stays unresolved
             owner = self._closed_namespace(name, chain, sep, spec)
-            last = name.rsplit(sep, 1)[-1]
-            if owner and last in self.unseen_types:
+            prefix, last = name.rsplit(sep, 1)
+            where = self._unseen(last, [f"{ns}{sep}{prefix}" if ns else prefix for ns in chain])
+            if owner and where:
                 # Poco::Data::DataException, declared by a macro the parser never saw:
                 # the project's, not a library's
                 return Resolution(UNRESOLVED, candidates=first.candidates, hint=(
                     f"the project's namespace {owner} declares no type {last} the parser "
-                    f"saw; {self.unseen_types[last]}"))
+                    f"saw; {where}"))
             heads = {i.path.split(sep, 1)[0] for i in scope.imports}
             heads |= {ns.split(sep, 1)[0] for ns in self.namespaces}
             if scope.namespace:
@@ -504,6 +530,11 @@ class Resolver:
         cands, unreachable = self._candidates(name, sep, rtype)
         if unreachable:
             hints.append(_unreachable_hint(unreachable))
+        # `XMLException` in Poco::XML, where POCO_DECLARE_EXCEPTION(..., XMLException, ...)
+        # stands: maybe the project's, maybe not (`DEFINE_GUARD(HANDLE, CloseHandle)`)
+        where = self._unseen(name, chain) if sep not in name else None
+        if where:
+            hints.append(where)
         return Resolution(UNRESOLVED, hint="; ".join(hints) or None,
                           candidates=cands, outside=outside)
 

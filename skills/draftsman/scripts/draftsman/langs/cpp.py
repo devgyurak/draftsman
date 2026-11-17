@@ -7,9 +7,11 @@ from .base import LanguageSpec
 # `class LEVELDB_EXPORT Status {` -> export/visibility macro between keyword and name
 _EXPORT_MACRO = re.compile(
     rb"\b(class|struct|union)(\s+)([A-Z][A-Z0-9_]{2,}(?:\([^()\n]*\))?)(\s+)(?=[A-Za-z_])")
-# `int x GUARDED_BY(mu_);`, `void f() EXCLUSIVE_LOCKS_REQUIRED(mu_);`, `Lock(M* m) ACQUIRE(m) :`
+# `int x GUARDED_BY(mu_);`, `void f() EXCLUSIVE_LOCKS_REQUIRED(mu_);`, `Lock(M* m) ACQUIRE(m) :`,
+# `E_OLD POCO_DEPRECATED("since 4.2; use f() instead") = 4,`: a string argument may hold
+# anything
 _ATTRIBUTE_MACRO = re.compile(
-    rb"(?<=[\w)\]])(\s+)([A-Z][A-Z0-9_]{2,}\([^;{}()\n]*\))"
+    rb"(?<=[\w)\]])(\s+)([A-Z][A-Z0-9_]{2,}\((?:[^;{}()\"\n]|\"(?:[^\"\\\n]|\\.)*\")*\))"
     rb"(?=\s*(?:[;{=,:]|const\b|override\b|final\b))")
 # `LEVELDB_EXPORT Iterator* NewIterator();`, `class FOO_API Bar` anywhere; also in mixed
 # case, as POCO writes them: `Foundation_API`, `NetSSL_Win_API`, `DNSSD_Bonjour_API`

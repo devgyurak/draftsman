@@ -16,7 +16,7 @@ from typing import Optional
 import tree_sitter as ts
 import tree_sitter_language_pack as tslp
 
-from .langs import FileScope, Import, LanguageSpec
+from .langs import FileScope, Import, LanguageSpec, Unseen
 from .langs.base import annotation_name
 from .model import Diagnostic, Location, Member, Param
 
@@ -254,15 +254,15 @@ class Extractor:
         self._packages = self._workspaces[root]
         scope = FileScope(file=rel, namespace=spec.file_namespace(mod_path), project=project)
         raw = RawFile(path=rel, scope=scope)
-        for name, line, macro in spec.macro_declared_names(original):
-            scope.unseen_types.setdefault(name, f"{macro}(...) at {rel}:{line} may declare it")
+        unseen: list[tuple[str, Unseen]] = [
+            (name, Unseen(rel, line, line, macro))
+            for name, line, macro in spec.macro_declared_names(original)]
         if tree.root_node.has_error:
             spans = _error_spans(tree.root_node)
             lines = src.split(b"\n")
             for start, end in spans:
                 for name in _CLASS_HEAD.findall(b"\n".join(lines[start - 1:end])):
-                    scope.unseen_types.setdefault(
-                        name.decode(), f"its declaration in {rel}:{start}-{end} did not parse")
+                    unseen.append((name.decode(), Unseen(rel, start, end)))
             for start, end in spans[:MAX_ERROR_SPANS]:
                 raw.diagnostics.append(Diagnostic(
                     rel, start, "syntax error; declarations in these lines may be missing",
@@ -289,6 +289,19 @@ class Extractor:
                         inline.append(n)
             else:
                 other.append(caps)
+        # by the namespace around the line, for references that see that namespace
+        for name, place in unseen:
+            point = (place.line - 1, 0)
+            cur = tree.root_node.descendant_for_point_range(point, point)
+            parts = []
+            while cur is not None:
+                if cur.id in namespaces:
+                    parts.insert(0, namespaces[cur.id])
+                cur = cur.parent
+            places = scope.unseen_types.setdefault(name, {}).setdefault(
+                spec.separator.join(parts), [])
+            if place not in places:
+                places.append(place)
         # C++ `inline namespace v1`: its types are also named without it (acme::Versioned)
         for n in inline:
             parts, cur = [], n

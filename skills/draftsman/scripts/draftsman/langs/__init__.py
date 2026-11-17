@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .base import FileScope, Import, LanguageSpec
+from .base import FileScope, Import, LanguageSpec, Unseen
 from .cpp import CppSpec
 from .csharp import CSharpSpec
 from .java import JavaSpec

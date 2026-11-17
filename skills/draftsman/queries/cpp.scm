@@ -28,7 +28,16 @@
   parameters: (template_parameter_list
     [(type_parameter_declaration (type_identifier) @tparam)
      (optional_type_parameter_declaration name: (type_identifier) @tparam)
-     (variadic_type_parameter_declaration (type_identifier) @tparam)])
+     (variadic_type_parameter_declaration (type_identifier) @tparam)
+     ; values (`std::size_t N`, `int N = 8`, `int... Is`, `auto V`) and templates
+     ; (`template <class> class C`): in the template they hide types of the same name
+     (parameter_declaration declarator: (identifier) @tparam)
+     (optional_parameter_declaration declarator: (identifier) @tparam)
+     (variadic_parameter_declaration declarator: (variadic_declarator (identifier) @tparam))
+     (template_template_parameter_declaration
+       [(type_parameter_declaration (type_identifier) @tparam)
+        (optional_type_parameter_declaration name: (type_identifier) @tparam)
+        (variadic_type_parameter_declaration (type_identifier) @tparam)])])
   [(class_specifier) (struct_specifier) (function_definition) (field_declaration)
    (declaration)] @tparam.target)
 

@@ -240,6 +240,76 @@ def test_cpp_attribute_macros_before_declarations(tmp_path):
     assert {u.raw_type for u in ir.unresolved} == {"HANDLE", "DWORD", "BOOL", "FILE", "SECURITY_STATUS"}
 
 
+def test_cpp_attribute_macros_with_string_arguments(tmp_path):
+    """A string argument may hold `;` and parentheses (MongoDB/Database.h lost the class)."""
+    ir = extract_source(tmp_path, {"a.h": (
+        "namespace Poco {\nclass Database {\npublic:\n  enum IndexOptions {\n    INDEX_UNIQUE = 1,\n"
+        '    INDEX_BACKGROUND POCO_DEPRECATED("Deprecated since 4.2; builds are online") = 1 << 2,\n'
+        "    INDEX_HIDDEN = 8\n  };\n"
+        '  void old() POCO_DEPRECATED("use bar() instead");\n'
+        '  void esc() POCO_DEPRECATED("say \\"hi\\"; (really)");\n  void bar();\n};\n}\n')})
+    assert not ir.diagnostics
+    assert _members(ir, "Poco::Database::IndexOptions") == [
+        "INDEX_UNIQUE", "INDEX_BACKGROUND", "INDEX_HIDDEN"]
+    assert _members(ir, "Poco::Database") == ["+ old(): void", "+ esc(): void", "+ bar(): void"]
+
+
+def test_cpp_template_parameters_of_every_kind(tmp_path):
+    """Values (`std::size_t N`, with a default, variadic, `auto`) and templates
+    (`template <class> class C`) are template parameters too: in the template they hide a
+    project type of the same name (`struct N`)."""
+    ir = extract_source(tmp_path, {"a.h": (
+        "namespace n {\nstruct N {};\nstruct P {};\n"
+        "template <class T, std::size_t M> struct Array { T data[M]; };\n"
+        "template <class T, std::size_t N> class Buf { Array<P, N> a; };\n"
+        "template <std::size_t S = 64> class Sock { Array<P, S> b; };\n"
+        "template <auto V> class Val { Array<P, V> d; };\n"
+        "template <int... Is> class Seq { Array<P, Is...> e; };\n"
+        "template <template <class> class C> class Wrap { C<P> c; };\n"
+        "template <template <class> class D = Array> class Wrap2 { D<P> c; };\n"
+        "class Free { template <std::size_t K> void f(Array<P, K> a); };\n}\n")})
+    assert not ir.unresolved
+    assert ("n::Buf", "dependency", "n::N") not in rels(ir)
+    assert {t.id: t.generics for t in ir.types if t.generics}["n::Buf"] == ["T", "N"]
+
+
+def test_cpp_unqualified_names_a_macro_may_declare(tmp_path):
+    """`XMLException` written in the namespace where a macro is passed it gets the macro as
+    a hint, also from nested namespaces; not from other namespaces. The reason stays."""
+    ir = extract_source(tmp_path, {"xml.h": (
+        "namespace Poco {\nclass Exception {};\nnamespace XML {\n"
+        "POCO_DECLARE_EXCEPTION(XML_API, XMLException, Poco::Exception)\n"
+        "class DOMException: public XMLException {};\n"
+        "namespace DOM { class Node { XMLException* e; }; }\n}\n"
+        "namespace Data { class Session { XMLException* e; }; }\n}\n"
+        "namespace other { class Thing: public XMLException {}; }\n")})
+    hints = {u.from_: (u.hint, u.reason) for u in ir.unresolved}
+    macro = "POCO_DECLARE_EXCEPTION(...) at xml.h:4 may declare it"
+    assert hints["Poco::XML::DOMException"] == (macro, "unexplained")
+    assert hints["Poco::XML::DOM::Node"] == (macro, "unexplained")
+    assert hints["Poco::Data::Session"] == (None, "unexplained")
+    assert hints["other::Thing"] == (None, "unexplained")
+
+
+def test_cpp_names_several_macros_mention(tmp_path):
+    """Every macro argument is recorded, bases too: several places are mentions, and the
+    file named after the name comes first (XMLException.h declares it; SAXException.h
+    passes it as a base and comes first in file order)."""
+    ir = extract_source(tmp_path, {
+        "SAX/SAXException.h": "namespace Poco { namespace XML {\n"
+                              "POCO_DECLARE_EXCEPTION(XML_API, SAXException, XMLException)\n} }\n",
+        "XML/XMLException.h": "namespace Poco { namespace XML {\nclass Base {};\n"
+                              "POCO_DECLARE_EXCEPTION(XML_API, XMLException, Base)\n} }\n",
+        "XML/DOMException.h": "namespace Poco { namespace XML {\n"
+                              "class DOMException: public XMLException {};\n} }\n",
+    })
+    (u,) = [u for u in ir.unresolved if u.raw_type == "XMLException"]
+    assert u.hint == (
+        "mentioned by POCO_DECLARE_EXCEPTION(...) at XML/XMLException.h:3, "
+        "POCO_DECLARE_EXCEPTION(...) at SAX/SAXException.h:2; one of them may declare it")
+    assert u.reason == "unexplained"
+
+
 def test_cpp_member_aliases_are_inherited(tmp_path):
     ir = extract_source(tmp_path, {"a.h": (
         "class Item {};\n"

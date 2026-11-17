@@ -258,7 +258,9 @@ is that type. Aliases of aliases are followed.
     arguments only before a constructor of a class in the file (`POCO_NODISCARD_CTOR
     Request(int)`) or when the name says `_NODISCARD`, `_DEPRECATED`, `_INLINE`,
     `_CONSTEXPR`, `_NOEXCEPT`, `_EXPLICIT` - a bare `HANDLE` or `DWORD` there is a type.
-  - Thread-safety attributes after a declaration (`GUARDED_BY(mu)`), and `#if` groups
+  - Attribute macros after a declaration or an enumerator (`GUARDED_BY(mu)`,
+    `E_OLD POCO_DEPRECATED("since 4.2; use f() instead") = 4,`: a string argument may
+    hold `;` and parentheses), and `#if` groups
     inside an expression (an initializer list), blanked with their `#elif`/`#else`/`#endif`.
   Other macros may still cause syntax errors; they are reported as diagnostics and only
   affect nearby declarations.
@@ -276,6 +278,15 @@ is that type. Aliases of aliases are followed.
   where: an argument of a blanked statement macro (`POCO_DECLARE_EXCEPTION(API,
   DataException, Base)` for `Poco::Data::DataException`) or a class head inside a syntax
   error. `std` is never the project's: a project may only specialise templates there.
+  Written without its namespace (`XMLException`), such a name gets the same "may declare
+  it" hint where that namespace is visible (the reference's own or an enclosing one); the
+  reason does not change, as a macro argument may be anything (`DEFINE_GUARD(Lock, ...)`).
+  A name several macros mention (as a base too) is listed with each place, "one of them
+  may declare it", a file named after the name first (`XMLException.h`).
+- Template parameters of every kind are no types to resolve: types (`class T`), values
+  (`std::size_t N`, `int N = 8`, `int... Is`, `auto V`) and templates (`template <class>
+  class C`). Inside the template they hide a project type of the same name (`Array<P, N>`
+  does not depend on a `struct N`), and they are listed with the class (`Array<T, N>`).
 - Class scope: nested types and type aliases of a base class (`using CharacterMap =
   int[256];`) are inherited, and so is the base's own name (`CodeGenerator::Properties` in
   a subclass of `Poco::CodeGeneration::CodeGenerator`); a class's own name comes first

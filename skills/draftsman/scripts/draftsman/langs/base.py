@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable, NamedTuple, Optional
 
 if TYPE_CHECKING:
     import tree_sitter as ts
@@ -47,6 +47,16 @@ class Import:
         return self.alias or self.path.rsplit(self.sep, 1)[-1]
 
 
+class Unseen(NamedTuple):
+    """A place that mentions a name the parser could not see declared."""
+
+    file: str
+    line: int
+    end_line: int
+    macro: Optional[str] = None   # the blanked macro it is passed to; None: a class head
+                                  # inside a syntax error
+
+
 @dataclass
 class FileScope:
     """What name resolution needs to know about one source file."""
@@ -58,9 +68,10 @@ class FileScope:
     aliases: set[str] = field(default_factory=set)      # qualified type alias names
     alias_targets: dict[str, str] = field(default_factory=dict)  # alias -> type it names
     inline_namespaces: set[str] = field(default_factory=set)    # C++ `inline namespace v1`
-    # names the file may declare where the parser could not see it: simple name -> where
-    # (an argument of a blanked macro, a class head inside a syntax error)
-    unseen_types: dict[str, str] = field(default_factory=dict)
+    # names the file may declare where the parser could not see it: simple name ->
+    # namespace around it -> places (an argument of a blanked macro, a class head inside
+    # a syntax error)
+    unseen_types: dict[str, dict[str, list[Unseen]]] = field(default_factory=dict)
     project: Optional[str] = None   # build project the file compiles in (C#: its .csproj)
 
 
