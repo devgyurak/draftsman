@@ -112,6 +112,11 @@ looked at by arm:
     uses X). An edge whose ends collapse onto one type is labelled **self** and left out.
   - **as drawn** (`label_drawn`, secondary): the names as the diagram gives them, nested
     types as types of their own.
+- **Kind at the top level** is judged on the collapsed evidence. An edge drawn as
+  inheritance is right when some type inside its source end (the end itself or a type
+  nested in it) inherits from some type inside its target end, so `A.X --|> B` collapsed
+  to `A → B` is not wrong kind. An edge drawn as anything else is wrong kind only when the
+  two top-level types themselves inherit and nothing else relates them.
 - A **nesting** edge (`Outer +-- Inner`, drawn from an outer type to its nested type) is
   *self* at the top level. As drawn, it is *declared* when Inner is declared inside Outer
   (cite that declaration); *wrong kind or direction* when reversed; otherwise it is judged
@@ -123,9 +128,11 @@ looked at by arm:
    labeller sees a pair of names, a kind and a direction only.
 2. A **separate session** that did not run the benchmark gives the first labels, at both
    levels, each with its `file:line`.
-3. `check_citations.py` checks every *declared* and *body only* label at both levels: the cited line must
-   contain the other type's simple name, inside the cited type's file. A label that fails
-   goes to human review; an *unnamed* label always does.
+3. `check_citations.py` checks every *declared* and *body only* label at both levels: the
+   cited line must contain the other type's simple name, inside the cited type's file. At
+   the top level the name of a type nested in the other type also counts (a line naming
+   only `Request` supports a relation to `Connection`). A label that fails goes to human
+   review; an *unnamed* label always does.
 4. **Human review**: every *unsupported*, *indirect* and *wrong kind or direction* label at
    either level, every label
    that failed step 3, and a random 20% of the rest (fixed seed). `review.csv` lists, per
@@ -145,6 +152,10 @@ headline uses the top-level labels; the as-drawn labels give the secondary figur
   use the focus), each against two denominators:
   - declared relations;
   - declared plus body-only relations.
+
+  A denominator pair counts as found when the diagram draws an edge between the two types,
+  on the same level, of any kind, in the pair's direction or undirected. Kind is judged by
+  the labels, not by recall.
 
   A direction whose denominator is empty (a focus class that uses no project type, or
   that no project type uses) has no recall: it is reported as *n/a*, left out of the

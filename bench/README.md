@@ -126,3 +126,7 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
   edge drawn to an outer type whose only evidence sits in its nested type would have
   counted as unsupported in the main scoring. Nesting edges are *self* at the top level
   and *declared* as drawn when the nesting is real.
+- 2026-11-17, before labelling: three gaps of collapsing to top-level types closed.
+  Inheritance drawn between nested types (`A.X --|> B`) is not wrong kind once collapsed;
+  the top-level citation check accepts the name of a type nested in the other end; recall
+  finds a pair from an edge of any kind, in its direction or undirected.
