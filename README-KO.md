@@ -175,6 +175,7 @@ scripts/validate.sh diagram.mmd
 | Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 | 0 | 0 |
 | Python | [Django](docs/e2e/python/django.md) `django/` | 879 | 1964 | 1853 | 0 | 0 |
 | C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 | 2 (2 unexplained) | 8개 파일에 9구간 (5구간은 함수 본문; `extern "C"`, `__has_include`, gMock 매크로, 멤버 함수 포인터 필드 하나) |
+| C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2065 | 9978 | 326 (1 ambiguous, 7 outside, 318 unexplained; 시스템·라이브러리 헤더, POCO의 `#define` 타입) | 124개 파일에 346구간 (`#if` 분기, 멤버 포인터, 명시적 인스턴스화, `typeid`) |
 
 미해결 참조는 이유별로 나눴습니다. *ambiguous*는 같은 이름의 프로젝트 타입이 있어 후보로만 적고 고르지 않은 것,
 *outside*는 소스 밖에 있는 것(와일드카드·기본 import, 외부 상위 타입의 중첩 타입)으로만 설명되는 것,

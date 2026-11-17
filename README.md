@@ -186,6 +186,7 @@ checked), an SVG and an HTML viewer — on real projects, tests and generated co
 | Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 | 0 | 0 |
 | Python | [Django](docs/e2e/python/django.md) `django/` | 879 | 1964 | 1853 | 0 | 0 |
 | C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 | 2 (2 unexplained) | 9 spans in 8 files (5 in function bodies; `extern "C"`, `__has_include`, a gMock macro, a pointer-to-member field) |
+| C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2065 | 9978 | 326 (1 ambiguous, 7 outside, 318 unexplained; system and library headers, POCO's `#define` types) | 346 spans in 124 files (`#if` branches, pointers to members, explicit instantiations, `typeid`) |
 
 Unresolved references are split by reason: *ambiguous* (a project type shares the name; it is
 listed, not picked), *outside* (only something outside the sources could provide it: a

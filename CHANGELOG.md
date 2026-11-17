@@ -195,3 +195,6 @@ Notes for anyone with `view.json` files written against a development build:
   was dropped) or inside a string literal (RemotingNG's code generators). POCO: 385 -> 346
   diagnostics, 8 constructors back, 9976 -> 9978 relations (`URI` -> `Path`, `FIFOIOS` ->
   `BasicFIFOBuffer`); leveldb unchanged.
+- End-to-end page for POCO (C++, `2ef5cec8a9`): 2317 files, 2065 types, 9978 relations,
+  326 unresolved (system and library headers, POCO's `#define` types, exception classes a
+  macro declares, and 20 gaps of Draftsman listed on the page), 346 diagnostics.
