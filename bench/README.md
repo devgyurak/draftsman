@@ -52,9 +52,10 @@ edges at the focus class that have no basis in the source.
 - **Arm C runs as its author built it, in our isolation, outside its stated range.**
   - Its explorer subagent is written for Python, JS/TS and Rust sources (its globs and
     example); these repositories are Java.
-  - Its skill draws at most 15 classes, and its explorer reads at most 25 files, on
-    Sonnet at effort medium. Both bound its recall by its own design, against the prompt's
-    80 classes.
+  - Its skill asks for at most 15 classes and for an explorer subagent (Sonnet, effort
+    medium, at most 25 file reads). In the pilot it did neither: it read the files itself
+    and drew up to 48 classes, following the prompt's limit of 80. Its recall is measured
+    as it behaved, not as its skill describes.
   - It renders through a Mermaid Chart MCP server that no isolated run has, so it cannot
     meet its own exit criteria; retries this causes add to its cost and time. Its cost and
     time are listed in the tables with this note and left out of the cost and time figure.
@@ -113,3 +114,6 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
   use it." Arm A has no such skill. All six pilot runs were discarded and the pilot was
   run again with this prompt. (T1's class limit reads 80 like T2's since the bounds were
   raised; spring-petclinic has 25 types, so it does not bind.)
+- 2026-11-17, pilot with the new prompt: the skill fired in every arm B and arm C run;
+  six runs, $1.19 in Claude Code's cost estimates, at most $0.37 a run. Measured runs
+  capped at $3 each, on the subscription token, with the pilot's image.

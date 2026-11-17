@@ -87,8 +87,8 @@ run:
     - --setting-sources=
     - --no-session-persistence
     - --permission-mode=bypassPermissions
-  max_budget_usd: null            # set after the pilot; a run that hits it is a failed run
+  max_budget_usd: 3               # about 8x the pilot's dearest run; a run that hits it is a failed run
   timeout_minutes: 30             # wall clock; a run that hits it is a failed run
   user: non-root                  # bypassPermissions is refused as root; checked in the pilot
   # unverified until the pilot: whether --setting-sources accepts an empty value
-  auth: null                      # decided in the pilot: API key (recommended) or subscription token
+  auth: subscription token        # CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`; costs are Claude Code's estimates
