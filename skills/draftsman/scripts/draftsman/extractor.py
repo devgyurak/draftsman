@@ -267,6 +267,7 @@ class Extractor:
 
         type_matches, member_matches, other = [], [], []
         namespaces: dict[int, str] = {}
+        inline: list = []
         for _, caps in ts.QueryCursor(self.query).matches(tree.root_node):
             if _root(caps, "type."):
                 type_matches.append(caps)
@@ -276,8 +277,18 @@ class Extractor:
                 name = _first(caps, "namespace.name")
                 if name is not None:
                     namespaces[n.id] = _text(name, src)
+                    if n.child_count and n.children[0].type == "inline":
+                        inline.append(n)
             else:
                 other.append(caps)
+        # C++ `inline namespace v1`: its types are also named without it (acme::Versioned)
+        for n in inline:
+            parts, cur = [], n
+            while cur is not None:
+                if cur.id in namespaces:
+                    parts.insert(0, namespaces[cur.id])
+                cur = cur.parent
+            scope.inline_namespaces.add(spec.separator.join(parts))
         # parameters must be appended in source order
         other.sort(key=lambda c: min(n.start_byte for nodes in c.values() for n in nodes))
 

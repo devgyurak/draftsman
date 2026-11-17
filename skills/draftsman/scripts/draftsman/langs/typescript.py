@@ -50,6 +50,9 @@ _BUILTINS = {
 # blanked it is the `export *` re-export it means for a diagram (same length, so
 # line numbers stay exact)
 _EXPORT_TYPE_STAR = re.compile(rb"\bexport(\s+)type(\s+)\*")
+# `import("rxjs").Observable<P>` (an import type) is not in the grammar either: keep the
+# type name, blank the module part (it then resolves like any other name)
+_IMPORT_TYPE = re.compile(rb"""\bimport\(\s*(['"])[^'"\n]*\1\s*\)\s*\.""")
 
 _EXT = re.compile(r"\.(d\.)?([cm]?[jt]sx?)$")
 _SOURCE = re.compile(r"\.[cm]?tsx?$")
@@ -82,8 +85,9 @@ class TypeScriptSpec(LanguageSpec):
     inherited_member_types = False
 
     def preprocess(self, src):
-        return _EXPORT_TYPE_STAR.sub(lambda m: b"export" + m.group(1) + b"    " + m.group(2) + b"*",
-                                     src)
+        src = _EXPORT_TYPE_STAR.sub(lambda m: b"export" + m.group(1) + b"    " + m.group(2) + b"*",
+                                    src)
+        return _IMPORT_TYPE.sub(lambda m: b" " * len(m.group(0)), src)
 
     def file_namespace(self, rel):
         return _module(rel)

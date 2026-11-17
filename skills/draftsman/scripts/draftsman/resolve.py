@@ -34,6 +34,7 @@ class Resolution:
 class Resolver:
     def __init__(self, types: dict[str, RawType], scopes: list[FileScope]):
         self.index = types
+        self.inline_names: dict[str, str] = {}
         self.by_simple: dict[str, list[str]] = {}
         for qname, t in types.items():
             self.by_simple.setdefault(t.name, []).append(qname)
@@ -47,6 +48,15 @@ class Resolver:
         # alias -> (the type text it names, the file scope that text is resolved in)
         self.alias_targets: dict[str, tuple[str, FileScope]] = {
             a: (text, s) for s in scopes for a, text in s.alias_targets.items()}
+        # C++ inline namespaces: acme::v1::Versioned is also acme::Versioned
+        inline = set().union(*(s.inline_namespaces for s in scopes)) if scopes else set()
+        if inline:
+            for qname in types:
+                parts = qname.split("::")
+                short = "::".join(p for i, p in enumerate(parts)
+                                  if "::".join(parts[:i + 1]) not in inline)
+                if short != qname and short not in types:
+                    self.inline_names.setdefault(short, qname)
         # what an import can name: a class or a type alias (`export type X = ...`)
         self._targets = set(self.index) | self.aliases
         self._supers_cache: dict[str, list[Resolution]] = {}
@@ -259,9 +269,13 @@ class Resolver:
         if sep in name:
             if name in self.index:
                 return Resolution(PROJECT, name)
+            if name in self.inline_names:
+                return Resolution(PROJECT, self.inline_names[name])
             for ns in chain:  # partially qualified: pay::Receipt inside namespace shop
                 if ns and ns + sep + name in self.index:
                     return Resolution(PROJECT, ns + sep + name)
+                if ns and ns + sep + name in self.inline_names:
+                    return Resolution(PROJECT, self.inline_names[ns + sep + name])
                 if ns and ns + sep + name in self.aliases:
                     return Resolution(ALIAS, ns + sep + name)
             head, rest = name.split(sep, 1)
@@ -339,6 +353,8 @@ class Resolver:
             cand = ns + sep + name if ns else name
             if cand in self.index:
                 return Resolution(PROJECT, cand)
+            if cand in self.inline_names:
+                return Resolution(PROJECT, self.inline_names[cand])
             if cand in self.aliases:
                 return Resolution(ALIAS, cand)  # a type alias: drawn through to its target
 

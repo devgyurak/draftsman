@@ -18,6 +18,27 @@ _EXPORT_WORD = re.compile(
 _DIRECTIVE = re.compile(rb"^[ \t]*#[ \t]*(if|ifdef|ifndef|elif|else|endif)\b.*$")
 
 
+# Qt: `Q_OBJECT`, `Q_PROPERTY(int x READ x)`, `Q_DISABLE_COPY(W)` on a line of their own,
+# and the `signals:` / `public slots:` sections moc reads
+_QT_STATEMENT = re.compile(
+    rb"^([ \t]*)(Q_[A-Z][A-Z0-9_]*)\b([ \t]*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))?[ \t]*;?",
+    re.MULTILINE)
+_QT_INLINE = re.compile(rb"\b(Q_INVOKABLE|Q_SIGNAL|Q_SLOT|Q_SCRIPTABLE)\b")
+_QT_SECTION = re.compile(rb"^([ \t]*)(?:(public|protected|private)([ \t]+)(?:slots|Q_SLOTS)"
+                         rb"|signals|Q_SIGNALS)([ \t]*):", re.MULTILINE)
+
+
+def _spaces(text: bytes) -> bytes:
+    """Blank ``text`` but keep its newlines, so line numbers stay."""
+    return re.sub(rb"[^\n]", b" ", text)
+
+
+def _qt_section(m: re.Match) -> bytes:
+    # `public slots:` -> `public      :`; `signals:` -> `public :` (signals are public)
+    access = m.group(2) or b"public"
+    return (m.group(1) + access).ljust(len(m.group(0)) - 1) + b":"
+
+
 def _blank(m: re.Match, group: int) -> bytes:
     text = m.group(0)
     start, end = m.start(group) - m.start(0), m.end(group) - m.start(0)
@@ -73,6 +94,10 @@ class CppSpec(LanguageSpec):
             for line in src.split(b"\n"))
         src = _EXPORT_MACRO.sub(lambda m: _blank(m, 3), src)
         src = _ATTRIBUTE_MACRO.sub(lambda m: _blank(m, 2), src)
+        if b"Q_" in src or b"signals" in src or b"slots" in src:
+            src = _QT_STATEMENT.sub(lambda m: m.group(1) + _spaces(m.group(0)[len(m.group(1)):]), src)
+            src = _QT_INLINE.sub(lambda m: b" " * len(m.group(0)), src)
+            src = _QT_SECTION.sub(_qt_section, src)
         return _blank_inline_directives(src)
 
     def declarator(self, node, src):
@@ -88,7 +113,13 @@ class CppSpec(LanguageSpec):
             if t in ("destructor_name", "operator_name", "operator_cast"):
                 return None, suffix, is_function
             if t == "function_declarator":
-                is_function = True
+                inner = cur.child_by_field_name("declarator")
+                if inner is not None and inner.type == "parenthesized_declarator":
+                    # `void (*cb)(int)`: a pointer to a function, so a field of type void(int)*
+                    params = cur.child_by_field_name("parameters")
+                    suffix += " ".join(params.text.decode().split()) if params else "()"
+                else:
+                    is_function = True
             elif t in _DECL_CHILD:
                 sigil = _DECL_CHILD[t]
                 if t == "reference_declarator" and b"&&" in cur.text[:3]:

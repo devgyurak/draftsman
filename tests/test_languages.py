@@ -935,3 +935,46 @@ def test_python_literal_annotated_and_type_parameters(tmp_path):
     assert ("S", "association", "Item", "item") in r
     assert ("New", "extends", "Order", None) in r
     assert by_name(ir, "New").generics == ["K", "Ts", "P"]
+
+
+def test_typescript_import_types(tmp_path):
+    """`import("rxjs").Observable<P>` is not in the grammar; the field keeps its type and
+    the rest of the class is still read."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {"a.ts": (
+        "export class P {}\n"
+        "export class S { o?: import('rxjs').Observable<P>; p?: P; }\n")})
+    assert not ir.diagnostics
+    assert {(r.via, r.multiplicity) for r in ir.relations} == {("o", "*"), ("p", "1")}
+    assert by_name(ir, "S").generics == []
+
+
+def test_cpp_qt_function_pointers_unions_and_inline_namespaces(tmp_path):
+    from conftest import extract_source
+    from draftsman.graph import member_text
+    ir = extract_source(tmp_path, {
+        "w.h": ("class QObject {};\nclass Model {};\nclass W : public QObject {\n"
+                "  Q_OBJECT\n  Q_PROPERTY(int x\n             READ x)\npublic:\n  Model* model;\n"
+                "  virtual Q_INVOKABLE void load();\npublic slots:\n  void reload();\nsignals:\n"
+                "  void changed();\nprivate Q_SLOTS:\n  void tick();\n};\n"),
+        "m.h": ("namespace acme { inline namespace v1 { class Versioned {}; } }\n"
+                "class Cb {\n  void (*cb)(int);\n  union { int a; float b; };\n"
+                "  acme::Versioned v;\n};\n"
+                "namespace acme { class User { Versioned v; }; }\n"),
+    })
+    assert not ir.diagnostics and not ir.unresolved
+    sigs = {t.id: [member_text(m) for m in t.members] for t in ir.types}
+    assert sigs["W"] == ["+ model: Model*", "+ load(): void", "+ reload(): void",
+                         "+ changed(): void", "- tick(): void"]
+    w = next(t for t in ir.types if t.id == "W")
+    assert [m.line for m in w.members] == [8, 9, 11, 13, 15]       # line numbers kept
+    # a function pointer is a field; anonymous union members are members of the class
+    assert sigs["Cb"] == ["- cb: void(int)*", "- a: int", "- b: float", "- v: acme::Versioned"]
+    r = {(r.from_, r.to) for r in ir.relations}
+    assert ("Cb", "acme::v1::Versioned") in r and ("acme::User", "acme::v1::Versioned") in r
+
+
+def test_kotlin_annotation_class(tmp_path):
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {"A.kt": "package p\nannotation class Marker\n"})
+    assert by_name(ir, "Marker").kind == "annotation"

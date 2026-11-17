@@ -57,6 +57,7 @@ class FileScope:
     type_params: set[str] = field(default_factory=set)  # file-wide (Python TypeVar)
     aliases: set[str] = field(default_factory=set)      # qualified type alias names
     alias_targets: dict[str, str] = field(default_factory=dict)  # alias -> type it names
+    inline_namespaces: set[str] = field(default_factory=set)    # C++ `inline namespace v1`
     project: Optional[str] = None   # build project the file compiles in (C#: its .csproj)
 
 
