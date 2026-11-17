@@ -244,7 +244,8 @@ class Extractor:
     def extract(self, path: Path, rel: str, root: Path) -> RawFile:
         """Parse one file; ``rel`` is its path below ``root``, the directory extracted."""
         spec = self.spec
-        src = spec.preprocess(path.read_bytes())
+        original = path.read_bytes()
+        src = spec.preprocess(original)
         tree = self.parser.parse(src)
         mod_path = self._module_path(root, rel)
         project, build_imports = spec.project_imports(path, root)
@@ -253,8 +254,15 @@ class Extractor:
         self._packages = self._workspaces[root]
         scope = FileScope(file=rel, namespace=spec.file_namespace(mod_path), project=project)
         raw = RawFile(path=rel, scope=scope)
+        for name, line, macro in spec.macro_declared_names(original):
+            scope.unseen_types.setdefault(name, f"{macro}(...) at {rel}:{line} may declare it")
         if tree.root_node.has_error:
             spans = _error_spans(tree.root_node)
+            lines = src.split(b"\n")
+            for start, end in spans:
+                for name in _CLASS_HEAD.findall(b"\n".join(lines[start - 1:end])):
+                    scope.unseen_types.setdefault(
+                        name.decode(), f"its declaration in {rel}:{start}-{end} did not parse")
             for start, end in spans[:MAX_ERROR_SPANS]:
                 raw.diagnostics.append(Diagnostic(
                     rel, start, "syntax error; declarations in these lines may be missing",
@@ -552,6 +560,9 @@ class Extractor:
 
 
 MAX_ERROR_SPANS = 20  # per file; the rest are summarised in one diagnostic
+
+
+_CLASS_HEAD = re.compile(rb"\b(?:class|struct)\s+(?:[A-Za-z_]\w*\s+)*?([A-Za-z_]\w*)\s*(?:final\s*)?(?::(?!:)|\{)")
 
 
 def _error_spans(root: ts.Node) -> list[tuple[int, int]]:

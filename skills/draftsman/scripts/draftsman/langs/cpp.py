@@ -11,9 +11,19 @@ _EXPORT_MACRO = re.compile(
 _ATTRIBUTE_MACRO = re.compile(
     rb"(?<=[\w)\]])(\s+)([A-Z][A-Z0-9_]{2,}\([^;{}()\n]*\))"
     rb"(?=\s*(?:[;{=,:]|const\b|override\b|final\b))")
-# `LEVELDB_EXPORT Iterator* NewIterator();`, `class FOO_API Bar` anywhere
+# `LEVELDB_EXPORT Iterator* NewIterator();`, `class FOO_API Bar` anywhere; also in mixed
+# case, as POCO writes them: `Foundation_API`, `NetSSL_Win_API`, `DNSSD_Bonjour_API`
 _EXPORT_WORD = re.compile(
-    rb"\b[A-Z][A-Z0-9_]*(?:EXPORT|_API|_DLL|_PUBLIC|_VISIBLE|_EXTERN)[A-Z0-9_]*\b(?!\s*\()")
+    rb"\b(?:[A-Z][A-Z0-9_]*(?:EXPORT|_API|_DLL|_PUBLIC|_VISIBLE|_EXTERN)[A-Z0-9_]*"
+    rb"|[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)*_(?:API|EXPORT|DLL|PUBLIC|VISIBLE|EXTERN))"
+    rb"\b(?!\s*\()(?=\s+[A-Za-z_~])")   # a declaration goes on: not `== ACC_PUBLIC)`
+# by position, whatever its name: `class MACRO Name :`, `class MACRO(x) Name {`,
+# `struct MACRO Name final` - two identifiers after the keyword and a class head after
+# them. Not when the first is all lower case (`struct sockaddr_in addr{};`, `alignas(8)`,
+# `__declspec(dllexport)`, which the grammar knows), nor `class Name final`
+_CLASS_MACRO = re.compile(
+    rb"\b(class|struct|union)(\s+)((?![a-z0-9_]+\b)[A-Za-z_]\w*(?:\([^()\n]*\))?)(\s+)"
+    rb"(?!final\b)([A-Za-z_]\w*)(?=\s*(?::(?!:)|\{|final\b))")
 # conditional compilation in the middle of an expression (e.g. an initializer list)
 _DIRECTIVE = re.compile(rb"^[ \t]*#[ \t]*(if|ifdef|ifndef|elif|else|endif)\b.*$")
 
@@ -64,6 +74,14 @@ def alias_node_declarators(node):
     return [c for i, c in enumerate(node.children) if node.field_name_for_child(i) == "declarator"]
 
 
+def _class_macro(m: re.Match) -> bytes:
+    # `struct Point origin{0, 0};` declares a variable: a lower-case name and a brace
+    if m.group(1) != b"class" and m.group(5)[:1].islower() \
+            and m.string[m.end():m.end() + 64].lstrip().startswith(b"{"):
+        return m.group(0)
+    return _blank(m, 3)
+
+
 def _blank(m: re.Match, group: int) -> bytes:
     text = m.group(0)
     start, end = m.start(group) - m.start(0), m.end(group) - m.start(0)
@@ -80,15 +98,128 @@ _DECL_CHILD = {"pointer_declarator": "*", "reference_declarator": "&", "array_de
 _NAMES = {"field_identifier", "identifier", "type_identifier"}
 
 
+# a statement macro on a line of its own, without `;`: `POCO_DECLARE_EXCEPTION(API, E, B)`,
+# `POCO_CHECK_MINMAX_MACROS`. Upper case with an underscore, then only comments
+_STATEMENT_MACRO = re.compile(
+    rb"^[ \t]*[A-Z][A-Z0-9]*_[A-Z0-9_]+(?:[ \t]*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))?"
+    rb"[ \t]*(?:/\*.*?\*/[ \t]*)*(?://.*)?$")
+_COMMENT = re.compile(rb"/\*.*?\*/|//[^\n]*")
+
+
+def _blank_statement_macros(src: bytes) -> bytes:
+    """Blank statement macros where a declaration may start: after `;`, `{` or `}` (or at
+    the start of the file), and not before a `{` (`TEST(A, B)` then a body) nor, without
+    arguments, before `name(` (`MY_TYPE` then `compute(P p);`: a return type). Not after
+    `,` or `:` (`MAX_SIZE(10)` in an initializer list), and not as the only line of an
+    enum (`enum E {` / `ONLY_ONE` / `};`)."""
+    lines = src.split(b"\n")
+    code = []   # (line index, text without comments) of the lines that hold code
+    continued = False
+    for i, line in enumerate(lines):
+        directive = continued or line.lstrip().startswith(b"#")
+        continued = directive and line.rstrip().endswith(b"\\")
+        text = _COMMENT.sub(b"", line).strip()
+        if text and not directive:
+            code.append((i, text))
+    for k, (i, text) in enumerate(code):
+        if not _STATEMENT_MACRO.match(lines[i]) or text.endswith(b";"):
+            continue
+        prev = code[k - 1][1] if k else b";"
+        if not prev.endswith((b";", b"{", b"}")):
+            continue
+        nxt = code[k + 1][1] if k + 1 < len(code) else b""
+        if nxt.startswith(b"{"):
+            continue
+        # `MY_TYPE` alone, then `compute(P p);`: a return type on a line of its own
+        if b"(" not in text and re.match(rb"~?[A-Za-z_]\w*\s*\(", nxt):
+            continue
+        if prev.endswith(b"{") and any(re.search(rb"\benum\b", t) for _, t in code[max(0, k - 2):k]):
+            continue
+        lines[i] = _spaces(lines[i])
+        code[k] = (i, b";")   # a statement ended here, for the next line to judge by
+    return b"\n".join(lines)
+
+
+# an attribute macro where a declaration starts: `POCO_DEPRECATED("...") void old();`,
+# `[[nodiscard]] POCO_DEPRECATED("...")` (the declaration on the next line), and without
+# arguments only `POCO_NODISCARD_CTOR Request(int)`: a word like `HANDLE` or `DWORD` there
+# is a return type
+_LEADING_MACRO = re.compile(
+    rb"^([ \t]*(?:\[\[[^\]\n]*\]\][ \t]*)*)"
+    rb"([A-Z][A-Z0-9]*_[A-Z0-9_]+)([ \t]*\((?:[^()\n]|\([^()\n]*\))*\))?")
+_ATTRIBUTE_WORDS = re.compile(rb"_(?:NODISCARD|DEPRECATED|INLINE|CONSTEXPR|NOEXCEPT|EXPLICIT)(?:_|$)")
+_ACCESS = re.compile(rb"^(?:public|protected|private)\s*:$")
+_TEMPLATE_HEAD = re.compile(rb"^template\s*<.*>$")
+_TYPE_NAME = re.compile(rb"\b(?:class|struct)\s+(\w+)\s*(?:final\s*)?[:{]")
+
+
+def _blank_leading_macros(src: bytes) -> bytes:
+    """Blank attribute macros at the start of a declaration (see _LEADING_MACRO): after
+    `;`, `{`, `}`, an access specifier, a `template <...>` head or a `[[...]]` attribute."""
+    if b"_" not in src:
+        return src
+    lines = src.split(b"\n")
+    classes = set(_TYPE_NAME.findall(src))
+    prev = b";"
+    continued = False
+    for i, line in enumerate(lines):
+        directive = continued or line.lstrip().startswith(b"#")
+        continued = directive and line.rstrip().endswith(b"\\")
+        text = _COMMENT.sub(b"", line).strip()
+        if not text or directive:
+            continue
+        m = _LEADING_MACRO.match(line)
+        at_start = m is not None and (prev.endswith((b";", b"{", b"}"))
+                                      or bool(_ACCESS.match(prev) or _TEMPLATE_HEAD.match(prev))
+                                      or b"[[" in m.group(1))
+        if at_start:
+            name, args = m.group(2), m.group(3)
+            rest = _COMMENT.sub(b"", line[m.end():]).strip()
+            if args:
+                # alone on its line, the declaration follows; unless a body does
+                # (`TEST_CASE(A, B)` then `{`: a function the macro defines)
+                nxt = next((t for t in (_COMMENT.sub(b"", x).strip() for x in lines[i + 1:])
+                            if t and not t.startswith(b"#")), b"")
+                ok = re.match(rb"[A-Za-z_~]|\[\[", rest) is not None if rest \
+                    else not nxt.startswith(b"{")
+            else:
+                after = re.match(rb"~?(\w+)\s*\(", rest)
+                ok = bool(_ATTRIBUTE_WORDS.search(name)) and re.match(rb"[A-Za-z_~]", rest) \
+                    or (after is not None and after.group(1) in classes)
+            if ok:
+                start = m.start(2)
+                lines[i] = line[:start] + _spaces(line[start:m.end()]) + line[m.end():]
+                text = _COMMENT.sub(b"", lines[i]).strip() or b";"
+        prev = text
+    return b"\n".join(lines)
+
+
 def _blank_inline_directives(src: bytes) -> bytes:
+    """Blank an `#if` group whose `#if` sits inside an expression (the code line before it
+    ends with `,` `:` `(` `)`): the group's `#elif`/`#else`/`#endif` go with it, and the
+    lines of other directives (`#define MIN(a, b) (...)`, `#pragma pack(push, 1)`) are no
+    code line to judge by."""
     lines = src.split(b"\n")
     prev = b""
+    groups: list[bool] = []   # per open `#if`: blanked or not
+    continued = False         # inside a directive continued with `\`
     for i, line in enumerate(lines):
-        if _DIRECTIVE.match(line):
-            if prev.rstrip().endswith((b",", b":", b"(", b")")):
+        directive = continued or line.lstrip().startswith(b"#")
+        continued = directive and line.rstrip().endswith(b"\\")
+        m = _DIRECTIVE.match(line)
+        if m:
+            word = m.group(1)
+            if word.startswith(b"if"):
+                groups.append(prev.rstrip().endswith((b",", b":", b"(", b")")))
+                blank = groups[-1]
+            else:
+                blank = groups[-1] if groups else prev.rstrip().endswith((b",", b":", b"(", b")"))
+                if word == b"endif" and groups:
+                    groups.pop()
+            if blank:
                 lines[i] = b" " * len(line)
             continue
-        if line.strip():
+        if line.strip() and not directive:
             prev = line
     return b"\n".join(lines)
 
@@ -118,11 +249,15 @@ class CppSpec(LanguageSpec):
             else _EXPORT_WORD.sub(lambda m: b" " * len(m.group(0)), line)
             for line in src.split(b"\n"))
         src = _EXPORT_MACRO.sub(lambda m: _blank(m, 3), src)
+        for _ in range(2):   # `class API DEPRECATED Name`: one macro per pass
+            src = _CLASS_MACRO.sub(_class_macro, src)
         src = _ATTRIBUTE_MACRO.sub(lambda m: _blank(m, 2), src)
         if b"Q_" in src or b"QT_" in src or b"QML_" in src or b"signals" in src or b"slots" in src:
             src = _QT_STATEMENT.sub(lambda m: m.group(1) + _spaces(m.group(0)[len(m.group(1)):]), src)
             src = _QT_INLINE.sub(lambda m: b" " * len(m.group(0)), src)
             src = _QT_SECTION.sub(_qt_section, src)
+        src = _blank_statement_macros(src)
+        src = _blank_leading_macros(src)
         return _blank_inline_directives(src)
 
     def alias_target(self, alias_node, type_node, text):
@@ -145,6 +280,23 @@ class CppSpec(LanguageSpec):
         elif parent is not None and parent.type == "reference_declarator":
             text += "&"
         return text
+
+    base_names_in_scope = True
+
+    def macro_declared_names(self, src):
+        out = []
+        for i, line in enumerate(src.split(b"\n"), 1):
+            m = _STATEMENT_MACRO.match(line)
+            if m and b"(" in line:
+                macro = line.split(b"(", 1)[0].strip().decode("utf-8", "replace")
+                args = line.split(b"(", 1)[1]
+                # names, not other macros: `XMLException`, `DataException`; not `XML_API`
+                out += [(n.decode(), i, macro) for n in re.findall(rb"\b([A-Z]\w*[a-z]\w*)", args)]
+        return out
+
+    def owns_namespace(self, namespace):
+        # a project may only specialise templates in std, not declare types there
+        return namespace != "std" and not namespace.startswith("std::")
 
     def is_import(self, node):
         # `using Base::Base;` in a class body is a member declaration; at file or namespace

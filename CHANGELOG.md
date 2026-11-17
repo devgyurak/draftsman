@@ -143,3 +143,30 @@ Notes for anyone with `view.json` files written against a development build:
 - Measured: Ktor 659 -> 541 unresolved (49 ambiguous, 492 outside), 6418 -> 6451
   relations (33 more external supertypes: `AbstractDecoder` 8, `KSerializer` 6, `JsAny`
   12, ...). Every other project keeps its relations and unresolved names.
+- C++ macros and directives (POCO, 2ef5cec8a9: 837 -> 2062 types, 2088 -> 9953 relations,
+  526 -> 335 unresolved, 3607 -> 389 diagnostics; `Poco::Logger` and `Poco::Channel` were
+  missing):
+  - an `#if` group is blanked or kept whole, and a directive line (`#define MIN(a, b)
+    (...)`, `#pragma pack(push, 1)`) is no code line to judge the next `#if` by. Before,
+    the `#endif` after such a line was blanked, which broke the file (leveldb's
+    `port/thread_annotations.h`: 10 -> 9 diagnostics; POCO's `String.h`).
+  - export macros between `class` and the name by position whatever their name
+    (`class Foundation_API Logger :`), and mixed-case ones by name elsewhere, only where a
+    declaration goes on (`ACC_PUBLIC` in an expression stays);
+  - statement macros on a line of their own (`POCO_CHECK_MINMAX_MACROS`,
+    `POCO_DECLARE_EXCEPTION(...)`) and attribute macros before a declaration
+    (`POCO_DEPRECATED("...")`, `POCO_NODISCARD_CTOR`) are blanked; a bare upper-case word
+    there (`HANDLE Open();`) stays a type.
+- C++: a qualified name missing from a namespace the project declares types in is
+  unresolved, not external, when the project may declare it out of the parser's sight: it
+  is passed to a blanked macro (`POCO_DECLARE_EXCEPTION(API, DataException, Base)`) or named
+  in a class head inside a syntax error; the hint says where (POCO: `DataException`,
+  `RemoteException` and `XMLException` are no external supertypes, which the classes that
+  extend them made them once they parsed). Without such a sign it stays a library's, as a
+  project may add to a library's namespace. `std` is never the project's. Java, Kotlin and
+  C# packages behave as before (a missing `com.foo.Missing` is still external).
+- C++: type aliases of a base class (`using CharacterMap = int[256];`) are found from
+  subclasses like its nested types, and so is the base's own name
+  (`CodeGenerator::Properties` in a subclass: POCO resolves 31 more references and gains
+  115 dependencies on `CodeGenerator`, in 14 classes); a class's own name comes
+  before its bases' (POCO: 440 -> 335 unresolved).

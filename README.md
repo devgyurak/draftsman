@@ -65,7 +65,7 @@ checked), an SVG and an HTML viewer — on real projects, tests and generated co
 | TypeScript | [TypeORM](docs/e2e/typescript/typeorm.md) `packages/typeorm/src` | 496 | 694 | 3968 | 1 (1 unexplained) | 0 |
 | Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 | 0 | 0 |
 | Python | [Django](docs/e2e/python/django.md) `django/` | 879 | 1964 | 1853 | 0 | 0 |
-| C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 | 2 (2 unexplained) | 10 spans in 9 files (5 in function bodies; macros, `extern "C"`, a pointer-to-member field) |
+| C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 | 2 (2 unexplained) | 9 spans in 8 files (5 in function bodies; `extern "C"`, `__has_include`, a gMock macro, a pointer-to-member field) |
 
 Unresolved references are split by reason: *ambiguous* (a project type shares the name; it is
 listed, not picked), *outside* (only something outside the sources could provide it: a

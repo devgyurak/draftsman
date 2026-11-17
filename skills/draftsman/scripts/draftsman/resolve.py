@@ -40,6 +40,11 @@ class Resolver:
         for qname, t in types.items():
             self.by_simple.setdefault(t.name, []).append(qname)
         self.namespaces = {t.namespace for t in types.values() if t.namespace}
+        self.type_namespaces = set(self.namespaces)   # namespaces with a type declared in them
+        self.unseen_types: dict[str, str] = {}
+        for s in scopes:
+            for n, where in s.unseen_types.items():
+                self.unseen_types.setdefault(n, where)
         self.scopes_by_ns: dict[str, list[FileScope]] = {}
         for s in scopes:
             if s.namespace:
@@ -210,12 +215,13 @@ class Resolver:
 
     def _member_type(self, owner: RawType, name: str, sep: str, inherit: bool,
                      seen: set[str]) -> Optional[str]:
-        """A nested type ``name`` declared in ``owner`` or inherited from its supertypes."""
+        """A nested type or member type alias ``name`` declared in ``owner`` or inherited from
+        its supertypes (`using CharacterMap = int[256];` in a base class)."""
         if owner.qualified_name in seen:
             return None
         seen.add(owner.qualified_name)
         cand = owner.qualified_name + sep + name
-        if cand in self.index:
+        if cand in self.index or cand in self.aliases:
             return cand
         if inherit:
             for sup in self.supertypes(owner):
@@ -246,6 +252,38 @@ class Resolver:
             cur = self.index.get(cur.outer) if cur.outer else None
         return out
 
+    def _closed_namespace(self, name: str, chain: list, sep: str, spec) -> Optional[str]:
+        """The project namespace a qualified name points into (`Poco::Data` for
+        `Poco::Data::Missing`, also relative to the enclosing namespaces), for languages that
+        check them (LanguageSpec.owns_namespace)."""
+        parts = name.split(sep)[:-1]
+        for i in range(len(parts), 0, -1):
+            prefix = sep.join(parts[:i])
+            for ns in chain:
+                cand = f"{ns}{sep}{prefix}" if ns else prefix
+                if cand in self.type_namespaces and spec.owns_namespace(cand):
+                    return cand
+        return None
+
+    def _base_named(self, rtype: RawType, name: str, sep: str) -> Optional[Resolution]:
+        """A base class of ``rtype`` (also through project bases) whose own name is
+        ``name``: in C++ it is in the scope of its derived classes."""
+        seen: set[str] = set()
+        stack = [rtype]
+        while stack:
+            t = stack.pop()
+            if t.qualified_name in seen:
+                continue
+            seen.add(t.qualified_name)
+            for sup in self.supertypes(t):
+                if not sup.target:
+                    continue
+                if sup.target.rsplit(sep, 1)[-1] == name and sup.status in (PROJECT, EXTERNAL):
+                    return Resolution(sup.status, sup.target)
+                if sup.status == PROJECT:
+                    stack.append(self.index[sup.target])
+        return None
+
     def _scope_supers(self, rtype: RawType, inherit: bool) -> list[str]:
         """External supertypes whose nested types are in scope where a name is written:
         those of the type and its enclosing types, or only the enclosing types' in the
@@ -257,6 +295,8 @@ class Resolver:
 
     def _nested_path(self, target: str, rest: str, sep: str, inherit: bool) -> Optional[str]:
         for part in rest.split(sep):
+            if target not in self.index:   # an alias, not a type to look into
+                return None
             target = self._member_type(self.index[target], part, sep, inherit, set())
             if target is None:
                 return None
@@ -305,7 +345,7 @@ class Resolver:
             if first.status == PROJECT:
                 found = self._nested_path(first.target, rest, sep, inherit)
                 if found:
-                    return Resolution(PROJECT, found)
+                    return self._found(found)
                 target = self.index[first.target]
                 if target.kind == "enum" and any(
                         rm.member.name == rest for rm in target.members):
@@ -324,6 +364,14 @@ class Resolver:
             # a fully qualified name outside the project, when its head is a package
             # (com.foo.Bar, System.Text.Encoding); otherwise a type this file could not
             # find (`Outer.Inner` under a star import), which stays unresolved
+            owner = self._closed_namespace(name, chain, sep, spec)
+            last = name.rsplit(sep, 1)[-1]
+            if owner and last in self.unseen_types:
+                # Poco::Data::DataException, declared by a macro the parser never saw:
+                # the project's, not a library's
+                return Resolution(UNRESOLVED, candidates=first.candidates, hint=(
+                    f"the project's namespace {owner} declares no type {last} the parser "
+                    f"saw; {self.unseen_types[last]}"))
             heads = {i.path.split(sep, 1)[0] for i in scope.imports}
             heads |= {ns.split(sep, 1)[0] for ns in self.namespaces}
             if scope.namespace:
@@ -336,13 +384,16 @@ class Resolver:
         # nested types of this type and its enclosing types, including inherited ones
         cur: Optional[RawType] = rtype
         while cur is not None:
-            found = self._member_type(
-                cur, name, sep,
-                spec.inherited_member_types and (inherit or cur is not rtype), set())
+            inherited = spec.inherited_member_types and (inherit or cur is not rtype)
+            found = self._member_type(cur, name, sep, inherited, set())
             if found:
-                return Resolution(PROJECT, found)
-            if cur.qualified_name + sep + name in self.aliases:
-                return Resolution(ALIAS, cur.qualified_name + sep + name)
+                return self._found(found)
+            if spec.base_names_in_scope and cur.name == name and cur.kind != "alias":
+                return Resolution(PROJECT, cur.qualified_name)   # a class's own name first
+            if inherited and spec.base_names_in_scope:
+                base = self._base_named(cur, name, sep)
+                if base is not None:   # `CodeGenerator::Properties` in a CodeGenerator subclass
+                    return base
             cur = self.index.get(cur.outer) if cur.outer else None
 
         for imp in scope.imports:

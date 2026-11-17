@@ -58,6 +58,9 @@ class FileScope:
     aliases: set[str] = field(default_factory=set)      # qualified type alias names
     alias_targets: dict[str, str] = field(default_factory=dict)  # alias -> type it names
     inline_namespaces: set[str] = field(default_factory=set)    # C++ `inline namespace v1`
+    # names the file may declare where the parser could not see it: simple name -> where
+    # (an argument of a blanked macro, a class head inside a syntax error)
+    unseen_types: dict[str, str] = field(default_factory=dict)
     project: Optional[str] = None   # build project the file compiles in (C#: its .csproj)
 
 
@@ -194,6 +197,20 @@ class LanguageSpec:
         ``external_supers()`` lists the external supertypes whose nested types are in
         scope there, for languages where such a nested type would win over an import."""
         return None
+
+    # C++: the name of a base class is in the scope of its derived classes
+    base_names_in_scope: bool = False
+
+    def owns_namespace(self, namespace: str) -> bool:
+        """Whether a name missing from a namespace the project declares types in may be
+        the project's own, declared where the parser could not see it (FileScope.unseen_types),
+        rather than a library's. Off by default: not checked for packages."""
+        return False
+
+    def macro_declared_names(self, src: bytes) -> list[tuple[str, int, str]]:
+        """(name, line, macro) for names passed to macros the preprocessing blanks, which
+        may declare them (`POCO_DECLARE_EXCEPTION(API, DataException, Exception)`)."""
+        return []
 
     def is_package_head(self, head: str, known: set[str]) -> bool:
         """Whether ``head`` in ``head.Rest`` names a package rather than a type: lower

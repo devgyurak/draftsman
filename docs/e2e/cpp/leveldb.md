@@ -8,7 +8,7 @@ Google's key-value store: plain C++ with a C API, ports and benchmarks.
 | Commit | `29465588d3` (2026-11-12) |
 | Extracted | the whole repository without `*_test.cc` and `third_party/` |
 
-Measured on 2026-11-17 with Draftsman `3a4f253`.
+Measured on 2026-11-17 with Draftsman `02aa135` and the changes of the next commit (C++ macros and directives).
 
 ## Run
 
@@ -39,12 +39,12 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 102 files, 161 types, relations: association 227, dependency 616, extends 17, implements 25, 2 unresolved (2 unexplained), 10 diagnostics
+draftsman: 102 files, 161 types, relations: association 227, dependency 616, extends 17, implements 25, 2 unresolved (2 unexplained), 9 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 102 | 161 | 227 | 616 | 17 | 25 | 2 (2 unexplained) | 10 |
+| 102 | 161 | 227 | 616 | 17 | 25 | 2 (2 unexplained) | 9 |
 
 Types by kind: 90 classes, 48 structs, 4 abstract classes, 8 interfaces, 11 enums.
 
@@ -59,10 +59,12 @@ Both unexplained, with no hint: C++ has no wildcard import that could explain th
 
 ## Parse diagnostics
 
-10 syntax-error spans. Declarations inside a span may be missing; the rest of the file is read.
+9 syntax-error spans. Declarations inside a span may be missing; the rest of the file is read.
+(`port/thread_annotations.h`, counted until 2026-11-17, was broken by Draftsman's own
+preprocessing: an `#endif` after a `#define ... (...)` line was taken for one inside
+an expression and blanked.)
 
 - `benchmarks/db_bench.cc:679` — a pointer-to-member field, `void (Benchmark::*method)(ThreadState*);`: the field `method` is missing from `ThreadArg`.
-- `port/thread_annotations.h:5-106` — a header made only of macro definitions.
 - `port/port_stdcxx.h:19` — `#if __has_include(...)`.
 - `include/leveldb/c.h:266` — `} /* end extern "C" */` in an `#ifdef __cplusplus` block; the `extern "C" {` it closes is opened in another one, at line 50.
 - `util/testutil.h:18` — gMock's `MATCHER(IsOK, "") { ... }`.

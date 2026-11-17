@@ -240,10 +240,28 @@ is that type. Aliases of aliases are followed.
 - Associations carry `ownership`: value members and `unique_ptr` are `owned`
   (composition, drawn with a diamond); pointers, references, `shared_ptr`/`weak_ptr` are
   `shared`.
-- Macros: export/visibility macros (`class FOO_EXPORT Bar`, `FOO_API`), thread-safety
-  attributes (`GUARDED_BY(mu)`), and `#if` lines inside initializer lists are blanked
-  before parsing (same length, so line numbers are exact). Other macros may still cause
-  syntax errors; they are reported as diagnostics and only affect nearby declarations.
+- Macros are blanked before parsing (same length, so line numbers are exact), never
+  expanded; a class a macro declares (`POCO_DECLARE_EXCEPTION(API, E, Base)`) is not drawn.
+  - Export macros: between `class`/`struct` and the name, by position whatever the
+    name (`class Foundation_API Logger :`, `class MACRO(x) Name {`; not a lower-case word,
+    so `struct sockaddr_in addr{};` stays, nor `class Name final`); elsewhere by name,
+    upper or mixed case, when a declaration goes on after them (`FOO_EXPORT`, `Net_API
+    std::ostream& operator<<(...)`, `std::string Util_API replace(...)`; not
+    `x == ACC_PUBLIC`).
+  - Statement macros on a line of their own without `;` (`POCO_CHECK_MINMAX_MACROS`,
+    `POCO_DECLARE_EXCEPTION(...)`), where a declaration may start: after `;`, `{`, `}` or
+    the start of the file, not before a `{` (`TEST(A, B)` then a body), not after `,` or
+    `:` (an initializer list), not as an enum's only constant, and without arguments not
+    before `name(` (`MY_TYPE` alone on its line, then `compute(P p);`: a return type).
+  - Attribute macros before a declaration: with arguments (`POCO_DEPRECATED("...")`,
+    also after `[[nodiscard]]`, an access specifier or a `template <...>` head); without
+    arguments only before a constructor of a class in the file (`POCO_NODISCARD_CTOR
+    Request(int)`) or when the name says `_NODISCARD`, `_DEPRECATED`, `_INLINE`,
+    `_CONSTEXPR`, `_NOEXCEPT`, `_EXPLICIT` - a bare `HANDLE` or `DWORD` there is a type.
+  - Thread-safety attributes after a declaration (`GUARDED_BY(mu)`), and `#if` groups
+    inside an expression (an initializer list), blanked with their `#elif`/`#else`/`#endif`.
+  Other macros may still cause syntax errors; they are reported as diagnostics and only
+  affect nearby declarations.
 - `typedef`/`using X = ...` are aliases, also inside a class (`typedef Circle* CirclePtr;`
   makes a field of type `CirclePtr` a shared association to `Circle`), also with several
   declarators (`typedef struct Legacy {…} Legacy_t, *LegacyPtr;` names `Legacy`). C's
@@ -251,8 +269,17 @@ is that type. Aliases of aliases are followed.
   anonymous union is no type, so `typedef union {…} U_t;` is an alias with nothing to draw.
   `using namespace X;` is a wildcard import, and `using a::B;` imports `B` (also inside an
   include guard); inside a class (`using Base::Base;`, `using Base::f;`) it is a member
-  declaration and imports nothing. Qualified names into namespaces outside the sources (`std::`, `boost::`) are
-  external. Types in an `inline namespace` are found with or without it
+  declaration and imports nothing. Qualified names into namespaces outside the sources
+  (`std::`, `boost::`) are external, also in a namespace the project adds to
+  (`Poco::Util::ServerApplication` next to the project's `Poco::Util::MyExtension`). A name
+  the project may declare where the parser could not see it is unresolved instead, with
+  where: an argument of a blanked statement macro (`POCO_DECLARE_EXCEPTION(API,
+  DataException, Base)` for `Poco::Data::DataException`) or a class head inside a syntax
+  error. `std` is never the project's: a project may only specialise templates there.
+- Class scope: nested types and type aliases of a base class (`using CharacterMap =
+  int[256];`) are inherited, and so is the base's own name (`CodeGenerator::Properties` in
+  a subclass of `Poco::CodeGeneration::CodeGenerator`); a class's own name comes first
+  (`Listener` inside `tcp::Listener`, which derives from another `Listener`). Types in an `inline namespace` are found with or without it
   (`acme::Versioned` is `acme::v1::Versioned`).
 - Parameters with a default value (`P p = P()`) are parameters. A function-pointer member
   (`void (*cb)(int)`) is a field of type `void(int)*`. Members of an anonymous union or
