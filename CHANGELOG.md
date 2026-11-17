@@ -188,3 +188,10 @@ Notes for anyone with `view.json` files written against a development build:
     `XMLException`), and when there are several the hint lists them as mentions, "one of
     them may declare it", a file named after the name first (`XMLException.h`). Before,
     the first in file order was named as the one that may declare it.
+- C++: an upper-case name with arguments after a word is an attribute macro only after a
+  declarator (`int x_ GUARDED_BY(mu_);`, `VersionSet* const v_ GUARDED_BY(mu_);`), not
+  after its type (`const std::string SENTINEL("=?");`, `static const Poco::Timespan
+  WAIT(1, 0);`), after a keyword (`explicit URI(const std::string& uri);`: a constructor
+  was dropped) or inside a string literal (RemotingNG's code generators). POCO: 385 -> 346
+  diagnostics, 8 constructors back, 9976 -> 9978 relations (`URI` -> `Path`, `FIFOIOS` ->
+  `BasicFIFOBuffer`); leveldb unchanged.

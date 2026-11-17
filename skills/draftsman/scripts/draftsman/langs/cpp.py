@@ -89,6 +89,45 @@ def _blank(m: re.Match, group: int) -> bytes:
     start, end = m.start(group) - m.start(0), m.end(group) - m.start(0)
     return text[:start] + b" " * (end - start) + text[end:]
 
+
+_QUALIFIERS = {b"const", b"static", b"constexpr", b"constinit", b"inline", b"extern",
+               b"mutable", b"volatile", b"thread_local", b"typename", b"struct", b"class",
+               b"enum", b"union", b"unsigned", b"signed", b"long", b"short"}
+# before a name and `(`, a declaration or an expression goes on, no attribute
+_KEYWORDS = {b"explicit", b"virtual", b"friend", b"inline", b"static", b"constexpr",
+             b"consteval", b"return", b"new", b"delete", b"throw", b"else", b"case",
+             b"typedef", b"using", b"co_return", b"co_yield", b"co_await", b"operator"}
+_ESCAPE = re.compile(rb"\\.")
+
+
+def _attribute_macro(m: re.Match) -> bytes:
+    """Blank an attribute macro after a declarator (`int x_ GUARDED_BY(mu_);`), but not
+    an upper-case variable initialised with parentheses after its type (`const std::string
+    SENTINEL("=?");`, `static const Poco::Timespan WAIT(1, 0);`), nor inside a string
+    literal (`std::string code("static const std::string NS(\\"");`)."""
+    src, start = m.string, m.start()
+    line = src[src.rfind(b"\n", 0, start) + 1:start]
+    if _ESCAPE.sub(b"", line).count(b'"') % 2:
+        return m.group(0)
+    word = start
+    while word > 0 and (src[word - 1:word].isalnum() or src[word - 1:word] == b"_"):
+        word -= 1
+    if src[word:start] in _KEYWORDS:   # `explicit URI(const std::string& uri);`
+        return m.group(0)
+    if src[start - 1:start] not in b")]" and src[m.end():m.end() + 64].lstrip()[:1] in (b";", b","):
+        # `Type NAME(...);` declares NAME when the word before it starts a declaration
+        before = src[:word].rstrip()
+        prev = re.search(rb"(\w+)$", before)
+        # `VersionSet* const versions_ GUARDED_BY(mutex_);`: a const pointer, then its name
+        const_pointer = prev is not None and prev.group(1) in (b"const", b"volatile") \
+            and before[:prev.start()].rstrip().endswith((b"*", b"&"))
+        at_line_start = not src[src.rfind(b"\n", 0, word) + 1:word].strip()
+        if not before or at_line_start \
+                or before.endswith((b"::", b"(", b";", b"{", b"}", b"<", b":", b"/")) \
+                or (prev is not None and prev.group(1) in _QUALIFIERS and not const_pointer):
+            return m.group(0)
+    return _blank(m, 2)
+
 _BUILTINS = {
     "void", "bool", "char", "wchar_t", "char8_t", "char16_t", "char32_t", "short", "int",
     "long", "float", "double", "signed", "unsigned", "auto", "size_t", "ptrdiff_t",
@@ -253,7 +292,7 @@ class CppSpec(LanguageSpec):
         src = _EXPORT_MACRO.sub(lambda m: _blank(m, 3), src)
         for _ in range(2):   # `class API DEPRECATED Name`: one macro per pass
             src = _CLASS_MACRO.sub(_class_macro, src)
-        src = _ATTRIBUTE_MACRO.sub(lambda m: _blank(m, 2), src)
+        src = _ATTRIBUTE_MACRO.sub(_attribute_macro, src)
         if b"Q_" in src or b"QT_" in src or b"QML_" in src or b"signals" in src or b"slots" in src:
             src = _QT_STATEMENT.sub(lambda m: m.group(1) + _spaces(m.group(0)[len(m.group(1)):]), src)
             src = _QT_INLINE.sub(lambda m: b" " * len(m.group(0)), src)

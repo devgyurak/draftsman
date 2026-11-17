@@ -260,7 +260,9 @@ is that type. Aliases of aliases are followed.
     `_CONSTEXPR`, `_NOEXCEPT`, `_EXPLICIT` - a bare `HANDLE` or `DWORD` there is a type.
   - Attribute macros after a declaration or an enumerator (`GUARDED_BY(mu)`,
     `E_OLD POCO_DEPRECATED("since 4.2; use f() instead") = 4,`: a string argument may
-    hold `;` and parentheses), and `#if` groups
+    hold `;` and parentheses), after a declarator or `)` only: `const std::string
+    SENTINEL("=?");` declares `SENTINEL`, `explicit URI(...)` is a constructor, and text
+    inside a string literal stays. Also `#if` groups
     inside an expression (an initializer list), blanked with their `#elif`/`#else`/`#endif`.
   Other macros may still cause syntax errors; they are reported as diagnostics and only
   affect nearby declarations.

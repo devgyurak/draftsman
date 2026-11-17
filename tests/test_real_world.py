@@ -254,6 +254,26 @@ def test_cpp_attribute_macros_with_string_arguments(tmp_path):
     assert _members(ir, "Poco::Database") == ["+ old(): void", "+ esc(): void", "+ bar(): void"]
 
 
+def test_cpp_upper_case_variables_are_no_attribute_macros():
+    """`Type NAME(...)` after its type declares NAME (POCO's constants), and code inside
+    a string literal is text; an attribute macro follows a declarator or a `)`."""
+    from draftsman.langs.cpp import CppSpec
+    pre = CppSpec().preprocess
+    for kept in (b'const std::string SENTINEL("=?base64?");\n',
+                 b"static const std::string ILLEGAL_CHARS(\"()[]/|\\\\',;\");\n",
+                 b"const Poco::Timespan RETRY_INTERVAL(10, 0);\n",
+                 b"const int MAX_SIZE(10);\nFoo FOO_BAR(x);\n",
+                 b'std::string code("static const std::string REMOTING__NAMESPACE(\\"");\n',
+                 # a constructor of an upper-case class (URI.h, UUID.h, FIFOBufferStream.h)
+                 b"class URI {\n  URI();\n  /// Creates an empty URI.\n\n"
+                 b"  explicit URI(const std::string& uri);\n  explicit URI(const char* uri) : x(1) {}\n};\n",
+                 b"// a constant.\nFoo FOO_BAR(x);\n"):
+        assert pre(kept) == kept
+    out = pre(b"int a_ GUARDED_BY(mu_), b_ GUARDED_BY(mu_);\nvoid f() REQUIRES(mu_);\n"
+              b"VersionSet* const versions_ GUARDED_BY(mutex_);\n")
+    assert b"GUARDED_BY" not in out and b"REQUIRES" not in out
+
+
 def test_cpp_template_parameters_of_every_kind(tmp_path):
     """Values (`std::size_t N`, with a default, variadic, `auto`) and templates
     (`template <class> class C`) are template parameters too: in the template they hide a
