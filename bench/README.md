@@ -107,3 +107,9 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
   Arm C's plugin never loaded: its manifest declares gauntlet as a dependency and Claude
   Code skips a plugin whose dependency is missing. Its `dependencies` line is now removed
   at build time (see Limits); the two arm C pilot runs were discarded and run again.
+- 2026-11-17, second pilot round: with the plugin loaded, arm C's skill still did not fire
+  (2 of 2 runs drew the diagram without it), while Draftsman's did (2 of 2). Every arm's
+  prompt now adds the same sentence, "If a skill for drawing class diagrams is available,
+  use it." Arm A has no such skill. All six pilot runs were discarded and the pilot was
+  run again with this prompt. (T1's class limit reads 80 like T2's since the bounds were
+  raised; spring-petclinic has 25 types, so it does not bind.)

@@ -44,8 +44,9 @@ tasks:
     runs: 3
     prompt: >-
       Draw a Mermaid classDiagram of the classes in this repository and the relations
-      between them, using production sources only (ignore tests). Do not ask questions.
-      Answer with a single mermaid block, at most 80 classes.
+      between them, using production sources only (ignore tests). If a skill for drawing
+      class diagrams is available, use it. Do not ask questions. Answer with a single
+      mermaid block, at most 80 classes.
   T2:
     repos: [spring-petclinic, jsoup, netty]
     classes_per_repo: 3
@@ -53,8 +54,8 @@ tasks:
     prompt: >-
       Draw a Mermaid classDiagram of `{name}` ({fqn}) and the classes directly related
       to it in either direction (types it uses and types that use it), using production
-      sources only (ignore tests). Do not ask questions. Answer with a single mermaid
-      block, at most 80 classes.
+      sources only (ignore tests). If a skill for drawing class diagrams is available, use
+      it. Do not ask questions. Answer with a single mermaid block, at most 80 classes.
 
 arms:
   A: {name: baseline, plugins: []}
