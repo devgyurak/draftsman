@@ -121,3 +121,8 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
   (outer type to nested type, kind *nesting*), which 42 drawn edges use and the rubric's
   arrow table did not list; on top-level types it collapses onto one type and drops out of
   the main scoring. `o-->` and `*-->` read as association.
+- 2026-11-17, before labelling (no edge yet labelled or read by arm): each edge gets a
+  label on top-level types, which the headline uses, and one as drawn. With one label, an
+  edge drawn to an outer type whose only evidence sits in its nested type would have
+  counted as unsupported in the main scoring. Nesting edges are *self* at the top level
+  and *declared* as drawn when the nesting is real.

@@ -100,23 +100,42 @@ Decided while writing the recall denominators, before any output was seen:
 
 Every label carries the `file:line` it rests on (none for unsupported).
 
+### Two levels, and nesting edges
+
+Settled before labelling, after the measured runs and before any edge was labelled or
+looked at by arm:
+
+- Each edge is labelled **twice**:
+  - **top level** (`label_top`, the main scoring): both ends collapsed to their top-level
+    types, and evidence collapsed the same way, so a use inside a nested type counts for
+    its outer type (`HttpConnection → X` is supported if only `HttpConnection.Response`
+    uses X). An edge whose ends collapse onto one type is labelled **self** and left out.
+  - **as drawn** (`label_drawn`, secondary): the names as the diagram gives them, nested
+    types as types of their own.
+- A **nesting** edge (`Outer +-- Inner`, drawn from an outer type to its nested type) is
+  *self* at the top level. As drawn, it is *declared* when Inner is declared inside Outer
+  (cite that declaration); *wrong kind or direction* when reversed; otherwise it is judged
+  like any edge that is not inheritance.
+
 ## Labelling procedure
 
 1. Pool the edges of all runs, deduplicate, shuffle, and drop the arm and run: the
    labeller sees a pair of names, a kind and a direction only.
-2. A **separate session** that did not run the benchmark gives the first label, with its
-   `file:line`.
-3. `check_citations.py` checks every *declared* and *body only* label: the cited line must
+2. A **separate session** that did not run the benchmark gives the first labels, at both
+   levels, each with its `file:line`.
+3. `check_citations.py` checks every *declared* and *body only* label at both levels: the cited line must
    contain the other type's simple name, inside the cited type's file. A label that fails
    goes to human review; an *unnamed* label always does.
-4. **Human review**: every *unsupported*, *indirect* and *wrong kind or direction* label, every label
+4. **Human review**: every *unsupported*, *indirect* and *wrong kind or direction* label at
+   either level, every label
    that failed step 3, and a random 20% of the rest (fixed seed). `review.csv` lists, per
    edge, the production files in which both simple names appear (grep), so an empty list
    confirms *unsupported* at once.
 
 ## Measures
 
-T2 compares **edges incident to the focus class**; all edges are a secondary figure.
+T2 compares **edges incident to the focus class**; all edges are a secondary figure. The
+headline uses the top-level labels; the as-drawn labels give the secondary figure.
 
 - **Unsupported (headline)**: count and share of incident edges labelled unsupported.
 - **Indirect** and **wrong kind or direction**: count and share each, reported separately,

@@ -22,7 +22,9 @@ import yaml
 from parse_mermaid import diagram
 
 BENCH = Path(__file__).resolve().parent
-LABEL_COLUMNS = ['source_fqn', 'target_fqn', 'label', 'unnamed', 'file_line', 'note']
+# as drawn and on top-level types (RUBRIC.md, "Two levels, and nesting edges")
+LABEL_COLUMNS = ['source_fqn', 'target_fqn', 'label_drawn', 'file_line_drawn',
+                 'label_top', 'file_line_top', 'unnamed', 'note']
 
 
 def main() -> None:
