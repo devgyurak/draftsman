@@ -30,8 +30,9 @@ into three strata by rank and one class per stratum is drawn with a fixed seed. 
 
 **Scoring** follows [`RUBRIC.md`](RUBRIC.md): edges from all runs are pooled and labelled
 blind, citations are checked by script, and every edge labelled *unsupported*, *indirect* or *wrong
-kind or direction* is checked by a person. The headline is the share of edges at the focus
-class that have no basis in the source.
+kind or direction* is checked by a person. Edges are compared on top-level types, so a
+diagram scores the same whether or not it draws nested types. The headline is the share of
+edges at the focus class that have no basis in the source.
 
 ## Limits
 
@@ -48,10 +49,20 @@ class that have no basis in the source.
 - One language (Java), one model, two runs per focus class.
 - The grep count that picks the focus classes is a proxy: it counts names, so a simple
   name shared with an unrelated type adds to it.
-- **Arm C runs as its author built it, in our isolation.** Its skill limits a diagram to
-  15 classes, so its recall is bounded by its own rule against the prompt's 80; it
-  explores through a subagent on Sonnet; and it renders through a Mermaid Chart MCP server
-  that no isolated run has. The Mermaid text it writes is what is scored.
+- **Arm C runs as its author built it, in our isolation, outside its stated range.**
+  - Its explorer subagent is written for Python, JS/TS and Rust sources (its globs and
+    example); these repositories are Java.
+  - Its skill draws at most 15 classes, and its explorer reads at most 25 files, on
+    Sonnet at effort medium. Both bound its recall by its own design, against the prompt's
+    80 classes.
+  - It renders through a Mermaid Chart MCP server that no isolated run has, so it cannot
+    meet its own exit criteria; retries this causes add to its cost and time. Its cost and
+    time are listed in the tables with this note and left out of the cost and time figure.
+  - The Mermaid text it writes is what is scored.
+- **Uses that never name a type are not in the recall denominators** (a call on a field of
+  that type, a nested class using its outer class's field). Counting them would take type
+  inference. This lowers the body-only recall every arm is measured against, the measure
+  Draftsman is expected to lose, so it slightly favours Draftsman.
 - Draftsman reads declarations, not method bodies; relations found only in bodies are
   reported as recall it is expected to lose.
 
@@ -77,3 +88,13 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
   output) for the nine focus classes and spring-petclinic, awaiting human review; the
   rubric records eight cases the draft showed to be undecided (qualified nested names,
   uses that never name the type, and others).
+- 2026-11-17, before the pilot, after review:
+  - Main scoring on top-level types, both ends collapsed; nested types as drawn are
+    secondary. Five denominator rows added for it (Connection: four incoming through its
+    nested types, one outgoing from `Connection.Response`).
+  - The image holds only the plugin's own files: the answer key (`bench/`, `docs/`) had
+    been about to go into every arm's container with the next build.
+  - run.py: an interrupted run is redone instead of skipped; the credential is masked in
+    transcripts; each run records the image ID and the session's init event; the other
+    arms' plugins are removed before a session starts; stdin is closed.
+  - Limits: arm C's stated language range and file budget, unnamed uses.

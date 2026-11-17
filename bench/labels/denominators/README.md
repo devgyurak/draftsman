@@ -26,14 +26,37 @@ exists, else `body_only`; `kind` is `inheritance` only for a direct `extends`/`i
 
 Of the 32 types that use CleanableDirectBuffer, 6 implement it.
 
+### Collapsed to top-level types (the main scoring)
+
+RUBRIC.md scores on top-level types: both ends of every row are collapsed to the outermost
+type that contains them, and a pair that collapses onto itself is dropped. Five rows were
+added for this, after review and before any measured run: the four types that use
+`Connection` only through its nested types (`CookieUtil`, `UrlBuilder`,
+`UrlConnectionExecutor`, `HttpClientExecutor`) and `Connection.Response → StreamParser`.
+No other focus has a relation that only its nested types carry.
+
+| Repo | Focus | Out (nested / collapsed) | In (nested / collapsed) |
+|---|---|---:|---:|
+| spring-petclinic | PetClinicRuntimeHints | 3 / 3 | 1 / 1 |
+| spring-petclinic | OwnerRepository | 1 / 1 | 3 / 3 |
+| spring-petclinic | Owner | 3 / 3 | 4 / 4 |
+| jsoup | Safelist | 10 / 6 | 2 / 2 |
+| jsoup | NodeInternals | 8 / 7 | 6 / 6 |
+| jsoup | Connection | 8 / 5 | 4 / 8 |
+| netty | ChunkedStream | 5 / 5 | 3 / 3 |
+| netty | Socks4ClientEncoder | 9 / 9 | 1 / 1 |
+| netty | CleanableDirectBuffer | 0 / 0 (n/a) | 32 / 24 |
+
+The nested counts are the focus's own rows; the five rows above count only collapsed.
+
 T1 (`spring-petclinic/_T1_all.csv`): 25 production types, 40 relations: 33 declared (8 of
 them inheritance) and 7 body only.
 
 ## Decisions applied
 
 - A qualified reference to a nested type (`Connection.Request`, `Range.Spans`,
-  `ChannelHandler.Sharable`) is a relation to the nested type only, not to its outer type
-  (RUBRIC: a nested type is its own type).
+  `ChannelHandler.Sharable`) is recorded as a relation to the nested type; the main scoring
+  collapses it to the outer type (see above).
 - A relation needs the type's name in the user's code. Uses without the name are not
   counted: a call on an expression of that type, or a nested class using its outer
   instance's field.

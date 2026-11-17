@@ -42,6 +42,16 @@ Every run is expected to answer with one Mermaid `classDiagram` block.
   of the edge (T1). An edge still ambiguous after that is **undecidable**: left out of
   both numerator and denominator, and counted.
 
+## Top-level types
+
+Diagrams differ in whether they draw nested types, so the **main scoring is on top-level
+types**: both ends of every drawn edge and every denominator row are collapsed to the
+outermost type that contains them (`HttpConnection.Request → Connection.Request` becomes
+`HttpConnection → Connection`), and a pair that collapses onto itself is dropped. A
+collapsed pair keeps the strongest evidence of the rows it merges; it is inheritance only
+if the two top-level types themselves inherit. Results on nested types as drawn are a
+secondary figure.
+
 ## Edge labels
 
 Each distinct edge gets the **first** label that applies, checked in this order:
@@ -79,12 +89,12 @@ Decided while writing the recall denominators, before any output was seen:
 
 | Case | Rule |
 |---|---|
-| A qualified nested name (`Connection.Request` in `CookieUtil`) | a relation to the nested type. An edge drawn to the outer type instead (`CookieUtil → Connection`) is supported by it, and matches the nested row when recall is scored, because many diagrams do not draw nested types |
-| A use that never names the type (a call on a field of that type, a nested class using its outer class's field) | not in the denominators; a drawn edge resting on it is labelled *body only* in review, not *unsupported* |
+| A qualified nested name (`Connection.Request` in `CookieUtil`) | recorded as a relation to the nested type; the main scoring collapses it (see *Top-level types* above) |
+| A use that never names the type (a call on a field of that type, a nested class using its outer class's field) | not in the denominators; a drawn edge resting on it is labelled *body only* with the flag *unnamed*, not *unsupported*, and the flagged labels are counted |
 | Anonymous classes and enum-constant bodies | belong to the enclosing named type |
 | A class literal in an annotation argument | declared |
 | A generic argument in a supertype clause (`implements ChunkedInput<ByteBuf>`) | declared, kind *other*: an edge drawn as inheritance to `ByteBuf` is wrong kind |
-| A focus class naming its own nested type | a relation, in the denominator |
+| A focus class naming its own nested type | a relation at the nested level; it collapses onto the focus and drops out of the main scoring |
 | An override whose signature names the type | declared, not indirect |
 | "Classes" in T1 | every type: classes, interfaces, enums, records |
 
@@ -98,7 +108,7 @@ Every label carries the `file:line` it rests on (none for unsupported).
    `file:line`.
 3. `check_citations.py` checks every *declared* and *body only* label: the cited line must
    contain the other type's simple name, inside the cited type's file. A label that fails
-   goes to human review.
+   goes to human review; an *unnamed* label always does.
 4. **Human review**: every *unsupported*, *indirect* and *wrong kind or direction* label, every label
    that failed step 3, and a random 20% of the rest (fixed seed). `review.csv` lists, per
    edge, the production files in which both simple names appear (grep), so an empty list

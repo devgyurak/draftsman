@@ -11,3 +11,8 @@ in,org.jsoup.helper.HttpConnection,org.jsoup.Connection,inheritance,declared,src
 in,org.jsoup.Jsoup,org.jsoup.Connection,other,declared,src/main/java/org/jsoup/Jsoup.java:94,return type
 in,org.jsoup.nodes.Document,org.jsoup.Connection,other,declared,src/main/java/org/jsoup/nodes/Document.java:27,field
 in,org.jsoup.nodes.FormElement,org.jsoup.Connection,other,declared,src/main/java/org/jsoup/nodes/FormElement.java:100,return type
+in,org.jsoup.helper.CookieUtil,org.jsoup.Connection.Request,other,declared,src/main/java/org/jsoup/helper/CookieUtil.java:70,to a nested type of the focus; counts when collapsed to top-level types
+in,org.jsoup.helper.UrlBuilder,org.jsoup.Connection.KeyVal,other,declared,src/main/java/org/jsoup/helper/UrlBuilder.java:67,to a nested type of the focus; counts when collapsed to top-level types
+in,org.jsoup.helper.UrlConnectionExecutor,org.jsoup.Connection.Method,other,body_only,src/main/java/org/jsoup/helper/UrlConnectionExecutor.java:47,to a nested type of the focus; counts when collapsed to top-level types
+in,org.jsoup.helper.HttpClientExecutor,org.jsoup.Connection.Method,other,body_only,src/main/java11/org/jsoup/helper/HttpClientExecutor.java:126,to a nested type of the focus; counts when collapsed to top-level types
+out,org.jsoup.Connection.Response,org.jsoup.parser.StreamParser,other,declared,src/main/java/org/jsoup/Connection.java:1037,from a nested type of the focus; counts when collapsed to top-level types

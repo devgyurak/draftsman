@@ -17,10 +17,12 @@ for repo in $(yq "' '.join(d['repos'])"); do
   rm -rf "$ctx/repos/$repo/.git"
 done
 
-# arm B: this repository at HEAD (uncommitted changes are not measured)
+# arm B: the plugin's own files at HEAD (uncommitted changes are not measured). Only these:
+# bench/, docs/ and the READMEs hold the answer key and must not reach any arm.
 draftsman_commit=$(git -C "$root" rev-parse HEAD)
 mkdir -p "$ctx/plugins/draftsman"
-git -C "$root" archive HEAD | tar -x -C "$ctx/plugins/draftsman"
+git -C "$root" archive HEAD .claude-plugin skills commands assets/icon.png LICENSE NOTICE \
+  | tar -x -C "$ctx/plugins/draftsman"
 
 # arm C: night-market's cartograph plugin at the pinned commit
 nm_url=$(yq "d['arms']['C']['source']"); nm_commit=$(yq "d['arms']['C']['commit']")

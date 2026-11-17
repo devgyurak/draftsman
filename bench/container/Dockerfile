@@ -24,6 +24,6 @@ RUN npm ci --prefix /opt/bench/plugins/draftsman/skills/draftsman/scripts --no-a
 
 ARG DRAFTSMAN_COMMIT
 ARG NIGHT_MARKET_COMMIT
+# labels only: an environment variable would be visible to the agent
 LABEL bench.draftsman=${DRAFTSMAN_COMMIT} bench.night-market=${NIGHT_MARKET_COMMIT} \
       bench.claude-code=${CLAUDE_CODE_VERSION}
-ENV BENCH_DRAFTSMAN_COMMIT=${DRAFTSMAN_COMMIT} BENCH_NIGHT_MARKET_COMMIT=${NIGHT_MARKET_COMMIT}
