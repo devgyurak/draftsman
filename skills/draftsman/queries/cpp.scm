@@ -6,16 +6,20 @@
 (namespace_definition name: (_) @namespace.name) @namespace
 
 (using_declaration "namespace" [(identifier) (qualified_identifier)] @import.wildcard)
-; `using a::B;` imports B at file or namespace level; inside a class it is a member
-; declaration (`using Base::Base;` inherits constructors, `using Base::f;` a method)
-(translation_unit (using_declaration . (qualified_identifier) @import))
-(declaration_list (using_declaration . (qualified_identifier) @import))
+; `using a::B;` imports B; inside a class it is a member declaration (`using Base::Base;`
+; inherits constructors), which CppSpec.is_import skips
+(using_declaration . (qualified_identifier) @import)
 
 ; ---------------------------------------------------------------- types
 ; forward declarations (no body) are not types of their own
 (class_specifier name: (type_identifier) @name body: (field_declaration_list)) @type.class
 (struct_specifier name: (type_identifier) @name body: (field_declaration_list)) @type.struct
 (enum_specifier name: (type_identifier) @name body: (enumerator_list)) @type.enum
+; C: `typedef struct { ... } Point;` is an anonymous struct named by its typedef
+(type_definition type: (struct_specifier !name body: (field_declaration_list)) @type.struct
+  . declarator: (type_identifier) @name)
+(type_definition type: (enum_specifier !name body: (enumerator_list)) @type.enum
+  . declarator: (type_identifier) @name)
 ; out-of-class definitions of nested types: struct Table::Rep { ... }
 (class_specifier name: (qualified_identifier) @name body: (field_declaration_list)) @type.class
 (struct_specifier name: (qualified_identifier) @name body: (field_declaration_list)) @type.struct

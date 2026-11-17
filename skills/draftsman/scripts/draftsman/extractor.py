@@ -299,6 +299,9 @@ class Extractor:
             elif (n := _first(caps, "typevar")) is not None:
                 scope.type_params.add(_text(n, src))
             elif any(k.startswith("import") for k in caps):
+                if not spec.is_import(next(n for k, ns in caps.items() if k.startswith("import")
+                                           for n in ns)):
+                    continue
                 imp = self._import(caps, src, mod_path)
                 if imp is not None:
                     scope.imports.append(imp)
@@ -422,14 +425,15 @@ class Extractor:
                 elif isinstance(owner, RawMember):
                     owner.tparams.add(_text(n, src))
             elif (n := _first(caps, "alias")) is not None:
+                t = _first(caps, "alias.type")
+                target = spec.alias_target(n, t, _text(t, src)) if t is not None else ""
+                if target is None:
+                    continue   # the declaration names a type, it is no alias of one
                 q = self._qualify(n, _text(n, src), types_by_node, namespaces, scope)
                 if q is not None:
                     scope.aliases.add(q)
-                    if (t := _first(caps, "alias.type")) is not None:
-                        text = _text(t, src)
-                        if n.parent is not None and n.parent.type == "pointer_declarator":
-                            text += "*"   # C++ `typedef Circle* CirclePtr;`
-                        scope.alias_targets[q] = spec.normalize_type(text)
+                    if target:
+                        scope.alias_targets[q] = spec.normalize_type(target)
             elif (n := _first(caps, "annotation")) is not None:
                 target = _first(caps, "annotation.target")
                 if target is None:

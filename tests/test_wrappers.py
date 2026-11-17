@@ -55,3 +55,33 @@ def test_user_wrappers_are_appended(tmp_path):
     cfg.write_text("wrappers:\n  - names: [Bag]\n    arg: 0\n    multiplicity: '*'\n")
     w = Wrappers.load(cfg)
     assert w.leaves(parse_type("Bag<Order>"), lambda n: False) == [Leaf("Order", "*", None)]
+
+
+@pytest.mark.parametrize("text, expected", [
+    # names that mean something of their own, when the project has no class of the name
+    ("Literal['a', 'b']", []),
+    ("Annotated[Item, Field(gt=0)]", [Leaf("Item", "1", None)]),
+    ("Optional[Annotated[Item, 'x']]", [Leaf("Item", "0..1", None)]),
+    ("tuple[P, Q]", [Leaf("P", "1", None), Leaf("Q", "1", None)]),
+    ("tuple[P, ...]", [Leaf("P", "*", None)]),
+    ("Tuple<P, Q>", [Leaf("P", "1", None), Leaf("Q", "1", None)]),
+    ("ValueTuple<P, Q>", [Leaf("P", "1", None), Leaf("Q", "1", None)]),
+    ("std::pair<int, P*>", [Leaf("int", "1", None), Leaf("P", "1", None)]),
+    # a bare Literal is a type of that name (an AST class)
+    ("Literal", [Leaf("Literal", "1", None)]),
+    ("Literal[]", [Leaf("Literal", "*", None)]),
+    # angle brackets: a generic class of that name (Java, TypeScript), not Python's
+    ("Literal<Item>", [Leaf("Literal", "1", None)]),
+])
+def test_special_forms(text, expected):
+    assert leaves(text) == expected
+
+
+@pytest.mark.parametrize("text, name", [
+    ("Literal[Item]", "Literal"), ("Annotated[Item, 'x']", "Annotated"),
+    ("Tuple<P, Q>", "Tuple"), ("tuple[P, Q]", "tuple"), ("ValueTuple<P, Q>", "ValueTuple"),
+    ("std::pair<P, Q>", "std::pair"),
+])
+def test_project_class_shadows_special_form(text, name):
+    """A project class called Tuple (common in Java, which has none) is that class."""
+    assert leaves(text, project={name}) == [Leaf(name, "1", None)]

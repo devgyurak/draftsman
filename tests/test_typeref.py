@@ -42,16 +42,25 @@ def test_parse(text, expected):
     ("std::function<int(Foo)>", Named("std::function", (FunctionType((Named("Foo"),), Named("int")),))),
     # parentheses that only group stay what they group
     ("(A | B)[]", Array(TypeUnion((Named("A"), Named("B"))))),
-    # tuples: TypeScript, C#, Python, C++; a homogeneous tuple[A, ...] stays a container
+    # tuples: TypeScript and C# by syntax; generic names (tuple[A, B], std::tuple) stay names,
+    # the wrappers read them as tuples unless the project defines the class
     ("[Point, Circle]", TypeTuple((Named("Point"), Named("Circle")))),
     ("[a: Point, b?: Circle]", TypeTuple((Named("Point"), Named("Circle")))),
     ("(Person a, Point b)", TypeTuple((Named("Person"), Named("Point")))),
-    ("tuple[P, Q]", TypeTuple((Named("P"), Named("Q")))),
+    ("tuple[P, Q]", Named("tuple", (Named("P"), Named("Q")))),
     ("tuple[P, ...]", Named("tuple", (Named("P"), None))),
-    ("std::tuple<P, B*>", TypeTuple((Named("P"), Pointer(Named("B"), "*")))),
-    # Python: Literal holds values, Annotated's first argument is the type
-    ("Literal['a', 'b']", None),
-    ("Annotated[Item, 'x']", Named("Item")),
+    ("std::tuple<P, B*>", Named("std::tuple", (Named("P"), Pointer(Named("B"), "*")))),
+    # Python: Annotated's metadata is cut as text (any expression); what Literal and
+    # Annotated mean is the wrappers' business
+    ("Literal['a', 'b']", Named("Literal", (None, None))),
+    ("Annotated[Item, 'x']", Named("Annotated", (Named("Item"),))),
+    ("Annotated[Item, Field(gt=0, json_schema_extra={'a': [1]})]", Named("Annotated", (Named("Item"),))),
+    # elsewhere, without a subscript, they are ordinary names
+    ("Literal", Named("Literal")),
+    ("Literal[]", Array(Named("Literal"))),
+    ("Annotated[]", Array(Named("Annotated"))),
+    ("list[typing.Annotated[Item, Depends(get_db), 'x,]']]",
+     Named("list", (Named("typing.Annotated", (Named("Item"),)),))),
     # C#: global:: is the root namespace
     ("global::Acme.Core.Point", Named("Acme.Core.Point")),
     # C/C++ multi-word builtins still join, a following name does not

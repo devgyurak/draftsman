@@ -55,7 +55,10 @@ rule skips local and anonymous types. Crossing a **static scope** node (Kotlin c
 object) makes the member static, unless the node is itself a `@type.*` (a companion with
 supertypes). `LanguageSpec.type_name` names a type whose `@name` capture is not its name
 (`companion` → `Companion`), and `LanguageSpec.member_name` the name a member is listed
-under (Kotlin's primary constructor is `constructor`).
+under (Kotlin's primary constructor is `constructor`). `LanguageSpec.is_import` drops an
+`@import*` capture that does not import (C++ `using` in a class body), and
+`LanguageSpec.alias_target` reads what an `@alias.type` names (C `typedef struct S {…} T;`
+names `S`; None when the declaration is the type itself).
 
 ## Adding a language
 

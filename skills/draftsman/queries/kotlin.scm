@@ -59,9 +59,12 @@
   (function_body)? @body) @member.method
 
 (secondary_constructor (modifiers)? @modifiers "constructor" @name) @member.constructor
-; the primary constructor, when it has parameters: plain ones are only here
+; the primary constructor, when one of its parameters is plain (no val/var): those are
+; only here. One whose parameters are all properties adds nothing the properties do not
 (class_declaration (type_identifier) @name
-  (primary_constructor (modifiers)? @modifiers (class_parameter)) @member.constructor)
+  (primary_constructor (modifiers)? @modifiers
+    [(class_parameter . (simple_identifier))
+     (class_parameter . (modifiers) . (simple_identifier))]) @member.constructor)
 
 (enum_entry (simple_identifier) @name) @member.enum_constant
 

@@ -19,11 +19,31 @@ _DIRECTIVE = re.compile(rb"^[ \t]*#[ \t]*(if|ifdef|ifndef|elif|else|endif)\b.*$"
 
 
 # Qt: `Q_OBJECT`, `Q_PROPERTY(int x READ x)`, `Q_DISABLE_COPY(W)` on a line of their own,
-# and the `signals:` / `public slots:` sections moc reads
+# and the `signals:` / `public slots:` sections moc reads. Only Qt's own macros, and only
+# when nothing but `;` or a comment follows: `Q_FIRST = 1,` is an enum constant
+_QT_MACROS = (rb"OBJECT|GADGET|GADGET_EXPORT|NAMESPACE|NAMESPACE_EXPORT|PROPERTY|PRIVATE_PROPERTY|"
+              rb"ENUM|ENUMS|ENUM_NS|FLAG|FLAGS|FLAG_NS|INTERFACES|CLASSINFO|PLUGIN_METADATA|"
+              rb"MOC_INCLUDE|PRIVATE_SLOT|DISABLE_COPY|DISABLE_MOVE|DISABLE_COPY_MOVE|"
+              rb"DECLARE_PRIVATE|DECLARE_PRIVATE_D|DECLARE_PUBLIC|DECLARE_METATYPE|DECLARE_FLAGS|"
+              rb"DECLARE_OPERATORS_FOR_FLAGS|DECLARE_INTERFACE|DECLARE_TYPEINFO|"
+              rb"DECLARE_SHARED|DECLARE_LOGGING_CATEGORY|LOGGING_CATEGORY")
+# also QT_BEGIN_NAMESPACE / QT_END_NAMESPACE around forward declarations, and the QML
+# registration macros (QML_ELEMENT, QML_NAMED_ELEMENT(Name), ...)
+# qqmlintegration.h
+_QML_MACROS = (rb"ELEMENT|NAMED_ELEMENT|ANONYMOUS|INTERFACE|IMPLEMENTS_INTERFACES|UNCREATABLE|"
+               rb"SINGLETON|FOREIGN|FOREIGN_NAMESPACE|EXTENDED|EXTENDED_NAMESPACE|ATTACHED|"
+               rb"ADDED_IN_VERSION|ADDED_IN_MINOR_VERSION|REMOVED_IN_VERSION|"
+               rb"REMOVED_IN_MINOR_VERSION|SEQUENTIAL_CONTAINER|VALUE_TYPE|CONSTRUCTIBLE_VALUE|"
+               rb"STRUCTURED_VALUE|UNAVAILABLE|EXTRA_VERSION")
 _QT_STATEMENT = re.compile(
-    rb"^([ \t]*)(Q_[A-Z][A-Z0-9_]*)\b([ \t]*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))?[ \t]*;?",
+    rb"^([ \t]*)(?:Q_(?:" + _QT_MACROS + rb")|QT_(?:BEGIN|END)_(?:NAMESPACE|HEADER)"
+    rb"|QT_FORWARD_DECLARE_(?:CLASS|STRUCT)|QML_(?:" + _QML_MACROS + rb"))\b"
+    rb"([ \t]*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))?[ \t]*;?"
+    rb"(?=[ \t]*(?:/\*[^\n]*?\*/[ \t]*)*(?://.*)?$)",   # then only comments
     re.MULTILINE)
-_QT_INLINE = re.compile(rb"\b(Q_INVOKABLE|Q_SIGNAL|Q_SLOT|Q_SCRIPTABLE)\b")
+# around a declaration: `Q_REVISION(1) Q_INVOKABLE void f();`, `void g() Q_DECL_OVERRIDE;`
+_QT_INLINE = re.compile(rb"\b(?:Q_INVOKABLE|Q_SIGNAL|Q_SLOT|Q_SCRIPTABLE|Q_REVISION|Q_DECL_[A-Z0-9_]+)\b"
+                        rb"(?:[ \t]*\([^()\n]*\))?")
 _QT_SECTION = re.compile(rb"^([ \t]*)(?:(public|protected|private)([ \t]+)(?:slots|Q_SLOTS)"
                          rb"|signals|Q_SIGNALS)([ \t]*):", re.MULTILINE)
 
@@ -37,6 +57,11 @@ def _qt_section(m: re.Match) -> bytes:
     # `public slots:` -> `public      :`; `signals:` -> `public :` (signals are public)
     access = m.group(2) or b"public"
     return (m.group(1) + access).ljust(len(m.group(0)) - 1) + b":"
+
+
+def alias_node_declarators(node):
+    """The declarators of a `typedef`, in order."""
+    return [c for i, c in enumerate(node.children) if node.field_name_for_child(i) == "declarator"]
 
 
 def _blank(m: re.Match, group: int) -> bytes:
@@ -94,11 +119,42 @@ class CppSpec(LanguageSpec):
             for line in src.split(b"\n"))
         src = _EXPORT_MACRO.sub(lambda m: _blank(m, 3), src)
         src = _ATTRIBUTE_MACRO.sub(lambda m: _blank(m, 2), src)
-        if b"Q_" in src or b"signals" in src or b"slots" in src:
+        if b"Q_" in src or b"QT_" in src or b"QML_" in src or b"signals" in src or b"slots" in src:
             src = _QT_STATEMENT.sub(lambda m: m.group(1) + _spaces(m.group(0)[len(m.group(1)):]), src)
             src = _QT_INLINE.sub(lambda m: b" " * len(m.group(0)), src)
             src = _QT_SECTION.sub(_qt_section, src)
         return _blank_inline_directives(src)
+
+    def alias_target(self, alias_node, type_node, text):
+        if type_node.child_by_field_name("body") is not None:
+            # `typedef struct Legacy {...} Legacy_t, *LegacyPtr;` names struct Legacy;
+            # `typedef struct {...} Point;` is the struct itself, called Point
+            name = type_node.child_by_field_name("name")
+            if name is None and type_node.type not in ("struct_specifier", "enum_specifier"):
+                return ""   # `typedef union {…} U_t;`: an alias of nothing drawn
+            if name is None:
+                first = next((d for d in alias_node_declarators(type_node.parent)
+                              if d.type == "type_identifier"), None)
+                if first is None or first.id == alias_node.id:
+                    return None
+                name = first
+            text = name.text.decode()
+        parent = alias_node.parent
+        if parent is not None and parent.type == "pointer_declarator":
+            text += "*"   # `typedef Circle* CirclePtr;`
+        elif parent is not None and parent.type == "reference_declarator":
+            text += "&"
+        return text
+
+    def is_import(self, node):
+        # `using Base::Base;` in a class body is a member declaration; at file or namespace
+        # level, also inside `#ifndef GUARD_H`, it imports
+        cur = node.parent
+        while cur is not None:
+            if cur.type == "field_declaration_list":
+                return False
+            cur = cur.parent
+        return True
 
     def declarator(self, node, src):
         suffix, is_function = "", False

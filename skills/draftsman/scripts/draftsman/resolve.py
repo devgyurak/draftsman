@@ -271,6 +271,8 @@ class Resolver:
                 return Resolution(PROJECT, name)
             if name in self.inline_names:
                 return Resolution(PROJECT, self.inline_names[name])
+            if name in self.aliases:   # n::Legacy_t
+                return Resolution(ALIAS, name)
             for ns in chain:  # partially qualified: pay::Receipt inside namespace shop
                 if ns and ns + sep + name in self.index:
                     return Resolution(PROJECT, ns + sep + name)
@@ -650,8 +652,9 @@ class _Builder:
         """A dependency on every project type named in ``ref``, containers seen through."""
         m = rm.member
         values = value_names(ref)   # `typeof setTimeout`: a value, not a missing type
-        for name, arity in named_refs(ref):
-            if self.wrappers.is_wrapper(name) and not self._is_project(rtype, rm)(name):
+        is_project = self._is_project(rtype, rm)
+        for name, arity in named_refs(ref, is_project):
+            if self.wrappers.is_wrapper(name) and not is_project(name):
                 continue
             res = self.resolver.resolve(name, rtype, rm, arity=arity)
             targets = [res.target] if res.status == PROJECT else \
@@ -692,7 +695,7 @@ class _Builder:
                 for target, mult, own in self._expand_alias(res.target, depth + 1)[0]:
                     leaves.append((target, combine(leaf.multiplicity, mult), own or leaf.ownership))
         names: list = []
-        for name, arity in named_refs(ref):
+        for name, arity in named_refs(ref, self._is_project(ctx, None)):
             res = self.resolver.resolve(name, ctx, None, arity=arity)
             if res.status == PROJECT:
                 names.append(res.target)

@@ -799,11 +799,15 @@ def _rels(ir):
 def test_cpp_class_level_using_is_no_import(tmp_path):
     """`using B::B;` inherits constructors; it must not turn every B into B::B."""
     from conftest import extract_source
-    ir = extract_source(tmp_path, {"f.h": (
-        "namespace n {\nclass B { public: B(int); };\n"
-        "class F1 : public B { using B::B; B* other; };\n}\n")})
+    ir = extract_source(tmp_path, {
+        "f.h": ("namespace n {\nclass B { public: B(int); };\n"
+                "class F1 : public B { using B::B; B* other; };\n}\n"),
+        # at file level it imports, also inside an include guard
+        "u.h": ("#ifndef U_H\n#define U_H\nnamespace lib { class Widget {}; }\n"
+                "using lib::Widget;\nclass User { Widget* w; };\n#endif\n")})
     assert {(r.from_, r.kind, r.to) for r in ir.relations} == {
-        ("n::F1", "extends", "n::B"), ("n::F1", "association", "n::B")}
+        ("n::F1", "extends", "n::B"), ("n::F1", "association", "n::B"),
+        ("User", "association", "lib::Widget")}
     assert not ir.unresolved
 
 
@@ -855,13 +859,18 @@ def test_primary_constructors(tmp_path):
                      "class Order(IRepo<Order> repo, Person owner) {}\n"
                      "record Rec(Person P); }"),
         "W.kt": ("package p\nclass P\nclass Item\nclass WithInit(p: P, vararg val items: Item)\n"
-                 "class Hidden private constructor(p: P)\n"),
+                 "class Hidden private constructor(p: P)\n"
+                 "data class Point(val x: Int, val p: P)\n"
+                 "class Injected @Inject constructor(private val p: P)\n"),
     })
     sigs = {t.id: [member_text(m) for m in t.members] for t in ir.types}
     assert sigs["N.Order"] == ["+ Order(repo: IRepo<Order>, owner: Person)"]
     assert sigs["N.Rec"] == ["+ P: Person"]                       # records: properties only
     assert sigs["p.WithInit"] == ["+ constructor(p: P, items: Item...)", "+ items: Item..."]
     assert sigs["p.Hidden"] == ["- constructor(p: P)"]
+    # only properties: the constructor would repeat them
+    assert sigs["p.Point"] == ["+ x: Int", "+ p: P"]
+    assert sigs["p.Injected"] == ["- p: P"]
     r = _rels(ir)
     assert {("Order", "dependency", "IRepo", "Order", None),
             ("Order", "dependency", "Person", "Order", None),
@@ -881,6 +890,12 @@ def test_aliases_are_drawn_through_to_what_they_name(tmp_path):
                     "type Y = X;\nexport class Uses { x?: X; y?: Y; }\n"),
         "cpp/s.h": ("class Circle {};\nclass S {\n  typedef Circle* CirclePtr;\n"
                     "  using Ref = Circle;\n  CirclePtr c;\n  Ref r;\n};\n"),
+        "cpp/l.h": ("namespace n {\ntypedef struct Legacy { int a; } Legacy_t, *LegacyPtr;\n"
+                    "typedef struct { int b; } Anon_t, *AnonPtr;\n}\n"
+                    "class L { n::Legacy_t v; n::LegacyPtr p; n::Anon_t a; n::AnonPtr ap; };\n"
+                    # an anonymous union is no type: an alias with nothing to draw
+                    "typedef union { int i; float f; } U_t, *UPtr;\n"
+                    "class H { U_t u; UPtr p; };\n"),
     })
     r = _rels(ir)
     assert {("Uses", "association", "Point", "p", "1"), ("Uses", "association", "Point", "q", "1"),
@@ -891,6 +906,11 @@ def test_aliases_are_drawn_through_to_what_they_name(tmp_path):
             ("S", "association", "Circle", "c", "1"), ("S", "association", "Circle", "r", "1")} <= r
     own = {(r.via, r.ownership) for r in ir.relations if r.from_ == "S"}
     assert own == {("c", "shared"), ("r", "owned")}
+    # a typedef of a struct definition names the struct; an anonymous one is the struct
+    assert {(r.via, r.to, r.ownership) for r in ir.relations if r.from_ == "L"} == {
+        ("v", "n::Legacy", "owned"), ("p", "n::Legacy", "shared"),
+        ("a", "n::Anon_t", "owned"), ("ap", "n::Anon_t", "shared")}
+    assert by_name(ir, "Anon_t").kind == "struct"
     assert not ir.unresolved
 
 
@@ -928,25 +948,98 @@ def test_python_literal_annotated_and_type_parameters(tmp_path):
     ir = extract_source(tmp_path, {"m.py": (
         "from typing import Annotated, Literal\nclass Item: ...\nclass Order[K]: ...\n"
         "class S:\n    mode: Literal['a', 'b']\n    item: Annotated[Item, 'x']\n"
+        "    gt: Annotated[Item, Field(gt=0, json_schema_extra={'a': [1]})]\n"
+        "    many: list[Annotated[Item, Depends(get_db)]]\n"
         "class New[K: Item, *Ts, **P](Order[K]):\n    k: K\n"
         "    def f[T](self, x: T) -> T: ...\n")})
     assert not ir.unresolved
     r = {(short(r.from_), r.kind, short(r.to), r.via) for r in ir.relations}
-    assert ("S", "association", "Item", "item") in r
+    assert {("S", "association", "Item", "item"), ("S", "association", "Item", "gt"),
+            ("S", "association", "Item", "many")} <= r
     assert ("New", "extends", "Order", None) in r
     assert by_name(ir, "New").generics == ["K", "Ts", "P"]
+
+
+def test_python_literal_values_are_no_types_anywhere(tmp_path):
+    """Literal["Item"] names a value, also in signatures, aliases and container keys,
+    where the dependency path reads the type (Python drops the quotes first)."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "m.py": ("from typing import Literal\nclass Item: ...\nclass Db: ...\n"
+                 "type Mode = Literal['Item', 'Db']\n"
+                 "class A:\n    a: Literal['Item', 'Db']\n    g: Mode\n"
+                 "    def m(self, k: Literal['Item']) -> Literal['ok', 'fail']: ...\n"
+                 "class C:\n    kinds: dict[Literal['Db'], int]\n"),
+        # a project class called Literal is a class: its arguments are types
+        "own/lit.py": ("class Literal: ...\nclass Item: ...\n"
+                       "class B:\n    def m(self, k: Literal['Item']) -> None: ...\n"),
+    })
+    assert {(r.from_, r.kind, r.to, r.via) for r in ir.relations} == {
+        ("own.lit.B", "dependency", "own.lit.Literal", "m"),
+        ("own.lit.B", "dependency", "own.lit.Item", "m")}
+    assert not ir.unresolved
+
+
+def test_project_classes_named_like_special_forms_win(tmp_path):
+    """Tuple, Literal, ...: read as a tuple or as values only when the project has no class
+    of the name (Java has no tuples, so projects write their own Tuple<A, B>)."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "p/Tuple.java": "package p; class Tuple<A, B> {}",
+        "p/P.java": "package p; class P {}",
+        "p/Holder.java": "package p; class Holder { Tuple<P, P> t; Tuple<P, P> f() { return null; } }",
+        "t.ts": "export class Tuple<A, B> {}\nexport class Q {}\nexport class H { t?: Tuple<Q, Q>; }\n",
+        "py/m.py": ("class Literal: ...\nclass Annotated: ...\nclass Item: ...\n"
+                    "class S:\n    l: Literal[Item]\n    a: Annotated[Item, 'x']\n"),
+    })
+    assert {(short(r.from_), r.kind, short(r.to), r.via) for r in ir.relations} == {
+        ("Holder", "association", "Tuple", "t"), ("Holder", "dependency", "P", "t"),
+        ("Holder", "dependency", "Tuple", "f"), ("Holder", "dependency", "P", "f"),
+        ("H", "association", "Tuple", "t"), ("H", "dependency", "Q", "t"),
+        ("S", "association", "Literal", "l"), ("S", "dependency", "Item", "l"),
+        ("S", "association", "Annotated", "a"), ("S", "dependency", "Item", "a")}
+    assert not ir.unresolved
+
+
+def test_literal_and_annotated_are_ordinary_names_elsewhere(tmp_path):
+    """The Python rules need a subscript: a Java or TypeScript class called Literal (an
+    AST node, say) is an ordinary type, also as `Literal[]` or `List<Literal>`."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "p/Literal.java": "package p; class Literal {}",
+        "p/Annotated.java": "package p; class Annotated {}",
+        "p/U.java": ("package p; import java.util.List;\n"
+                     "class U { Literal l; List<Literal> ls; Annotated[] as;\n"
+                     "  Literal f(Annotated a) { return null; } }"),
+        "t.ts": "export class Literal {}\nexport class T { l?: Literal; ls?: Literal[]; }\n",
+    })
+    assert {(r.from_, r.kind, r.to, r.via) for r in ir.relations} == {
+        ("p.U", "association", "p.Literal", "l"), ("p.U", "association", "p.Literal", "ls"),
+        ("p.U", "association", "p.Annotated", "as"), ("p.U", "dependency", "p.Literal", "f"),
+        ("p.U", "dependency", "p.Annotated", "f"),
+        ("t.T", "association", "t.Literal", "l"), ("t.T", "association", "t.Literal", "ls")}
+    assert not ir.unresolved
 
 
 def test_typescript_import_types(tmp_path):
     """`import("rxjs").Observable<P>` is not in the grammar; the field keeps its type and
     the rest of the class is still read."""
     from conftest import extract_source
-    ir = extract_source(tmp_path, {"a.ts": (
-        "export class P {}\n"
-        "export class S { o?: import('rxjs').Observable<P>; p?: P; }\n")})
-    assert not ir.diagnostics
-    assert {(r.via, r.multiplicity) for r in ir.relations} == {("o", "*"), ("p", "1")}
-    assert by_name(ir, "S").generics == []
+    from draftsman.graph import member_text
+    ir = extract_source(tmp_path, {
+        "other.ts": "export class Foo {}\n",
+        "a.ts": ("export class P {}\nexport class Foo {}\n"
+                 "export type T = import('./other').Foo;\n"
+                 "export class S {\n  o?: import('rxjs').Observable<P>;\n  p?: P;\n"
+                 "  f?: import(\"./other\").Foo;\n  t?: T;\n}\n")})
+    assert not ir.diagnostics and not ir.unresolved
+    # from the module named, never the file's own Foo
+    assert {(r.via, r.to, r.multiplicity) for r in ir.relations} == {
+        ("o", "a.P", "*"), ("p", "a.P", "1"), ("f", "other.Foo", "1"), ("t", "other.Foo", "1")}
+    s = by_name(ir, "S")
+    assert s.generics == []
+    assert [(member_text(m), m.line) for m in s.members] == [
+        ("+ o: rxjs.Observable<P>", 5), ("+ p: P", 6), ("+ f: other.Foo", 7), ("+ t: T", 8)]
 
 
 def test_cpp_qt_function_pointers_unions_and_inline_namespaces(tmp_path):
@@ -955,21 +1048,31 @@ def test_cpp_qt_function_pointers_unions_and_inline_namespaces(tmp_path):
     ir = extract_source(tmp_path, {
         "w.h": ("class QObject {};\nclass Model {};\nclass W : public QObject {\n"
                 "  Q_OBJECT\n  Q_PROPERTY(int x\n             READ x)\npublic:\n  Model* model;\n"
-                "  virtual Q_INVOKABLE void load();\npublic slots:\n  void reload();\nsignals:\n"
+                "  virtual Q_INVOKABLE void load();\n  Q_REVISION(2) Q_INVOKABLE void more() Q_DECL_OVERRIDE;\npublic slots:\n  void reload();\nsignals:\n"
                 "  void changed();\nprivate Q_SLOTS:\n  void tick();\n};\n"),
         "m.h": ("namespace acme { inline namespace v1 { class Versioned {}; } }\n"
                 "class Cb {\n  void (*cb)(int);\n  union { int a; float b; };\n"
                 "  acme::Versioned v;\n};\n"
                 "namespace acme { class User { Versioned v; }; }\n"),
+        "q.h": ("QT_BEGIN_NAMESPACE\nclass QLabel;\nQT_END_NAMESPACE\nclass Model {};\n"
+                "class Item : public QObject {\n  Q_OBJECT\n  QML_ELEMENT\n  QML_NAMED_ELEMENT(Thing)\n"
+                "  Q_PROPERTY(int x READ x) /* moc */\npublic:\n  Model* m;\n};\n"),
+        # a forward-declaration header with no other Qt macro
+        "fwd.h": "QT_BEGIN_NAMESPACE\nclass Fwd;\nQT_END_NAMESPACE\nclass Panel { Model* m; };\n",
+        # C code may name constants like Qt's macros
+        "e.h": "enum Flags {\n  Q_FIRST = 1,\n  Q_SECOND,\n  Q_FLAG = 4,\n  QML_LAST\n};\n",
     })
     assert not ir.diagnostics and not ir.unresolved
     sigs = {t.id: [member_text(m) for m in t.members] for t in ir.types}
-    assert sigs["W"] == ["+ model: Model*", "+ load(): void", "+ reload(): void",
+    assert sigs["Item"] == ["+ m: Model*"]
+    assert {("Item", "Model"), ("Panel", "Model")} <= {(r.from_, r.to) for r in ir.relations}
+    assert sigs["W"] == ["+ model: Model*", "+ load(): void", "+ more(): void", "+ reload(): void",
                          "+ changed(): void", "- tick(): void"]
     w = next(t for t in ir.types if t.id == "W")
-    assert [m.line for m in w.members] == [8, 9, 11, 13, 15]       # line numbers kept
+    assert [m.line for m in w.members] == [8, 9, 10, 12, 14, 16]       # line numbers kept
     # a function pointer is a field; anonymous union members are members of the class
     assert sigs["Cb"] == ["- cb: void(int)*", "- a: int", "- b: float", "- v: acme::Versioned"]
+    assert sigs["Flags"] == ["Q_FIRST", "Q_SECOND", "Q_FLAG", "QML_LAST"]   # enum constants, no Qt macros
     r = {(r.from_, r.to) for r in ir.relations}
     assert ("Cb", "acme::v1::Versioned") in r and ("acme::User", "acme::v1::Versioned") in r
 

@@ -50,9 +50,38 @@ _BUILTINS = {
 # blanked it is the `export *` re-export it means for a diagram (same length, so
 # line numbers stay exact)
 _EXPORT_TYPE_STAR = re.compile(rb"\bexport(\s+)type(\s+)\*")
-# `import("rxjs").Observable<P>` (an import type) is not in the grammar either: keep the
-# type name, blank the module part (it then resolves like any other name)
-_IMPORT_TYPE = re.compile(rb"""\bimport\(\s*(['"])[^'"\n]*\1\s*\)\s*\.""")
+# `import("rxjs").Observable<P>` (an import type) is not in the grammar either. The
+# module part becomes a namespace alias of the same length (`rxjs          .Observable`)
+# and `import * as rxjs from "rxjs";` is appended after the last line, so the name
+# resolves from that module and no line moves
+_IMPORT_TYPE = re.compile(rb"""\bimport\(\s*(['"])([^'"\n]*)\1\s*\)\s*\.""")
+_WORD = re.compile(rb"[A-Za-z_$][\w$]*")
+_PADDED_DOT = re.compile(r"(?<=[\w$])\s+\.(?=[A-Za-z_$])")
+
+
+def _import_types(src: bytes) -> bytes:
+    if b"import" not in src or not _IMPORT_TYPE.search(src):
+        return src
+    used = set(_WORD.findall(_IMPORT_TYPE.sub(b"", src)))
+    aliases: dict[bytes, bytes] = {}
+
+    def alias_for(module: bytes, room: int) -> bytes:
+        if module not in aliases:
+            stem = re.sub(rb"\W", b"_", module.rstrip(b"/").rsplit(b"/", 1)[-1].split(b".")[0])
+            alias = stem if stem[:1].isalpha() else b"_" + stem
+            while alias in used or alias in aliases.values():
+                alias += b"_"
+            if len(alias) > room:      # cannot be longer than `import("…")`
+                alias = b"_i%d" % len(aliases)
+            aliases[module] = alias
+        return aliases[module]
+
+    def sub(m: re.Match) -> bytes:
+        alias = alias_for(m.group(2), len(m.group(0)) - 1)
+        return alias.ljust(len(m.group(0)) - 1) + b"."
+
+    src = _IMPORT_TYPE.sub(sub, src)
+    return src + b"".join(b'\nimport * as %s from "%s";' % (a, mod) for mod, a in aliases.items())
 
 _EXT = re.compile(r"\.(d\.)?([cm]?[jt]sx?)$")
 _SOURCE = re.compile(r"\.[cm]?tsx?$")
@@ -84,10 +113,13 @@ class TypeScriptSpec(LanguageSpec):
     import_suffix_match = True
     inherited_member_types = False
 
+    def type_text(self, type_node, text, src):
+        return _PADDED_DOT.sub(".", text)   # `rxjs          .Observable`, see _import_types
+
     def preprocess(self, src):
         src = _EXPORT_TYPE_STAR.sub(lambda m: b"export" + m.group(1) + b"    " + m.group(2) + b"*",
                                     src)
-        return _IMPORT_TYPE.sub(lambda m: b" " * len(m.group(0)), src)
+        return _import_types(src)
 
     def file_namespace(self, rel):
         return _module(rel)

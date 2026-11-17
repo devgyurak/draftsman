@@ -56,7 +56,7 @@ checked), an SVG and an HTML viewer — on a real project, tests and generated c
 | Java | spring-petclinic | 30 | 25 | 73 | 0 | 0 |
 | Java | jsoup | 105 | 230 | 1310 | 2 (`Map.Entry`, with a hint) | 0 |
 | C# | eShopOnWeb `src/` | 209 | 208 | 356 | 199 (198 framework types via `using`) | 0 |
-| Kotlin | nowinandroid | 226 | 237 | 439 | 4 (protobuf-generated) | 0 |
+| Kotlin | nowinandroid | 226 | 237 | 388 | 4 (protobuf-generated) | 0 |
 | TypeScript | nest `packages/` | 730 | 738 | 2304 | 0 | 0 |
 | Python | httpx | 23 | 87 | 283 | 0 | 0 |
 | C++ | leveldb | 102 | 161 | 885 | 2 | 10 spans in 9 files (macro-only headers, `extern "C"` guards, one pointer-to-member field) |

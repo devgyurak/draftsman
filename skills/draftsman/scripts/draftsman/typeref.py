@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 TypeRef = Union["Named", "Array", "Nullable", "Pointer", "TypeUnion", "FunctionType", "TypeTuple"]
 
@@ -33,6 +33,7 @@ class Named:
     name: str
     args: tuple = field(default_factory=tuple)
     value: bool = False   # `typeof x`: names a value, which may or may not be a class
+    subscript: bool = field(default=False, compare=False)   # arguments in `[...]` (Python)
 
 
 @dataclass(frozen=True)
@@ -70,7 +71,8 @@ class TypeTuple:
     items: tuple
 
 
-# generic names that are tuples when given two or more element types
+# generic names that are tuples when given two or more element types (unless the project
+# defines a class of that name: see special_form)
 _TUPLES = frozenset({"tuple", "Tuple", "typing.Tuple", "std::tuple", "std::pair", "ValueTuple",
                      "System.Tuple", "System.ValueTuple"})
 # words that combine into one C/C++ builtin type: `unsigned long long`, `long double`
@@ -238,10 +240,12 @@ class _Parser:
         while name.rsplit(" ", 1)[-1] in _MULTIWORD and (self.peek() or "") in _MULTIWORD:
             name += " " + self.take()
         args: tuple = ()
+        subscript = False   # Python `X[...]`, where Literal and Annotated mean something
         if self.peek() == "<":
             args = self.arg_list(">")
         elif self.peek() == "[" and self.peek(1) != "]":
             args = self.arg_list("]")
+            subscript = True
         if self.peek() == "." and self.peek(1) == "(":   # Kotlin R.(A) -> C
             self.take()
             params, _ = self.param_list()
@@ -250,13 +254,6 @@ class _Parser:
         if self.peek() == "(":   # C++ std::function<R(A)>
             params, _ = self.param_list()
             return FunctionType(params, Named(name, args, value))
-        last = name.rsplit(".", 1)[-1]
-        if last == "Literal":       # Python Literal["a", "b"]: values, no types
-            return None
-        if last == "Annotated":     # Python Annotated[Item, "x"]: the type is the first
-            return args[0] if args else None
-        if name in _TUPLES and len(args) >= 2 and None not in args:   # not tuple[A, ...]
-            return TypeTuple(args)
         if name.rsplit(".", 1)[-1] == "Callable" and len(args) == 2 \
                 and (isinstance(args[0], _ParamList) or args[0] is None):   # Python
             params = args[0].items if isinstance(args[0], _ParamList) else ()
@@ -268,7 +265,7 @@ class _Parser:
             name = name + sep + rest
             if self.peek() == "<":
                 args = self.arg_list(">")
-        return Named(name, args, value)
+        return Named(name, args, value, subscript)
 
     def param_list(self, opener: str = "(", close: str = ")") -> tuple[tuple, bool]:
         """`(A, b: B, ...rest: C[])` -> (types, whether it was a plain `(Type)`)."""
@@ -352,10 +349,56 @@ def _is_ident(tok: str) -> bool:
     return bool(tok) and (tok[0].isalpha() or tok[0] in "_$")
 
 
+_ANNOTATED = re.compile(r"\b(?:[A-Za-z_]\w*\.)*Annotated\s*\[(?!\s*\])")   # not Annotated[]
+
+
+def _strip_annotated(text: str) -> str:
+    """`Annotated[Item, Field(gt=0, json_schema_extra={...})]` -> `Annotated[Item]`. The
+    metadata is any Python expression, so it is cut out as text before tokenizing."""
+    pos = 0
+    while (m := _ANNOTATED.search(text, pos)) is not None:
+        depth, quote, comma, i = 0, None, None, m.end()
+        while i < len(text):
+            c = text[i]
+            if quote:
+                quote = None if c == quote else quote
+            elif c in "\"'":
+                quote = c
+            elif c in "([{":
+                depth += 1
+            elif c in ")]}":
+                if depth == 0:
+                    break
+                depth -= 1
+            elif c == "," and depth == 0 and comma is None:
+                comma = i
+            i += 1
+        else:
+            return text   # unbalanced: leave it to the parser
+        if comma is not None:
+            text = text[:comma] + text[i:]
+        pos = m.end()
+    return text
+
+
+def special_form(ref: Named) -> Optional[str]:
+    """What a name with a meaning of its own stands for, when no project class of that name
+    is meant (the caller checks): "values" for Python `Literal["a"]`, "tuple" for
+    `tuple[A, B]`, `Tuple<A, B>`, `std::pair<A, B>`. (`Annotated[X]` is a wrapper in
+    config/wrappers.yaml once _strip_annotated has cut its metadata.)"""
+    if ref.subscript and ref.name.rsplit(".", 1)[-1] == "Literal":
+        return "values"
+    if ref.name in _TUPLES and len(ref.args) >= 2 and None not in ref.args:   # not tuple[A, ...]
+        return "tuple"
+    return None
+
+
 def parse_type(text: Optional[str]) -> Optional[TypeRef]:
     """Parse a type expression; return ``None`` if it has no usable structure."""
     if not text:
         return None
+    if "Annotated" in text:
+        text = _strip_annotated(text)
     try:
         return _Parser(_tokenize(text)).parse()
     except _ParseError:
@@ -385,14 +428,19 @@ def value_names(ref: Optional[TypeRef]) -> set[str]:
     return values - types
 
 
-def named_refs(ref: Optional[TypeRef]) -> list[tuple[str, int]]:
-    """(name, number of type arguments) of every named type in ``ref``."""
+def named_refs(ref: Optional[TypeRef],
+               is_project: Optional[Callable[[str], bool]] = None) -> list[tuple[str, int]]:
+    """(name, number of type arguments) of every named type in ``ref``. With ``is_project``,
+    the arguments of a `Literal[...]` that is no project class are values and skipped
+    (`Literal["Item"]`, whose quotes Python's normalize_type has already removed)."""
     out: list[tuple[str, int]] = []
 
     def walk(r):
         if isinstance(r, Named):
             if r.name not in NULL_LIKE:
                 out.append((r.name, len(r.args)))
+            if is_project is not None and special_form(r) == "values" and not is_project(r.name):
+                return
             for a in r.args:
                 walk(a)
         elif isinstance(r, (Array, Nullable, Pointer)):

@@ -125,6 +125,15 @@ class LanguageSpec:
         the type node (Kotlin `suspend`, `context(A)`)."""
         return text
 
+    def alias_target(self, alias_node, type_node, text: str) -> Optional[str]:
+        """The type an alias names, given the text of its `@alias.type`; None when the
+        declaration is the type itself rather than an alias."""
+        return text
+
+    def is_import(self, node) -> bool:
+        """Whether an `@import*` capture really imports (C++ `using` in a class does not)."""
+        return True
+
     def member_name(self, kind: str, name: str) -> str:
         """The name a member is listed under (Kotlin calls every constructor `constructor`)."""
         return name

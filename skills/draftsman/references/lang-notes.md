@@ -96,9 +96,10 @@ is that type. Aliases of aliases are followed.
 - Visibility default `public`. Top-level extension functions belong to no class; a member
   extension keeps its receiver (`+ Grammar.unaryPlus()`), and the receiver type is a
   dependency. `vararg` parameters read as `String...`, `suspend` stays in function types.
-- The primary constructor is listed as `constructor(...)` with all its parameters when it
-  has any; its plain parameters are dependencies. A `vararg val` property is
-  `items: Item...` (multiplicity `*`).
+- The primary constructor is listed as `constructor(...)` with all its parameters when one
+  of them is plain (no `val`/`var`), and its parameters are dependencies. When all are
+  properties (`data class Point(val x: Int, val y: Int)`) it is not listed: the properties
+  already say it. A `vararg val` property is `items: Item...` (multiplicity `*`).
 - Properties without a written type (`val state = MutableStateFlow(...)`) have no type:
   the initialiser is not evaluated, so no relation.
 - `expect`/`actual`: the expect class and its actuals are one type, located at the expect
@@ -127,9 +128,10 @@ is that type. Aliases of aliases are followed.
 - `class`, `abstract class`, `interface`, `enum`; `namespace` blocks nest their types
   (`Customer.Address` through declaration merging works). `type X = ...` is an alias.
 - Tuples (`[Point, Circle]`, `[a: Point, b?: Circle]`) relate to each element once.
-  Rest parameters read as `...rest: P[]`. `import("rxjs").Observable<P>` (an import
-  type, not in the grammar) is read as `Observable<P>`: the module part is blanked
-  before parsing, same length.
+  Rest parameters read as `...rest: P[]`. `import("./other").Foo` (an import type, not
+  in the grammar) is read as `other.Foo` from that module, never a `Foo` of the file:
+  before parsing, the module part becomes a namespace alias of the same length and
+  `import * as other from "./other";` is appended after the last line.
 - Ids are module path + name: `src/order/order.Order`; `index.ts` is its directory.
 - Scopes: a `namespace` block sees the module around it (`namespace Order { … Order … }`).
   Members of a merged namespace are not inherited: a subclass of `Base` must write
@@ -193,8 +195,10 @@ is that type. Aliases of aliases are followed.
   never unresolved, and draw nothing (an assignment may be a value). `type X = A | B`
   (PEP 695) is an alias drawn through to `A` and `B`; PEP 695 type parameters
   (`class New[K: Item]`, `def f[T]`) are type parameters. String annotations (`"Order"`)
-  are read as types. `Literal[...]` holds values, no types; `Annotated[X, ...]` is `X`.
-  `tuple[P, Q]` relates to `P` and `Q` once each, `tuple[P, ...]` to many `P`.
+  are read as types. `Literal[...]` holds values, no types; `Annotated[X, ...]` is `X`,
+  whatever the metadata (`Field(gt=0)`, `Depends(get_db)`). `Literal` needs the
+  subscript: a class called `Literal` in another language (`Literal l;`, `Literal[]`) is a
+  type. `tuple[P, Q]` relates to `P` and `Q` once each, `tuple[P, ...]` to many `P`.
   `*args: Item` and `**kw: Status` are parameters.
 - Not handled: `__all__` (a `*` re-export is taken to expose every name the module
   defines), attributes created outside `__init__`, untyped values (no association
@@ -218,19 +222,26 @@ is that type. Aliases of aliases are followed.
   before parsing (same length, so line numbers are exact). Other macros may still cause
   syntax errors; they are reported as diagnostics and only affect nearby declarations.
 - `typedef`/`using X = ...` are aliases, also inside a class (`typedef Circle* CirclePtr;`
-  makes a field of type `CirclePtr` a shared association to `Circle`). `using namespace
-  X;` is a wildcard import, and `using a::B;` imports `B` at file or namespace level; inside
-  a class (`using Base::Base;`, `using Base::f;`) it is a member declaration and imports
-  nothing. Qualified names into namespaces outside the sources (`std::`, `boost::`) are
+  makes a field of type `CirclePtr` a shared association to `Circle`), also with several
+  declarators (`typedef struct Legacy {…} Legacy_t, *LegacyPtr;` names `Legacy`). C's
+  `typedef struct {…} Point;` (an anonymous struct or enum) is a type called `Point`; an
+  anonymous union is no type, so `typedef union {…} U_t;` is an alias with nothing to draw.
+  `using namespace X;` is a wildcard import, and `using a::B;` imports `B` (also inside an
+  include guard); inside a class (`using Base::Base;`, `using Base::f;`) it is a member
+  declaration and imports nothing. Qualified names into namespaces outside the sources (`std::`, `boost::`) are
   external. Types in an `inline namespace` are found with or without it
   (`acme::Versioned` is `acme::v1::Versioned`).
 - Parameters with a default value (`P p = P()`) are parameters. A function-pointer member
   (`void (*cb)(int)`) is a field of type `void(int)*`. Members of an anonymous union or
   struct are members of the enclosing class, as in C++. `std::tuple<P, B*>` and
   `std::pair` relate to each element once.
-- Qt: `Q_OBJECT`, `Q_PROPERTY(...)` and other `Q_...` statements on a line of their own,
-  `Q_INVOKABLE`/`Q_SIGNAL`/`Q_SLOT`, and the `signals:` / `public slots:` sections are
-  blanked or read as access sections before parsing (signals are public).
+- Qt: Qt's statement macros (`Q_OBJECT`, `Q_GADGET`, `Q_PROPERTY(...)`, `Q_ENUM(...)`,
+  `Q_DISABLE_COPY(...)`, `Q_DECLARE_...`, `QT_BEGIN_NAMESPACE`/`QT_END_NAMESPACE`,
+  `QML_ELEMENT`, `QML_NAMED_ELEMENT(...)`, ...) when only a comment follows on their line,
+  the markers around a declaration (`Q_INVOKABLE`, `Q_SIGNAL`, `Q_SLOT`, `Q_REVISION(n)`,
+  `Q_DECL_...`), and the `signals:` / `public slots:` sections are blanked or read as access
+  sections before parsing (signals are public). Other `Q_` names (`Q_FIRST = 1,`) are left
+  alone.
 - Not handled: `#include` graphs (resolution is by name and namespace, not by includes),
   template specialisations as separate types, private/protected inheritance (drawn as
   plain `extends`).

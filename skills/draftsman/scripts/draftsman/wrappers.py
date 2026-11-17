@@ -8,7 +8,8 @@ from typing import Callable, Optional
 
 import yaml
 
-from .typeref import Array, NULL_LIKE, Named, Nullable, Pointer, TypeRef, TypeTuple, TypeUnion
+from .typeref import (NULL_LIKE, Array, Named, Nullable, Pointer, TypeRef, TypeTuple, TypeUnion,
+                      special_form)
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "config" / "wrappers.yaml"
 
@@ -99,7 +100,15 @@ class Wrappers:
             elif isinstance(r, Named):
                 if r.name in NULL_LIKE:
                     return
-                rule = None if is_project(r.name) else self.rule_for(r.name)
+                project = is_project(r.name)   # a project class of the name always wins
+                form = None if project else special_form(r)
+                if form == "values":            # Literal["a", "b"]
+                    return
+                if form == "tuple":             # tuple[P, Q], std::pair<P, Q>: one of each
+                    for item in r.args:
+                        walk(item, mult, own)
+                    return
+                rule = None if project else self.rule_for(r.name)
                 if rule is None:
                     owner = (own or "owned") if track_ownership else None
                     out.append(Leaf(r.name, mult, owner, tuple(r.args), r.value))
