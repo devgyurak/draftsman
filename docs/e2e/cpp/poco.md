@@ -11,7 +11,7 @@ exception classes.
 | Commit | `2ef5cec8a9` (2026-11-17) |
 | Extracted | the whole repository without tests (`testsuite/`, `Data/DataTest`, `CppUnit/`), `samples/`, `fuzzing/`, `Benchmark/` and the bundled third-party code (`dependencies/`, `Data/SQLParser`) |
 
-Measured on 2026-11-17 with Draftsman `d637b4b`.
+Measured on 2026-11-17 with Draftsman `526b88a`.
 
 ## Run
 
@@ -49,16 +49,16 @@ unresolved below.
 `extract.py` prints:
 
 ```text
-draftsman: 2317 files, 2066 types, relations: association 1921, dependency 6989, extends 893, implements 181, 309 unresolved (1 ambiguous, 4 outside the sources, 304 unexplained), 333 diagnostics
+draftsman: 2317 files, 2066 types, relations: association 1920, dependency 6989, extends 893, implements 181, 309 unresolved (1 ambiguous, 4 outside the sources, 304 unexplained), 333 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 2317 | 2066 | 1921 | 6989 | 893 | 181 | 309 (1 ambiguous, 4 outside, 304 unexplained) | 333 |
+| 2317 | 2066 | 1920 | 6989 | 893 | 181 | 309 (1 ambiguous, 4 outside, 304 unexplained) | 333 |
 
 Types by kind: 1374 classes, 273 structs, 2 unions, 74 abstract classes, 65 interfaces, 278 enums.
 
-The Mermaid and SVG renders of the view draw 37 types and 83 relations (`Poco::Logger` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2066 types and 5377 relations and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 37 types and 83 relations (`Poco::Logger` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2066 types and 5376 relations and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
@@ -141,6 +141,6 @@ extracted; what is lost is members near a span. By cause:
   specialisations such as `AbstractEvent<void, TStrategy, ...>` are skipped with what is
   inside them, so no nested type of theirs comes out as a type of `Poco`.
 - Scale: 2066 types in nested namespaces (`Poco::Data::ODBC`, `Poco::Net::Impl`), 440
-  nested types; of 1921 associations, 1494 are `owned` and 427 `shared`. 129 `extends` relations
+  nested types; of 1920 associations, 1494 are `owned` and 426 `shared`. 129 `extends` relations
   reach 13 external classes, 12 of them in `std` (`std::ios` 43, `std::istream` 37,
   `std::ostream` 32) and quill's `Sink`.
