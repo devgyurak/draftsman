@@ -123,6 +123,10 @@ class LanguageSpec:
         the type node (Kotlin `suspend`, `context(A)`)."""
         return text
 
+    def type_name(self, node, name: str) -> str:
+        """The name of a type declaration whose @name capture is not the name itself."""
+        return name
+
     def accepts(self, filename: str) -> bool:
         """Whether a file with one of ``extensions`` is source to extract."""
         return True

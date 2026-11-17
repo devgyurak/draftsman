@@ -328,7 +328,7 @@ class Extractor:
                     entry["skip"] = True
                     return None
                 cur = cur.parent
-            name = _text(name_node, src)
+            name = spec.type_name(node, _text(name_node, src))
             prefix = None
             if sep in name:  # an out-of-class definition such as `struct Table::Rep`
                 written = re.sub(r"<[^<>]*>", "", re.sub(r"<[^<>]*>", "", name)).replace(" ", "")

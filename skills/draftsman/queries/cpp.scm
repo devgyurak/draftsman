@@ -6,7 +6,10 @@
 (namespace_definition name: (_) @namespace.name) @namespace
 
 (using_declaration "namespace" [(identifier) (qualified_identifier)] @import.wildcard)
-(using_declaration . (qualified_identifier) @import)
+; `using a::B;` imports B at file or namespace level; inside a class it is a member
+; declaration (`using Base::Base;` inherits constructors, `using Base::f;` a method)
+(translation_unit (using_declaration . (qualified_identifier) @import))
+(declaration_list (using_declaration . (qualified_identifier) @import))
 
 ; ---------------------------------------------------------------- types
 ; forward declarations (no body) are not types of their own

@@ -109,6 +109,12 @@ class KotlinSpec(LanguageSpec):
             return f"{mods} {text}"
         return text
 
+    def type_name(self, node, name):
+        if node.type == "companion_object":   # `companion object Factory`, else Companion
+            named = [c for c in node.named_children if c.type == "type_identifier"]
+            return named[0].text.decode() if named else "Companion"
+        return name
+
     def accepts(self, filename):
         # Gradle build and settings scripts configure the build; they are not the app
         return not filename.endswith(".gradle.kts")

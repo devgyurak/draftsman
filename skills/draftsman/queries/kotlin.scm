@@ -14,6 +14,9 @@
 (class_declaration (modifiers)? @modifiers "interface" (type_identifier) @name) @type.interface
 (class_declaration (modifiers)? @modifiers "enum" (type_identifier) @name) @type.enum
 (object_declaration (modifiers)? @modifiers (type_identifier) @name) @type.object
+; a companion with supertypes is the object that implements them (`companion object :
+; Parcelable.Creator<A>`), so it is a type, `A.Companion`; one without stays a static scope
+(companion_object (modifiers)? @modifiers "companion" @name (delegation_specifier)) @type.object
 
 (type_parameters (type_parameter (type_identifier) @tparam))
 

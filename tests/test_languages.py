@@ -788,3 +788,37 @@ def test_csharp_inner_type_sees_members_inherited_by_its_outer(tmp_path):
     })
     assert not ir.unresolved
     assert ("Impl", "implements", "IListener") in rels(ir)
+
+
+# ------------------------------------------------------------------ declarations once missed
+
+def _rels(ir):
+    return {(short(r.from_), r.kind, short(r.to), r.via, r.multiplicity) for r in ir.relations}
+
+
+def test_cpp_class_level_using_is_no_import(tmp_path):
+    """`using B::B;` inherits constructors; it must not turn every B into B::B."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {"f.h": (
+        "namespace n {\nclass B { public: B(int); };\n"
+        "class F1 : public B { using B::B; B* other; };\n}\n")})
+    assert {(r.from_, r.kind, r.to) for r in ir.relations} == {
+        ("n::F1", "extends", "n::B"), ("n::F1", "association", "n::B")}
+    assert not ir.unresolved
+
+
+def test_kotlin_companion_with_supertypes_is_its_own_type(tmp_path):
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {"A.kt": (
+        "package p\ninterface Creator<T>\nclass Id\n"
+        "class A {\n  companion object : Creator<A> { fun make(): A = A() }\n}\n"
+        "class B {\n  companion object Factory : Creator<B>\n}\n"
+        "class C {\n  companion object { fun id(): Id = Id() }\n}\n")})
+    kinds = {t.id: t.kind for t in ir.types}
+    assert kinds["p.A.Companion"] == kinds["p.B.Factory"] == "object"
+    assert "p.C.Companion" not in kinds                  # no supertypes: a static scope
+    r = {(r.from_, r.kind, r.to) for r in ir.relations}
+    assert ("p.A.Companion", "implements", "p.Creator") in r
+    assert ("p.B.Factory", "implements", "p.Creator") in r
+    assert not any(f in ("p.A", "p.B") and k == "implements" for f, k, _ in r)
+    assert members(ir, "C")["id"].static
