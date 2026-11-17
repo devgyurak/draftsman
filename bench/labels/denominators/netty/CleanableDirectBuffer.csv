@@ -1,0 +1,33 @@
+direction,source_type,target_type,kind,evidence,file_line,note
+in,io.netty.util.internal.Cleaner,io.netty.util.internal.CleanableDirectBuffer,other,declared,common/src/main/java/io/netty/util/internal/Cleaner.java:31,return type
+in,io.netty.util.internal.PlatformDependent,io.netty.util.internal.CleanableDirectBuffer,other,declared,common/src/main/java/io/netty/util/internal/PlatformDependent.java:622,return type; also anonymous class implementing it at :141
+in,io.netty.util.internal.DirectCleaner,io.netty.util.internal.CleanableDirectBuffer,other,declared,common/src/main/java/io/netty/util/internal/DirectCleaner.java:22,return type
+in,io.netty.util.internal.DirectCleaner.CleanableDirectBufferImpl,io.netty.util.internal.CleanableDirectBuffer,inheritance,declared,common/src/main/java/io/netty/util/internal/DirectCleaner.java:51,implements
+in,io.netty.util.internal.CleanerJava6,io.netty.util.internal.CleanableDirectBuffer,other,declared,common/src/main/java/io/netty/util/internal/CleanerJava6.java:103,return type
+in,io.netty.util.internal.CleanerJava6.CleanableDirectBufferImpl,io.netty.util.internal.CleanableDirectBuffer,inheritance,declared,common/src/main/java/io/netty/util/internal/CleanerJava6.java:154,implements
+in,io.netty.util.internal.CleanerJava9,io.netty.util.internal.CleanableDirectBuffer,other,declared,common/src/main/java/io/netty/util/internal/CleanerJava9.java:85,return type
+in,io.netty.util.internal.CleanerJava9.CleanableDirectBufferImpl,io.netty.util.internal.CleanableDirectBuffer,inheritance,declared,common/src/main/java/io/netty/util/internal/CleanerJava9.java:131,implements
+in,io.netty.util.internal.CleanerJava24Linker,io.netty.util.internal.CleanableDirectBuffer,other,declared,common/src/main/java/io/netty/util/internal/CleanerJava24Linker.java:86,return type
+in,io.netty.util.internal.CleanerJava24Linker.CleanableDirectBufferImpl,io.netty.util.internal.CleanableDirectBuffer,inheritance,declared,common/src/main/java/io/netty/util/internal/CleanerJava24Linker.java:232,implements
+in,io.netty.util.internal.CleanerJava25,io.netty.util.internal.CleanableDirectBuffer,other,declared,common/src/main/java/io/netty/util/internal/CleanerJava25.java:84,return type
+in,io.netty.util.internal.CleanerJava25.CleanableDirectBufferImpl,io.netty.util.internal.CleanableDirectBuffer,inheritance,declared,common/src/main/java/io/netty/util/internal/CleanerJava25.java:124,implements
+in,io.netty.buffer.PoolArena.DirectArena,io.netty.util.internal.CleanableDirectBuffer,other,declared,buffer/src/main/java/io/netty/buffer/PoolArena.java:766,return type
+in,io.netty.buffer.PoolChunk,io.netty.util.internal.CleanableDirectBuffer,other,declared,buffer/src/main/java/io/netty/buffer/PoolChunk.java:153,field
+in,io.netty.buffer.UnpooledDirectByteBuf,io.netty.util.internal.CleanableDirectBuffer,other,declared,buffer/src/main/java/io/netty/buffer/UnpooledDirectByteBuf.java:43,field
+in,io.netty.buffer.UnpooledUnsafeDirectByteBuf,io.netty.util.internal.CleanableDirectBuffer,other,declared,buffer/src/main/java/io/netty/buffer/UnpooledUnsafeDirectByteBuf.java:101,parameter
+in,io.netty.buffer.UnpooledUnsafeNoCleanerDirectByteBuf,io.netty.util.internal.CleanableDirectBuffer,other,declared,buffer/src/main/java/io/netty/buffer/UnpooledUnsafeNoCleanerDirectByteBuf.java:33,return type
+in,io.netty.buffer.UnpooledByteBufAllocator.InstrumentedUnpooledUnsafeNoCleanerDirectByteBuf,io.netty.util.internal.CleanableDirectBuffer,other,declared,buffer/src/main/java/io/netty/buffer/UnpooledByteBufAllocator.java:186,return type of override
+in,io.netty.buffer.UnpooledByteBufAllocator.InstrumentedUnpooledUnsafeDirectByteBuf,io.netty.util.internal.CleanableDirectBuffer,other,declared,buffer/src/main/java/io/netty/buffer/UnpooledByteBufAllocator.java:213,return type of override
+in,io.netty.buffer.UnpooledByteBufAllocator.InstrumentedUnpooledDirectByteBuf,io.netty.util.internal.CleanableDirectBuffer,other,declared,buffer/src/main/java/io/netty/buffer/UnpooledByteBufAllocator.java:242,return type of override
+in,io.netty.buffer.UnpooledByteBufAllocator.DecrementingCleanableDirectBuffer,io.netty.util.internal.CleanableDirectBuffer,inheritance,declared,buffer/src/main/java/io/netty/buffer/UnpooledByteBufAllocator.java:264,implements
+in,io.netty.channel.unix.Buffer,io.netty.util.internal.CleanableDirectBuffer,other,declared,transport-native-unix-common/src/main/java/io/netty/channel/unix/Buffer.java:53,return type
+in,io.netty.channel.unix.IovArray,io.netty.util.internal.CleanableDirectBuffer,other,declared,transport-native-unix-common/src/main/java/io/netty/channel/unix/IovArray.java:69,field
+in,io.netty.channel.epoll.EpollEventArray,io.netty.util.internal.CleanableDirectBuffer,other,declared,transport-classes-epoll/src/main/java/io/netty/channel/epoll/EpollEventArray.java:50,field
+in,io.netty.channel.kqueue.KQueueEventArray,io.netty.util.internal.CleanableDirectBuffer,other,declared,transport-classes-kqueue/src/main/java/io/netty/channel/kqueue/KQueueEventArray.java:47,field
+in,io.netty.channel.kqueue.NativeLongArray,io.netty.util.internal.CleanableDirectBuffer,other,declared,transport-classes-kqueue/src/main/java/io/netty/channel/kqueue/NativeLongArray.java:28,field
+in,io.netty.channel.uring.AbstractIoUringChannel,io.netty.util.internal.CleanableDirectBuffer,other,declared,transport-classes-io_uring/src/main/java/io/netty/channel/uring/AbstractIoUringChannel.java:131,field
+in,io.netty.channel.uring.AbstractIoUringServerChannel.AcceptedAddressMemory,io.netty.util.internal.CleanableDirectBuffer,other,declared,transport-classes-io_uring/src/main/java/io/netty/channel/uring/AbstractIoUringServerChannel.java:40,field
+in,io.netty.channel.uring.IoUringIoHandler,io.netty.util.internal.CleanableDirectBuffer,other,declared,transport-classes-io_uring/src/main/java/io/netty/channel/uring/IoUringIoHandler.java:68,field
+in,io.netty.channel.uring.IoUringSharedIovArray,io.netty.util.internal.CleanableDirectBuffer,other,declared,transport-classes-io_uring/src/main/java/io/netty/channel/uring/IoUringSharedIovArray.java:32,field
+in,io.netty.channel.uring.MsgHdrMemory,io.netty.util.internal.CleanableDirectBuffer,other,declared,transport-classes-io_uring/src/main/java/io/netty/channel/uring/MsgHdrMemory.java:38,field
+in,io.netty.channel.uring.MsgHdrMemoryArray,io.netty.util.internal.CleanableDirectBuffer,other,declared,transport-classes-io_uring/src/main/java/io/netty/channel/uring/MsgHdrMemoryArray.java:30,field

@@ -1,0 +1,5 @@
+direction,source_type,target_type,kind,evidence,file_line,note
+out,org.springframework.samples.petclinic.PetClinicRuntimeHints,org.springframework.samples.petclinic.model.BaseEntity,other,body_only,src/main/java/org/springframework/samples/petclinic/PetClinicRuntimeHints.java:33,class literal
+out,org.springframework.samples.petclinic.PetClinicRuntimeHints,org.springframework.samples.petclinic.model.Person,other,body_only,src/main/java/org/springframework/samples/petclinic/PetClinicRuntimeHints.java:34,class literal
+out,org.springframework.samples.petclinic.PetClinicRuntimeHints,org.springframework.samples.petclinic.vet.Vet,other,body_only,src/main/java/org/springframework/samples/petclinic/PetClinicRuntimeHints.java:35,class literal
+in,org.springframework.samples.petclinic.PetClinicApplication,org.springframework.samples.petclinic.PetClinicRuntimeHints,other,declared,src/main/java/org/springframework/samples/petclinic/PetClinicApplication.java:29,class literal in annotation @ImportRuntimeHints

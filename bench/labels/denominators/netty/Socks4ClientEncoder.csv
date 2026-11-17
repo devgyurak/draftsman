@@ -1,0 +1,11 @@
+direction,source_type,target_type,kind,evidence,file_line,note
+out,io.netty.handler.codec.socksx.v4.Socks4ClientEncoder,io.netty.handler.codec.MessageToByteEncoder,inheritance,declared,codec-socks/src/main/java/io/netty/handler/codec/socksx/v4/Socks4ClientEncoder.java:32,extends MessageToByteEncoder<Socks4CommandRequest>
+out,io.netty.handler.codec.socksx.v4.Socks4ClientEncoder,io.netty.handler.codec.socksx.v4.Socks4CommandRequest,other,declared,codec-socks/src/main/java/io/netty/handler/codec/socksx/v4/Socks4ClientEncoder.java:46,parameter; also generic arg at :32
+out,io.netty.handler.codec.socksx.v4.Socks4ClientEncoder,io.netty.channel.ChannelHandler.Sharable,other,declared,codec-socks/src/main/java/io/netty/handler/codec/socksx/v4/Socks4ClientEncoder.java:31,annotation @Sharable (nested type of ChannelHandler)
+out,io.netty.handler.codec.socksx.v4.Socks4ClientEncoder,io.netty.channel.ChannelHandlerContext,other,declared,codec-socks/src/main/java/io/netty/handler/codec/socksx/v4/Socks4ClientEncoder.java:46,parameter
+out,io.netty.handler.codec.socksx.v4.Socks4ClientEncoder,io.netty.buffer.ByteBuf,other,declared,codec-socks/src/main/java/io/netty/handler/codec/socksx/v4/Socks4ClientEncoder.java:46,parameter
+out,io.netty.handler.codec.socksx.v4.Socks4ClientEncoder,io.netty.buffer.ByteBufUtil,other,body_only,codec-socks/src/main/java/io/netty/handler/codec/socksx/v4/Socks4ClientEncoder.java:49,static call
+out,io.netty.handler.codec.socksx.v4.Socks4ClientEncoder,io.netty.util.NetUtil,other,body_only,codec-socks/src/main/java/io/netty/handler/codec/socksx/v4/Socks4ClientEncoder.java:50,static call
+out,io.netty.handler.codec.socksx.v4.Socks4ClientEncoder,io.netty.util.AsciiString,other,body_only,codec-socks/src/main/java/io/netty/handler/codec/socksx/v4/Socks4ClientEncoder.java:67,static call
+out,io.netty.handler.codec.socksx.v4.Socks4ClientEncoder,io.netty.handler.codec.EncoderException,other,body_only,codec-socks/src/main/java/io/netty/handler/codec/socksx/v4/Socks4ClientEncoder.java:68,new EncoderException
+in,io.netty.handler.proxy.Socks4ProxyHandler,io.netty.handler.codec.socksx.v4.Socks4ClientEncoder,other,body_only,handler-proxy/src/main/java/io/netty/handler/proxy/Socks4ProxyHandler.java:82,static field Socks4ClientEncoder.INSTANCE

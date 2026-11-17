@@ -10,7 +10,9 @@ results/raw/<set>/<run id>.jsonl and its metadata to <run id>.meta.json. Runs wh
 transcript already exists are skipped, so an interrupted set can be resumed.
 
 Authentication is passed through from the environment (ANTHROPIC_API_KEY or
-CLAUDE_CODE_OAUTH_TOKEN); it is never written to disk.
+CLAUDE_CODE_OAUTH_TOKEN), or read from ~/.config/draftsman-bench/oauth-token (a token
+from `claude setup-token`); it reaches the container as an environment variable and is
+never written to the results.
 """
 
 import argparse
@@ -28,6 +30,7 @@ import yaml
 BENCH = Path(__file__).resolve().parent
 IMAGE = 'draftsman-bench'
 AUTH_VARS = ('ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN')
+TOKEN_FILE = Path.home() / '.config' / 'draftsman-bench' / 'oauth-token'
 
 
 def matrix(tasks: dict, focus: dict, which: str) -> list[dict]:
@@ -87,8 +90,11 @@ def main() -> None:
             print(r['id'])
         print(f'{len(runs)} runs; first command:\n' + shlex.join(command(tasks, runs[0])))
         return
+    if not any(os.environ.get(v) for v in AUTH_VARS) and TOKEN_FILE.is_file():
+        os.environ['CLAUDE_CODE_OAUTH_TOKEN'] = TOKEN_FILE.read_text().strip()
     if not any(os.environ.get(v) for v in AUTH_VARS):
-        raise SystemExit(f'no credentials: set one of {", ".join(AUTH_VARS)}')
+        raise SystemExit(f'no credentials: set one of {", ".join(AUTH_VARS)} or write {TOKEN_FILE}')
+    auth = next(v for v in AUTH_VARS if os.environ.get(v))
 
     labels = image_labels()
     out_dir = BENCH / 'results' / 'raw' / args.set
@@ -102,6 +108,7 @@ def main() -> None:
         with open(transcript, 'w') as fh:
             proc = subprocess.run(command(tasks, run), stdout=fh, stderr=subprocess.PIPE, text=True)
         meta = {**run, 'model': tasks['model'], 'effort': tasks['effort'], 'image': labels,
+                'auth': auth,
                 'started': datetime.fromtimestamp(started, timezone.utc).isoformat(),
                 'wall_seconds': round(time.time() - started, 1), 'exit_code': proc.returncode,
                 'timed_out': proc.returncode == 124, 'stderr_tail': proc.stderr[-2000:]}

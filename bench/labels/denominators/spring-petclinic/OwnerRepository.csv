@@ -1,0 +1,5 @@
+direction,source_type,target_type,kind,evidence,file_line,note
+out,org.springframework.samples.petclinic.owner.OwnerRepository,org.springframework.samples.petclinic.owner.Owner,other,declared,src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java:45,return Page<Owner>; also generic arg of JpaRepository at :36
+in,org.springframework.samples.petclinic.owner.OwnerController,org.springframework.samples.petclinic.owner.OwnerRepository,other,declared,src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java:53,field
+in,org.springframework.samples.petclinic.owner.PetController,org.springframework.samples.petclinic.owner.OwnerRepository,other,declared,src/main/java/org/springframework/samples/petclinic/owner/PetController.java:53,field
+in,org.springframework.samples.petclinic.owner.VisitController,org.springframework.samples.petclinic.owner.OwnerRepository,other,declared,src/main/java/org/springframework/samples/petclinic/owner/VisitController.java:45,field

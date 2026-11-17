@@ -1,0 +1,15 @@
+direction,source_type,target_type,kind,evidence,file_line,note
+out,org.jsoup.nodes.NodeInternals,org.jsoup.nodes.Node,other,declared,src/main/java/org/jsoup/nodes/NodeInternals.java:17,parameter
+out,org.jsoup.nodes.NodeInternals,org.jsoup.internal.LineMap,other,declared,src/main/java/org/jsoup/nodes/NodeInternals.java:17,parameter
+out,org.jsoup.nodes.NodeInternals,org.jsoup.nodes.Element,other,declared,src/main/java/org/jsoup/nodes/NodeInternals.java:25,parameter
+out,org.jsoup.nodes.NodeInternals,org.jsoup.nodes.ProcessingInstruction,other,declared,src/main/java/org/jsoup/nodes/NodeInternals.java:41,parameter
+out,org.jsoup.nodes.NodeInternals,org.jsoup.nodes.Attributes,other,declared,src/main/java/org/jsoup/nodes/NodeInternals.java:50,parameter
+out,org.jsoup.nodes.NodeInternals,org.jsoup.nodes.Range.AttributeRange,other,declared,src/main/java/org/jsoup/nodes/NodeInternals.java:68,parameter Range.AttributeRange (nested type)
+out,org.jsoup.nodes.NodeInternals,org.jsoup.nodes.Range.Spans,other,body_only,src/main/java/org/jsoup/nodes/NodeInternals.java:35,local Range.Spans (nested type)
+out,org.jsoup.nodes.NodeInternals,org.jsoup.helper.Validate,other,body_only,src/main/java/org/jsoup/nodes/NodeInternals.java:18,static call
+in,org.jsoup.parser.TreeBuilder,org.jsoup.nodes.NodeInternals,other,body_only,src/main/java/org/jsoup/parser/TreeBuilder.java:396,static call
+in,org.jsoup.parser.HtmlTreeBuilder,org.jsoup.nodes.NodeInternals,other,body_only,src/main/java/org/jsoup/parser/HtmlTreeBuilder.java:597,static call
+in,org.jsoup.parser.XmlTreeBuilder,org.jsoup.nodes.NodeInternals,other,body_only,src/main/java/org/jsoup/parser/XmlTreeBuilder.java:219,static call
+in,org.jsoup.parser.HtmlTreeBuilderState,org.jsoup.nodes.NodeInternals,other,body_only,src/main/java/org/jsoup/parser/HtmlTreeBuilderState.java:1726,static call in enum static method mergeAttributes
+in,org.jsoup.parser.Token.Tag,org.jsoup.nodes.NodeInternals,other,body_only,src/main/java/org/jsoup/parser/Token.java:250,static call (nested type Token.Tag)
+in,org.jsoup.safety.Cleaner,org.jsoup.nodes.NodeInternals,other,body_only,src/main/java/org/jsoup/safety/Cleaner.java:208,static call

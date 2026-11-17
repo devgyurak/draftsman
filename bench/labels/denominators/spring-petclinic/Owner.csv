@@ -1,0 +1,8 @@
+direction,source_type,target_type,kind,evidence,file_line,note
+out,org.springframework.samples.petclinic.owner.Owner,org.springframework.samples.petclinic.model.Person,inheritance,declared,src/main/java/org/springframework/samples/petclinic/owner/Owner.java:50,
+out,org.springframework.samples.petclinic.owner.Owner,org.springframework.samples.petclinic.owner.Pet,other,declared,src/main/java/org/springframework/samples/petclinic/owner/Owner.java:70,field List<Pet>
+out,org.springframework.samples.petclinic.owner.Owner,org.springframework.samples.petclinic.owner.Visit,other,declared,src/main/java/org/springframework/samples/petclinic/owner/Owner.java:176,parameter of addVisit
+in,org.springframework.samples.petclinic.owner.OwnerController,org.springframework.samples.petclinic.owner.Owner,other,declared,src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java:65,return type
+in,org.springframework.samples.petclinic.owner.OwnerRepository,org.springframework.samples.petclinic.owner.Owner,other,declared,src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java:45,return Page<Owner>; also generic arg of JpaRepository at :36
+in,org.springframework.samples.petclinic.owner.PetController,org.springframework.samples.petclinic.owner.Owner,other,declared,src/main/java/org/springframework/samples/petclinic/owner/PetController.java:68,return type
+in,org.springframework.samples.petclinic.owner.VisitController,org.springframework.samples.petclinic.owner.Owner,other,declared,src/main/java/org/springframework/samples/petclinic/owner/VisitController.java:98,parameter

@@ -1,0 +1,9 @@
+direction,source_type,target_type,kind,evidence,file_line,note
+out,io.netty.handler.stream.ChunkedStream,io.netty.handler.stream.ChunkedInput,inheritance,declared,handler/src/main/java/io/netty/handler/stream/ChunkedStream.java:36,implements ChunkedInput<ByteBuf>
+out,io.netty.handler.stream.ChunkedStream,io.netty.buffer.ByteBuf,other,declared,handler/src/main/java/io/netty/handler/stream/ChunkedStream.java:103,return type; also generic arg at :36
+out,io.netty.handler.stream.ChunkedStream,io.netty.channel.ChannelHandlerContext,other,declared,handler/src/main/java/io/netty/handler/stream/ChunkedStream.java:103,parameter
+out,io.netty.handler.stream.ChunkedStream,io.netty.buffer.ByteBufAllocator,other,declared,handler/src/main/java/io/netty/handler/stream/ChunkedStream.java:108,parameter
+out,io.netty.handler.stream.ChunkedStream,io.netty.util.internal.ObjectUtil,other,body_only,handler/src/main/java/io/netty/handler/stream/ChunkedStream.java:59,static call
+in,io.netty.handler.stream.ChunkedFile,io.netty.handler.stream.ChunkedStream,other,body_only,handler/src/main/java/io/netty/handler/stream/ChunkedFile.java:47,static constant ChunkedStream.DEFAULT_CHUNK_SIZE
+in,io.netty.handler.stream.ChunkedNioFile,io.netty.handler.stream.ChunkedStream,other,body_only,handler/src/main/java/io/netty/handler/stream/ChunkedNioFile.java:68,static constant ChunkedStream.DEFAULT_CHUNK_SIZE
+in,io.netty.handler.stream.ChunkedNioStream,io.netty.handler.stream.ChunkedStream,other,body_only,handler/src/main/java/io/netty/handler/stream/ChunkedNioStream.java:49,static constant ChunkedStream.DEFAULT_CHUNK_SIZE

@@ -1,0 +1,13 @@
+direction,source_type,target_type,kind,evidence,file_line,note
+out,org.jsoup.safety.Safelist,org.jsoup.safety.Safelist.TagName,other,declared,src/main/java/org/jsoup/safety/Safelist.java:76,own nested type; field Set<TagName>
+out,org.jsoup.safety.Safelist,org.jsoup.safety.Safelist.AttributeKey,other,declared,src/main/java/org/jsoup/safety/Safelist.java:77,"own nested type; field Map<TagName, Set<AttributeKey>>"
+out,org.jsoup.safety.Safelist,org.jsoup.safety.Safelist.AttributeValue,other,declared,src/main/java/org/jsoup/safety/Safelist.java:78,own nested type; field
+out,org.jsoup.safety.Safelist,org.jsoup.safety.Safelist.Protocol,other,declared,src/main/java/org/jsoup/safety/Safelist.java:79,own nested type; field
+out,org.jsoup.safety.Safelist,org.jsoup.nodes.Element,other,declared,src/main/java/org/jsoup/safety/Safelist.java:530,parameter
+out,org.jsoup.safety.Safelist,org.jsoup.nodes.Attribute,other,declared,src/main/java/org/jsoup/safety/Safelist.java:530,parameter
+out,org.jsoup.safety.Safelist,org.jsoup.nodes.Attributes,other,declared,src/main/java/org/jsoup/safety/Safelist.java:615,return type
+out,org.jsoup.safety.Safelist,org.jsoup.helper.Validate,other,body_only,src/main/java/org/jsoup/safety/Safelist.java:255,static call
+out,org.jsoup.safety.Safelist,org.jsoup.internal.Normalizer,other,body_only,src/main/java/org/jsoup/safety/Safelist.java:259,static call; also static import lowerCase used at :573
+out,org.jsoup.safety.Safelist,org.jsoup.internal.StringUtil,other,body_only,src/main/java/org/jsoup/safety/Safelist.java:556,static call
+in,org.jsoup.Jsoup,org.jsoup.safety.Safelist,other,declared,src/main/java/org/jsoup/Jsoup.java:346,parameter
+in,org.jsoup.safety.Cleaner,org.jsoup.safety.Safelist,other,declared,src/main/java/org/jsoup/safety/Cleaner.java:44,field

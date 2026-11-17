@@ -73,3 +73,7 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
     3–7 / 7–13 / 13–80; the lower bound is what changes them.
   - Labels: *indirect* added (indirect inheritance and uses through an inherited member,
     outside the headline); empty recall denominators are *n/a*.
+- 2026-11-17, before the pilot — recall denominators drafted from the source (no Draftsman
+  output) for the nine focus classes and spring-petclinic, awaiting human review; the
+  rubric records eight cases the draft showed to be undecided (qualified nested names,
+  uses that never name the type, and others).

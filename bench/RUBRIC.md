@@ -75,6 +75,19 @@ Boundary cases, decided in advance:
 | A generic argument (`List<Pet> pets`) | declared |
 | A nested type (`Owner.Builder`) | its own type, not its outer class |
 
+Decided while writing the recall denominators, before any output was seen:
+
+| Case | Rule |
+|---|---|
+| A qualified nested name (`Connection.Request` in `CookieUtil`) | a relation to the nested type. An edge drawn to the outer type instead (`CookieUtil → Connection`) is supported by it, and matches the nested row when recall is scored, because many diagrams do not draw nested types |
+| A use that never names the type (a call on a field of that type, a nested class using its outer class's field) | not in the denominators; a drawn edge resting on it is labelled *body only* in review, not *unsupported* |
+| Anonymous classes and enum-constant bodies | belong to the enclosing named type |
+| A class literal in an annotation argument | declared |
+| A generic argument in a supertype clause (`implements ChunkedInput<ByteBuf>`) | declared, kind *other*: an edge drawn as inheritance to `ByteBuf` is wrong kind |
+| A focus class naming its own nested type | a relation, in the denominator |
+| An override whose signature names the type | declared, not indirect |
+| "Classes" in T1 | every type: classes, interfaces, enums, records |
+
 Every label carries the `file:line` it rests on (none for unsupported).
 
 ## Labelling procedure

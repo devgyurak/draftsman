@@ -1,0 +1,13 @@
+direction,source_type,target_type,kind,evidence,file_line,note
+out,org.jsoup.Connection,org.jsoup.Connection.Method,other,declared,src/main/java/org/jsoup/Connection.java:192,own nested type; parameter
+out,org.jsoup.Connection,org.jsoup.Connection.KeyVal,other,declared,src/main/java/org/jsoup/Connection.java:267,own nested type; parameter Collection<KeyVal>
+out,org.jsoup.Connection,org.jsoup.Connection.Response,other,declared,src/main/java/org/jsoup/Connection.java:486,own nested type; return type
+out,org.jsoup.Connection,org.jsoup.Connection.Request,other,declared,src/main/java/org/jsoup/Connection.java:492,own nested type; return type
+out,org.jsoup.Connection,org.jsoup.parser.Parser,other,declared,src/main/java/org/jsoup/Connection.java:388,parameter
+out,org.jsoup.Connection,org.jsoup.helper.RequestAuthenticator,other,declared,src/main/java/org/jsoup/Connection.java:451,parameter
+out,org.jsoup.Connection,org.jsoup.nodes.Document,other,declared,src/main/java/org/jsoup/Connection.java:464,return type
+out,org.jsoup.Connection,org.jsoup.Progress,other,declared,src/main/java/org/jsoup/Connection.java:523,parameter Progress<Response>
+in,org.jsoup.helper.HttpConnection,org.jsoup.Connection,inheritance,declared,src/main/java/org/jsoup/helper/HttpConnection.java:60,implements Connection
+in,org.jsoup.Jsoup,org.jsoup.Connection,other,declared,src/main/java/org/jsoup/Jsoup.java:94,return type
+in,org.jsoup.nodes.Document,org.jsoup.Connection,other,declared,src/main/java/org/jsoup/nodes/Document.java:27,field
+in,org.jsoup.nodes.FormElement,org.jsoup.Connection,other,declared,src/main/java/org/jsoup/nodes/FormElement.java:100,return type
