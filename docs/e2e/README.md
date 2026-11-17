@@ -21,7 +21,7 @@ project.
 | Python | [httpx](python/httpx.md) | `7cff5f79bc` (2026-11-16) | 23 | 87 | 283 | 0 | 0 |
 | Python | [Django](python/django.md) | `d3954c9813` (2026-11-16) | 879 | 1964 | 1853 | 0 | 0 |
 | C++ | [leveldb](cpp/leveldb.md) | `29465588d3` (2026-11-12) | 102 | 161 | 885 | 2 (2 unexplained) | 9 |
-| C++ | [POCO](cpp/poco.md) | `2ef5cec8a9` (2026-11-17) | 2317 | 2065 | 9978 | 326 (1 ambiguous, 7 outside, 318 unexplained) | 346 |
+| C++ | [POCO](cpp/poco.md) | `2ef5cec8a9` (2026-11-17) | 2317 | 2066 | 9984 | 309 (1 ambiguous, 4 outside, 304 unexplained) | 333 |
 
 Unresolved references are split by reason as `extract.py` prints them: ambiguous, outside
 (the sources), unexplained; see [`ir-schema.md`](../../skills/draftsman/references/ir-schema.md#unresolved).

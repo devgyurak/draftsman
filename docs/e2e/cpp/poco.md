@@ -11,7 +11,7 @@ exception classes.
 | Commit | `2ef5cec8a9` (2026-11-17) |
 | Extracted | the whole repository without tests (`testsuite/`, `Data/DataTest`, `CppUnit/`), `samples/`, `fuzzing/`, `Benchmark/` and the bundled third-party code (`dependencies/`, `Data/SQLParser`) |
 
-Measured on 2026-11-17 with Draftsman `c6746b9`.
+Measured on 2026-11-17 with Draftsman `d637b4b`.
 
 ## Run
 
@@ -49,27 +49,27 @@ unresolved below.
 `extract.py` prints:
 
 ```text
-draftsman: 2317 files, 2065 types, relations: association 1920, dependency 6984, extends 893, implements 181, 326 unresolved (1 ambiguous, 7 outside the sources, 318 unexplained), 346 diagnostics
+draftsman: 2317 files, 2066 types, relations: association 1921, dependency 6989, extends 893, implements 181, 309 unresolved (1 ambiguous, 4 outside the sources, 304 unexplained), 333 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 2317 | 2065 | 1920 | 6984 | 893 | 181 | 326 (1 ambiguous, 7 outside, 318 unexplained) | 346 |
+| 2317 | 2066 | 1921 | 6989 | 893 | 181 | 309 (1 ambiguous, 4 outside, 304 unexplained) | 333 |
 
-Types by kind: 1374 classes, 274 structs, 74 abstract classes, 65 interfaces, 278 enums.
+Types by kind: 1374 classes, 273 structs, 2 unions, 74 abstract classes, 65 interfaces, 278 enums.
 
-The Mermaid and SVG renders of the view draw 37 types and 83 relations (`Poco::Logger` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2065 types and 5372 relations and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 37 types and 83 relations (`Poco::Logger` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2066 types and 5377 relations and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
-326 references to 168 names. C++ has no wildcard import that could explain a name outside
+309 references to 157 names. C++ has no wildcard import that could explain a name outside
 the sources, so most are unexplained; the groups below cover all of them.
 
-Outside the sources (265):
+Outside the sources (267):
 
 - Platform APIs, from system headers: Windows (71: `HANDLE` 17, `DWORD` 14,
-  `SecurityFunctionTableW`, `CredHandle`, `HKEY`, ...) and POSIX and other systems (53:
-  `sockaddr` 9, `pthread_mutex_t`, `timeval`, `sem_t`, `epoll_event`, `pid_t`; VxWorks'
+  `SecurityFunctionTableW`, `CredHandle`, `HKEY`, ...) and POSIX and other systems (55:
+  `sockaddr` 9, `pthread_mutex_t`, `timeval`, `sem_t`, `semid_ds`, `epoll_event`, `pid_t`; VxWorks'
   `SEM_ID` and `MODULE_ID`, HP-UX's `shl_t`, Solaris' `fp_except`).
 - Libraries the connectors and wrappers bind to: ODBC (36: `SQLINTEGER`, `SQLSMALLINT`,
   `SQLHDBC`, ...), OpenSSL (35: `EVP_PKEY` 9, `X509`, `SSL_CTX`, `BIO`), DNS-SD and Avahi
@@ -91,24 +91,7 @@ macros that mention it, the file named after it first: *mentioned by
 POCO_DECLARE_EXCEPTION(...) at XML/include/Poco/XML/XMLException.h:28, ...; one of them may
 declare it*.
 
-Gaps of Draftsman (20):
-
-- Names that depend on a template parameter or a library alias (6):
-  `typename ActRec::Ptr` and `typename MapType::iterator` (members of template
-  parameters), `NamespaceManager::NamespaceMap::const_iterator` 2 and
-  `SerializerGenerator::VarGet::const_iterator` (`const_iterator` of a member alias of a
-  `std` container; the hint says the class has no such nested type), and `TStrategy` in a
-  struct inside the partial specialisation `AbstractEvent<void, TStrategy, ...>`, which is
-  not read as a type.
-- Expressions read as types (7): `std::aligned_storage<sizeof(T), alignof(T)>` in
-  `MPSCQueue` gives `sizeof` and `alignof`; `poco_static_assert(offsetof(Header, code) ==
-  0x01);` in the body of `ICMPv4PacketImpl` is read as a declaration and gives
-  `poco_static_assert`, `code`, `checksum`, `id` and `seq`.
-- `Placeholder` (6, 3 of them outside): `Poco::Placeholder` is a `union`, and named unions
-  are no types; the hint lists `Poco::Util::Units::Units::Prefix::Placeholder`, a project
-  type of the same name out of scope.
-- `XMLStreamSerializer` (1): only forward-declared in `ValueTraits.h`; POCO does not define
-  it.
+Never defined (1): `XMLStreamSerializer`, only forward-declared in `ValueTraits.h`.
 
 1 ambiguous: `Parser::SQLParserResult` in `Poco::Data::Statement`, from the excluded
 `Data/SQLParser`; the three project classes called `Parser` are listed as candidates and
@@ -116,11 +99,11 @@ none is picked.
 
 ## Parse diagnostics
 
-346 syntax-error spans in 124 files (139 of them in 53 headers). Declarations inside a span
+333 syntax-error spans in 121 files (128 of them in 51 headers). Declarations inside a span
 may be missing; the rest of the file is read. Every class declared in a header is
 extracted; what is lost is members near a span. By cause:
 
-- Conditional compilation (100): each `#if` is read with its first branch, so an
+- Conditional compilation (94): each `#if` is read with its first branch, so an
   `if (...) {` in one branch and its `else` in another (`IPAddress.cpp` 21, `DNS.cpp`), a
   `#if __has_include(...)` (`Platform.h`, `SocketDefs.h`), or an `#if` inside an expression
   (`NetSSL_Win/src/Context.cpp`) breaks the code around it.
@@ -133,8 +116,8 @@ extracted; what is lost is members near a span. By cause:
   `VarHolder.h`.
 - Windows calling conventions and casts (14): `typedef DWORD (WINAPI *Entry)(LPVOID);`,
   `(CONST BYTE*) value` in `WinRegistryKey.cpp`.
-- 88 others, mostly one or two each: `sizeof(struct in6_addr)` in an enum initialiser,
-  `new T*[n]`, `typename X::y(...)` calls, `.operator bool()` calls, a `throw` in a
+- 81 others, mostly one or two each: `poco_static_assert (offsetof(...) == 2);` in a
+  class body (read as no member), `new T*[n]`, `typename X::y(...)` calls, `.operator bool()` calls, a `throw` in a
   conditional expression, `operator ++ ();` statements, Apache's `AP_MODULE_DECLARE_DATA`,
   OpenSSL's `STACK_OF(...)`, a leading macro after `static`
   (`static POCO_TUPLE_TYPE_HANDLER_INLINE void tupleBind(...)`), `class P = C*` defaults in
@@ -153,7 +136,11 @@ extracted; what is lost is members near a span. By cause:
   `POCO_NODISCARD_CTOR`), blanked so the classes around them parse.
 - Inherited member aliases (`using CharacterMap = int[256];` in `TextEncoding`, used by its
   subclasses) and base class names in derived classes (`CodeGenerator::Properties`).
-- Scale: 2065 types in nested namespaces (`Poco::Data::ODBC`, `Poco::Net::Impl`), 438
-  nested types; of 1920 associations, 1493 are `owned` and 427 `shared`. 129 `extends` relations
+- Templates: `template <typename PlaceholderT, unsigned int SizeV = ...> union Placeholder` (a
+  named union, kind `union`, with its nested `Size` and `Allocation`); partial
+  specialisations such as `AbstractEvent<void, TStrategy, ...>` are skipped with what is
+  inside them, so no nested type of theirs comes out as a type of `Poco`.
+- Scale: 2066 types in nested namespaces (`Poco::Data::ODBC`, `Poco::Net::Impl`), 440
+  nested types; of 1921 associations, 1494 are `owned` and 427 `shared`. 129 `extends` relations
   reach 13 external classes, 12 of them in `std` (`std::ios` 43, `std::istream` 37,
   `std::ostream` 32) and quill's `Sink`.
