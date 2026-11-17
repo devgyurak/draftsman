@@ -51,15 +51,15 @@
 
 | 언어 | 프로젝트 | 파일 | 타입 | 관계 | 미해결 | 파싱 진단 |
 |---|---|---:|---:|---:|---:|---:|
-| Java | spring-petclinic | 30 | 25 | 73 | 0 | 0 |
-| Java | jsoup | 105 | 230 | 1310 | 2 (`Map.Entry`, 힌트 포함) | 0 |
-| C# | eShopOnWeb `src/` | 209 | 208 | 356 | 199 (그중 198은 `using`으로 들어온 프레임워크 타입) | 0 |
-| Kotlin | nowinandroid | 226 | 237 | 388 | 4 (protobuf 생성 코드) | 0 |
-| TypeScript | nest `packages/` | 730 | 738 | 2304 | 0 | 0 |
-| Python | httpx | 23 | 87 | 283 | 0 | 0 |
-| C++ | leveldb | 102 | 161 | 885 | 2 | 9개 파일에 10구간 (매크로만 있는 헤더, `extern "C"` 가드, 멤버 함수 포인터 필드 하나) |
+| Java | [spring-petclinic](docs/e2e/java/spring-petclinic.md) | 30 | 25 | 73 | 0 | 0 |
+| Java | [jsoup](docs/e2e/java/jsoup.md) | 105 | 230 | 1310 | 2 (`Map.Entry`, 힌트 포함) | 0 |
+| C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 356 | 199 (`using`으로 들어온 라이브러리 타입 195, `.razor` 파일의 Blazor 컴포넌트 4) | 0 |
+| Kotlin | [nowinandroid](docs/e2e/kotlin/nowinandroid.md) | 226 | 237 | 388 | 4 (protobuf 생성 코드) | 0 |
+| TypeScript | [nest](docs/e2e/typescript/nest.md) `packages/` | 730 | 738 | 2304 | 0 | 0 |
+| Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 | 0 | 0 |
+| C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 | 2 | 9개 파일에 10구간 (5구간은 함수 본문; 매크로, `extern "C"`, 멤버 함수 포인터 필드 하나) |
 
-행마다 측정한 커밋과 추출 명령은 [`docs/measurements.md`](docs/measurements.md)에 있습니다. 언어별로 알려진 한계는 [`lang-notes.md`](skills/draftsman/references/lang-notes.md)에 있습니다.
+프로젝트마다 [`docs/e2e/`](docs/e2e/README.md) 아래에 고정한 커밋, 실행 명령, 미해결 이름과 진단 하나하나의 원인을 적은 문서가 있습니다. 언어별로 알려진 한계는 [`lang-notes.md`](skills/draftsman/references/lang-notes.md)에 있습니다.
 
 ## 설치
 
@@ -177,7 +177,7 @@ skills/draftsman/references/    스키마와 언어 노트, 필요할 때만 읽
 commands/                       /draftsman 슬래시 커맨드(Claude Code)
 assets/                         플러그인 아이콘. 로고 원본과 가이드는 assets/logo/
 tests/                          pytest. 여섯 언어 모두 같은 shop fixture
-docs/                           설계 노트, README 이미지
+docs/                           설계 노트, 엔드투엔드 실행 기록(docs/e2e/), README 이미지
 ```
 
 ## 문서
@@ -190,14 +190,16 @@ docs/                           설계 노트, README 이미지
 | [`lang-notes.md`](skills/draftsman/references/lang-notes.md) | 언어별 동작과 알려진 한계 |
 | [`query-protocol.md`](skills/draftsman/references/query-protocol.md) | 언어 쿼리가 쓰는 캡처 이름, 언어 추가하기 |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 설계 노트: 배경, 원칙, 아키텍처, 로드맵 |
+| [`docs/e2e/`](docs/e2e/README.md) | 측정한 프로젝트마다 한 페이지: 고정 커밋, 실행 명령, 결과, 미해결 이름과 진단의 원인 |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | 환경 설정, 변경할 위치, 테스트와 재측정, 언어 추가 (영문) |
 | [`CHANGELOG.md`](CHANGELOG.md) | 기존 `ir.json`/`view.json`에 영향을 주는 변경 |
 | [`assets/logo/GUIDELINES.md`](assets/logo/GUIDELINES.md) | 로고 파일, 색, 여백, 최소 크기 |
 
 ## 기여
 
-이슈와 PR을 환영합니다. 특히 새 언어 쿼리요. `uv run pytest`가 통과해야 합니다. 새 언어에는 `shop` fixture와,
-이름 해석 규칙마다 그 규칙으로만 생기는 관계 하나(`tests/test_languages.py`의 `SCOPE_RULES`)가 함께 있어야 합니다.
-리졸버를 고칠 때도 그 규칙을 모든 언어에 대해 거기에 추가합니다. 기여물은 이 프로젝트의 라이선스로 받습니다.
+이슈와 PR을 환영합니다. 실제 프로젝트에서 나온 버그 리포트라면 더 좋습니다.
+[`CONTRIBUTING.md`](CONTRIBUTING.md)(영문)에 관계를 지어내지 않는다는 원칙, 변경할 위치, 수정을 테스트하는 방법,
+[엔드투엔드 프로젝트](docs/e2e/README.md)를 다시 돌려야 하는 경우가 정리되어 있습니다.
 
 ## 라이선스
 

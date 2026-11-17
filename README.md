@@ -53,16 +53,17 @@ checked), an SVG and an HTML viewer — on a real project, tests and generated c
 
 | Language | Project | Files | Types | Relations | Unresolved | Parse diagnostics |
 |---|---|---:|---:|---:|---:|---:|
-| Java | spring-petclinic | 30 | 25 | 73 | 0 | 0 |
-| Java | jsoup | 105 | 230 | 1310 | 2 (`Map.Entry`, with a hint) | 0 |
-| C# | eShopOnWeb `src/` | 209 | 208 | 356 | 199 (198 framework types via `using`) | 0 |
-| Kotlin | nowinandroid | 226 | 237 | 388 | 4 (protobuf-generated) | 0 |
-| TypeScript | nest `packages/` | 730 | 738 | 2304 | 0 | 0 |
-| Python | httpx | 23 | 87 | 283 | 0 | 0 |
-| C++ | leveldb | 102 | 161 | 885 | 2 | 10 spans in 9 files (macro-only headers, `extern "C"` guards, one pointer-to-member field) |
+| Java | [spring-petclinic](docs/e2e/java/spring-petclinic.md) | 30 | 25 | 73 | 0 | 0 |
+| Java | [jsoup](docs/e2e/java/jsoup.md) | 105 | 230 | 1310 | 2 (`Map.Entry`, with a hint) | 0 |
+| C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 356 | 199 (195 library types via `using`, 4 Blazor components in `.razor` files) | 0 |
+| Kotlin | [nowinandroid](docs/e2e/kotlin/nowinandroid.md) | 226 | 237 | 388 | 4 (protobuf-generated) | 0 |
+| TypeScript | [nest](docs/e2e/typescript/nest.md) `packages/` | 730 | 738 | 2304 | 0 | 0 |
+| Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 | 0 | 0 |
+| C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 | 2 | 10 spans in 9 files (5 in function bodies; macros, `extern "C"`, a pointer-to-member field) |
 
-The commit and the exact command behind each row are in
-[`docs/measurements.md`](docs/measurements.md). Known gaps per language are listed in
+Each project has a page under [`docs/e2e/`](docs/e2e/README.md) with the pinned commit,
+the exact commands, and what every unresolved name and diagnostic is. Known gaps per
+language are listed in
 [`lang-notes.md`](skills/draftsman/references/lang-notes.md).
 
 ## Install
@@ -184,7 +185,7 @@ skills/draftsman/references/    schemas and language notes, loaded on demand
 commands/                       the /draftsman slash command (Claude Code)
 assets/                         plugin icon; logo masters and guidelines in assets/logo/
 tests/                          pytest suite; the same shop fixture in all six languages
-docs/                           design notes, README images
+docs/                           design notes, end-to-end runs (docs/e2e/), README images
 ```
 
 ## Documentation
@@ -197,15 +198,16 @@ docs/                           design notes, README images
 | [`lang-notes.md`](skills/draftsman/references/lang-notes.md) | Per-language behaviour and known gaps |
 | [`query-protocol.md`](skills/draftsman/references/query-protocol.md) | The capture names a language query uses; adding a language |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | Design notes (Korean): background, principles, architecture, roadmap |
+| [`docs/e2e/`](docs/e2e/README.md) | One page per measured project: pinned commit, commands, results, every unresolved name and diagnostic explained |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Setup, where a change goes, tests and re-measuring, adding a language |
 | [`CHANGELOG.md`](CHANGELOG.md) | Changes that affect existing `ir.json`/`view.json` files |
 | [`assets/logo/GUIDELINES.md`](assets/logo/GUIDELINES.md) | Logo files, colours, clear space, minimum sizes |
 
 ## Contributing
 
-Issues and pull requests are welcome — new language queries especially. `uv run pytest` must
-pass. A new language comes with its `shop` fixture and a witness for every name-resolution
-rule (`SCOPE_RULES` in `tests/test_languages.py`); a resolver change adds its rule there for
-every language. Contributions are accepted under the project's license.
+Issues and pull requests are welcome — bug reports from real projects most of all. Read
+[`CONTRIBUTING.md`](CONTRIBUTING.md) first: the never-invent rule, where a change goes, how
+fixes are tested, and when to re-run the [end-to-end projects](docs/e2e/README.md).
 
 ## License
 
