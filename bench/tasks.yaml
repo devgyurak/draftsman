@@ -15,7 +15,7 @@ repos:
     url: https://github.com/jhy/jsoup
     commit: d90d57521d931db7bf7ee464a4c0a1a9293db088   # 2026-11-04
     roots: [src/main]
-    exclude: []
+    exclude: ['**/org/jsoup/examples/**']   # examples, as for Netty
   netty:
     url: https://github.com/netty/netty
     commit: e3cab70052e59cfa66622beeba54c95631e3435c   # 2026-11-16
@@ -28,8 +28,11 @@ selection:
   kinds: [class, interface, record]   # top-level public, file name = type name
   unique_simple_name: true            # the name is declared once in production sources
   metric: uses + used_by              # see select_focus.py
-  min: 3
-  max: 40                             # hub classes above this are out of scope
+  # [min, max] of the metric; hub classes above max are out of scope. Most classes are
+  # small, so the lower bound is what moves the strata: [3, 40] gave Netty 3-7 / 7-12 / 12-40.
+  bounds:
+    default: [8, 80]
+    spring-petclinic: [3, 40]         # its largest class counts 7
   strata: 3                           # low / middle / high third of the bounded pool
   seed: 20261117
   pilot_seed: 20261118                # pilot classes: same pool, never a measured class
@@ -42,7 +45,7 @@ tasks:
     prompt: >-
       Draw a Mermaid classDiagram of the classes in this repository and the relations
       between them, using production sources only (ignore tests). Do not ask questions.
-      Answer with a single mermaid block, at most 40 classes.
+      Answer with a single mermaid block, at most 80 classes.
   T2:
     repos: [spring-petclinic, jsoup, netty]
     classes_per_repo: 3
@@ -51,12 +54,18 @@ tasks:
       Draw a Mermaid classDiagram of `{name}` ({fqn}) and the classes directly related
       to it in either direction (types it uses and types that use it), using production
       sources only (ignore tests). Do not ask questions. Answer with a single mermaid
-      block, at most 40 classes.
+      block, at most 80 classes.
 
 arms:
   A: {name: baseline, plugins: []}
   B: {name: draftsman, plugins: [draftsman]}         # --plugin-dir <this repository>
-  C: {name: night-market class-diagram, plugins: [night-market]}   # after reviewing its hooks and scripts
+  C:
+    name: night-market class-diagram
+    plugins: [night-market]           # after reviewing its hooks and scripts
+    source: https://github.com/athola/claude-night-market
+    commit: null                      # pinned when the plugin is reviewed
+    plugin: null                      # the plugin name that holds class-diagram
+# Each run also records the Draftsman commit it ran with (arm B) and the Claude Code version.
 
 run:
   container: true                 # repositories copied into the container, not bind-mounted
@@ -71,4 +80,7 @@ run:
     - --no-session-persistence
     - --permission-mode=bypassPermissions
   max_budget_usd: null            # set after the pilot; a run that hits it is a failed run
+  timeout_minutes: 30             # wall clock; a run that hits it is a failed run
+  user: non-root                  # bypassPermissions is refused as root; checked in the pilot
+  # unverified until the pilot: whether --setting-sources accepts an empty value
   auth: null                      # decided in the pilot: API key (recommended) or subscription token

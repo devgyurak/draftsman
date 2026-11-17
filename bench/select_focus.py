@@ -1,13 +1,14 @@
 """Choose the T2 focus classes from grep counts, without Draftsman.
 
 For every top-level public class, interface or record of a repository's production
-sources (file name = type name, simple name declared once):
+sources (file name = type name, simple name declared once, and no production file
+imports another type of that simple name from elsewhere):
 
   uses     distinct other project type names that appear in its file
   used_by  other production files that mention its simple name
 
 Comments and string literals are blanked first. The metric is uses + used_by. Classes
-outside [min, max] are dropped; the rest are ranked and cut into equal strata, and one
+outside the repository's bounds are dropped; the rest are ranked and cut into equal strata, and one
 class per stratum is drawn with the fixed seed. Pilot classes are drawn from the same
 pool with the pilot seed, never a measured class.
 
@@ -34,6 +35,7 @@ _NOISE = re.compile(r'/\*.*?\*/|//[^\n]*|"""(?:.|\n)*?"""|"(?:\\.|[^"\\\n])*"|\'
 _DECL = re.compile(r'\b(?:class|interface|enum|record|@interface)\s+([A-Z]\w*)')
 _MODIFIERS = r'(?:(?:abstract|final|sealed|non-sealed|static|strictfp)\s+)*'
 _IDENT = re.compile(r'\b[A-Z]\w*\b')
+_IMPORT = re.compile(r'^\s*import\s+(?:static\s+)?([\w.]+)\s*;', re.M)
 
 
 def blank(text: str) -> str:
@@ -60,6 +62,11 @@ def production_files(checkout: Path, roots: list[str], exclude: list[str]) -> di
 
 def candidates(files: dict[str, str], kinds: list[str], unique: bool) -> list[dict]:
     declared = Counter(name for text in files.values() for name in _DECL.findall(text))
+    # simple name -> fully qualified names the production sources import it as
+    imported: dict[str, set[str]] = {}
+    for text in files.values():
+        for fqn in _IMPORT.findall(text):
+            imported.setdefault(fqn.rsplit('.', 1)[-1], set()).add(fqn)
     project = set(declared)
     words = {rel: set(_IDENT.findall(text)) for rel, text in files.items()}
     kind_alt = '|'.join(kinds)
@@ -70,9 +77,14 @@ def candidates(files: dict[str, str], kinds: list[str], unique: bool) -> list[di
         if not top or (unique and declared[name] != 1):
             continue
         package = re.search(r'^\s*package\s+([\w.]+)\s*;', text, re.M)
+        fqn = f'{package.group(1)}.{name}' if package else name
+        # a name the sources also import from elsewhere (java.util.function.BooleanSupplier)
+        # would be counted by its look-alike
+        if imported.get(name, set()) - {fqn}:
+            continue
         uses = len((words[rel] & project) - {name})
         used_by = sum(1 for other, ws in words.items() if other != rel and name in ws)
-        rows.append({'name': name, 'fqn': f'{package.group(1)}.{name}' if package else name,
+        rows.append({'name': name, 'fqn': fqn,
                      'kind': top.group(1), 'file': rel, 'uses': uses, 'used_by': used_by,
                      'metric': uses + used_by})
     return sorted(rows, key=lambda r: (r['metric'], r['fqn']))
@@ -97,7 +109,7 @@ def main() -> None:
 
     tasks = yaml.safe_load((BENCH / 'tasks.yaml').read_text())
     sel = tasks['selection']
-    out = {'rule': {k: sel[k] for k in ('kinds', 'unique_simple_name', 'metric', 'min', 'max',
+    out = {'rule': {k: sel[k] for k in ('kinds', 'unique_simple_name', 'metric', 'bounds',
                                          'strata', 'seed', 'pilot_seed')},
            'measured': {}, 'pilot': {}}
     (BENCH / 'results' / 'candidates').mkdir(parents=True, exist_ok=True)
@@ -110,14 +122,15 @@ def main() -> None:
             w = csv.DictWriter(fh, fieldnames=list(rows[0]))
             w.writeheader()
             w.writerows(rows)
-        pool = [r for r in rows if sel['min'] <= r['metric'] <= sel['max']]
+        low, high = sel['bounds'].get(repo, sel['bounds']['default'])
+        pool = [r for r in rows if low <= r['metric'] <= high]
         measured = draw(pool, sel['strata'], sel['seed'])
         out['measured'][repo] = measured
         if repo in sel['pilot_repos']:
             rest = [r for r in pool if r['fqn'] not in {m['fqn'] for m in measured}]
             out['pilot'][repo] = [dict(random.Random(sel['pilot_seed']).choice(rest))]
         print(f'{repo}: {len(files)} files, {len(rows)} candidates, {len(pool)} in '
-              f'[{sel["min"]}, {sel["max"]}] -> ' + ', '.join(
+              f'[{low}, {high}] -> ' + ', '.join(
                   f'{m["name"]} ({m["stratum"]}, {m["metric"]})' for m in measured)
               + (f' | pilot {out["pilot"][repo][0]["name"]}' if repo in out['pilot'] else ''))
 

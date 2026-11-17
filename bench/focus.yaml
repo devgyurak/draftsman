@@ -6,8 +6,13 @@ rule:
   - record
   unique_simple_name: true
   metric: uses + used_by
-  min: 3
-  max: 40
+  bounds:
+    default:
+    - 8
+    - 80
+    spring-petclinic:
+    - 3
+    - 40
   strata: 3
   seed: 20261117
   pilot_seed: 20261118
@@ -38,54 +43,54 @@ measured:
     metric: 7
     stratum: high
   jsoup:
-  - name: LineMap
-    fqn: org.jsoup.internal.LineMap
+  - name: Safelist
+    fqn: org.jsoup.safety.Safelist
     kind: class
-    file: src/main/java/org/jsoup/internal/LineMap.java
-    uses: 0
-    used_by: 4
-    metric: 4
+    file: src/main/java/org/jsoup/safety/Safelist.java
+    uses: 11
+    used_by: 2
+    metric: 13
     stratum: low
-  - name: HtmlToPlainText
-    fqn: org.jsoup.examples.HtmlToPlainText
+  - name: NodeInternals
+    fqn: org.jsoup.nodes.NodeInternals
     kind: class
-    file: src/main/java/org/jsoup/examples/HtmlToPlainText.java
-    uses: 11
-    used_by: 0
-    metric: 11
+    file: src/main/java/org/jsoup/nodes/NodeInternals.java
+    uses: 9
+    used_by: 6
+    metric: 15
     stratum: middle
-  - name: Selector
-    fqn: org.jsoup.select.Selector
-    kind: class
-    file: src/main/java/org/jsoup/select/Selector.java
-    uses: 11
-    used_by: 10
+  - name: Connection
+    fqn: org.jsoup.Connection
+    kind: interface
+    file: src/main/java/org/jsoup/Connection.java
+    uses: 10
+    used_by: 11
     metric: 21
     stratum: high
   netty:
-  - name: BooleanSupplier
-    fqn: io.netty.util.BooleanSupplier
-    kind: interface
-    file: common/src/main/java/io/netty/util/BooleanSupplier.java
-    uses: 0
-    used_by: 3
-    metric: 3
-    stratum: low
-  - name: Http2UnknownFrame
-    fqn: io.netty.handler.codec.http2.Http2UnknownFrame
-    kind: interface
-    file: codec-http2/src/main/java/io/netty/handler/codec/http2/Http2UnknownFrame.java
-    uses: 5
-    used_by: 2
-    metric: 7
-    stratum: middle
-  - name: Http2OutboundFrameLogger
-    fqn: io.netty.handler.codec.http2.Http2OutboundFrameLogger
+  - name: ChunkedStream
+    fqn: io.netty.handler.stream.ChunkedStream
     kind: class
-    file: codec-http2/src/main/java/io/netty/handler/codec/http2/Http2OutboundFrameLogger.java
-    uses: 12
+    file: handler/src/main/java/io/netty/handler/stream/ChunkedStream.java
+    uses: 5
     used_by: 3
-    metric: 15
+    metric: 8
+    stratum: low
+  - name: Socks4ClientEncoder
+    fqn: io.netty.handler.codec.socksx.v4.Socks4ClientEncoder
+    kind: class
+    file: codec-socks/src/main/java/io/netty/handler/codec/socksx/v4/Socks4ClientEncoder.java
+    uses: 10
+    used_by: 1
+    metric: 11
+    stratum: middle
+  - name: CleanableDirectBuffer
+    fqn: io.netty.util.internal.CleanableDirectBuffer
+    kind: interface
+    file: common/src/main/java/io/netty/util/internal/CleanableDirectBuffer.java
+    uses: 0
+    used_by: 24
+    metric: 24
     stratum: high
 pilot:
   spring-petclinic:
@@ -97,10 +102,10 @@ pilot:
     used_by: 3
     metric: 4
   netty:
-  - name: PreferredDirectByteBufAllocator
-    fqn: io.netty.channel.unix.PreferredDirectByteBufAllocator
+  - name: SocketUtils
+    fqn: io.netty.util.internal.SocketUtils
     kind: class
-    file: transport-native-unix-common/src/main/java/io/netty/channel/unix/PreferredDirectByteBufAllocator.java
+    file: common/src/main/java/io/netty/util/internal/SocketUtils.java
     uses: 4
-    used_by: 3
-    metric: 7
+    used_by: 21
+    metric: 25

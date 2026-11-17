@@ -47,27 +47,31 @@ Every run is expected to answer with one Mermaid `classDiagram` block.
 Each distinct edge gets the **first** label that applies, checked in this order:
 
 1. **Unsupported** — the source has no relation between the two types in either
-   direction: no supertype, field, signature, generic argument, annotation or method-body
-   use of one type in the other's declaration.
-2. **Wrong kind or direction** — a relation exists, but the edge contradicts it:
+   direction, neither directly nor through a third type: no supertype, field, signature,
+   generic argument, annotation or method-body use of one type in the other's
+   declaration, and none through their supertypes.
+2. **Indirect** — the relation exists only through a third type: indirect inheritance
+   drawn as direct (`A → B → C`, drawn `A → C`), or a use through an inherited member
+   (A uses B only through a field of its superclass).
+3. **Wrong kind or direction** — a direct relation exists, but the edge contradicts it:
    - drawn as inheritance where there is none, or not as inheritance where there is one;
    - drawn in the reverse direction of every relation that exists.
 
    Association versus dependency (a field drawn as `..>`, a parameter drawn as `-->`) is
    **not** an error: the distinction is not judged.
-3. **Body only** — the only evidence is inside method bodies or initialisers: local
+4. **Body only** — the only evidence is inside method bodies or initialisers: local
    variables, `new`, static calls, casts, `instanceof`, `catch`, lambdas.
-4. **Declared** — the evidence is in a declaration: supertype clause, field type,
+5. **Declared** — the evidence is in a declaration: supertype clause, field type,
    parameter, return or `throws` type, generic argument, annotation.
 
 Boundary cases, decided in advance:
 
 | Case | Label |
 |---|---|
-| Indirect inheritance drawn as direct (`A → B → C`, drawn `A → C`) | wrong kind or direction |
+| Indirect inheritance drawn as direct | indirect |
+| A use through an inherited member | indirect |
 | A name that appears only in comments, Javadoc (`{@link}`, `@see`) or an unused import | not a relation; if there is no other evidence, unsupported |
 | A generic argument (`List<Pet> pets`) | declared |
-| A relation through an inherited member (A uses B only through a field of its superclass) | unsupported for A → B; the superclass has the relation |
 | A nested type (`Owner.Builder`) | its own type, not its outer class |
 
 Every label carries the `file:line` it rests on (none for unsupported).
@@ -81,7 +85,7 @@ Every label carries the `file:line` it rests on (none for unsupported).
 3. `check_citations.py` checks every *declared* and *body only* label: the cited line must
    contain the other type's simple name, inside the cited type's file. A label that fails
    goes to human review.
-4. **Human review**: every *unsupported* and *wrong kind or direction* label, every label
+4. **Human review**: every *unsupported*, *indirect* and *wrong kind or direction* label, every label
    that failed step 3, and a random 20% of the rest (fixed seed). `review.csv` lists, per
    edge, the production files in which both simple names appear (grep), so an empty list
    confirms *unsupported* at once.
@@ -91,13 +95,17 @@ Every label carries the `file:line` it rests on (none for unsupported).
 T2 compares **edges incident to the focus class**; all edges are a secondary figure.
 
 - **Unsupported (headline)**: count and share of incident edges labelled unsupported.
-- **Wrong kind or direction**: count and share, reported separately, never added to the
-  headline.
+- **Indirect** and **wrong kind or direction**: count and share each, reported separately,
+  never added to the headline.
 - **Classes that do not exist**: count per diagram.
 - **Recall**, split into **outgoing** (types the focus uses) and **incoming** (types that
   use the focus), each against two denominators:
   - declared relations;
   - declared plus body-only relations.
+
+  A direction whose denominator is empty (a focus class that uses no project type, or
+  that no project type uses) has no recall: it is reported as *n/a*, left out of the
+  averages, and the number of such cases is given.
 
 ### Recall denominators
 
