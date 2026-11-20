@@ -46,7 +46,7 @@ the agent only decides what to show, and a renderer draws it.
 flowchart LR
     S[Source code] --> E["extract.py<br/>tree-sitter"]
     E --> IR[("ir.json<br/>facts")]
-    IR --> A["Agent<br/>surveys with summary.py"]
+    IR --> A["Agent<br/>chooses the scope"]
     A --> V[("view.json<br/>scope · hidden · groups · notes")]
     IR --> R[render.py]
     V --> R
@@ -59,10 +59,12 @@ It surveys the facts, then writes `view.json` — which class to centre on, how 
 what to hide, how to group, what to point out. `render.py` merges the two and refuses any
 relation that is not in `ir.json`, unless the view marks it as inferred with a reason.
 
-A request goes through the same steps every time: extract, survey, choose the scope
-(everything up to ~30 types, otherwise a focus class and its neighbours), write the view,
-render, validate Mermaid, and answer with the diagram, the scope it chose, and the
-unresolved references.
+In the common case one command, `draw.py`, runs every step: extract, scope (everything up
+to ~30 types, otherwise a focus class and its neighbours), render, validate Mermaid. It
+prints the diagram with a report of what the scope covers, what one more hop would add and
+what could not be resolved; the agent checks its choice of scope against it, draws again
+if it is wrong, and answers with the diagram, the scope and the unresolved references.
+Groups, notes and highlights go in a view passed to the same command.
 
 ## Install
 
@@ -84,7 +86,7 @@ codex plugin add draftsman@draftsman
 
 Or run `/plugins` inside Codex and pick *Draftsman*.
 
-**The skill alone** — without the plugin's `/draftsman` command:
+**The skill alone**, without the plugin:
 
 | Agent | Install |
 |---|---|
@@ -116,6 +118,7 @@ Or call it directly:
 
 ```text
 /draftsman [ClassName | path] [mermaid|svg|html] [members|public|no-members]   # Claude Code
+/draftsman:draftsman OrderService html   # the same, in full (needed if another /draftsman exists)
 $draftsman:draftsman                # Codex (plugin); $draftsman for a skill-only install
 ```
 
@@ -147,6 +150,8 @@ view for one render.
 
 ```bash
 cd skills/draftsman
+python3 scripts/draw.py path/to/src --focus Order --hops 1   # all of the below in one step
+python3 scripts/draw.py /tmp/draftsman-…/ir.json --view view.json --format svg -o d.svg
 python3 scripts/extract.py path/to/src -o ir.json --exclude '**/test/**'   # *.gradle.kts are skipped
 python3 scripts/summary.py ir.json                  # sizes, hubs, unresolved references
 python3 scripts/summary.py ir.json --type Order     # one type in detail
@@ -213,14 +218,13 @@ skills/draftsman/
 ├── SKILL.md            workflow, hard rules, how scope and output are chosen
 ├── agents/openai.yaml  Codex display name and default prompt
 ├── queries/            one tree-sitter query per language: what to capture
-├── scripts/            extract.py · summary.py · render.py · validate.sh · layout.mjs
+├── scripts/            draw.py · extract.py · summary.py · render.py · validate.sh · layout.mjs
 │   └── draftsman/      the library: extractor, resolver, scene, renderers, langs/
 ├── assets/             draw.js (shared by SVG and the viewer) · viewer.html
 ├── config/             wrappers.yaml: containers to see through (List<T> → T, *)
 └── references/         schemas and language notes, loaded on demand
 .claude-plugin/         Claude Code plugin and marketplace manifests
 .codex-plugin/ · .agents/   Codex plugin manifest and marketplace
-commands/               the /draftsman slash command (Claude Code)
 ```
 
 | Document | What is in it |
@@ -228,6 +232,7 @@ commands/               the /draftsman slash command (Claude Code)
 | [`SKILL.md`](skills/draftsman/SKILL.md) | The agent's workflow, hard rules, and how it picks scope and output |
 | [`ir-schema.md`](skills/draftsman/references/ir-schema.md) | Every field of `ir.json` and how each relation is derived |
 | [`view-schema.md`](skills/draftsman/references/view-schema.md) | Every key of `view.json`, the three outputs, an example |
+| [`setup.md`](skills/draftsman/references/setup.md) | Dependencies: pip, the uv fallback, sandboxes, Node for SVG and the Mermaid check |
 | [`lang-notes.md`](skills/draftsman/references/lang-notes.md) | Per-language behaviour and known gaps |
 | [`query-protocol.md`](skills/draftsman/references/query-protocol.md) | The capture names a language query uses; adding a language |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | Design notes (Korean): background, principles, architecture, roadmap |

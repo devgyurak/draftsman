@@ -14,14 +14,15 @@ import argparse
 import fnmatch
 import os
 import sys
-from collections import Counter
 from pathlib import Path
 
 from draftsman.extractor import Extractor
 from draftsman.langs import LANGUAGES, spec_for_path
 from draftsman.langs.base import SKIP_DIRS
+from draftsman.model import IR
 from draftsman.resolve import build_ir
 from draftsman.wrappers import Wrappers
+from summary import counts
 
 
 def excluded(rel: str, patterns: list[str]) -> bool:
@@ -61,44 +62,36 @@ def main(argv: list[str] | None = None) -> int:
                     help="extra wrapper rules appended to config/wrappers.yaml")
     args = ap.parse_args(argv)
 
-    root = args.path.resolve()
-    if not root.exists():
+    if not args.path.exists():
         ap.error(f"{args.path} does not exist")
     langs = set(args.lang or LANGUAGES)
-    files = discover(root, langs, args.exclude)
-    if not files:
+    ir = extract(args.path, langs, args.exclude, args.wrappers)
+    if ir is None:
         print(f"no source files for {', '.join(sorted(langs))} under {args.path}",
               file=sys.stderr)
         return 1
-
-    src_root = root if root.is_dir() else root.parent
-    extractors = {}
-    raw_files = []
-    for path, rel in files:
-        spec = spec_for_path(path.name)
-        ex = extractors.setdefault(spec.name, Extractor(spec))
-        raw_files.append(ex.extract(path, rel, src_root))
-
-    ir = build_ir(str(args.path), raw_files, Wrappers.load(*args.wrappers))
     text = ir.dump(args.output)
     if args.output is None:
         sys.stdout.write(text)
-
-    counts = {}
-    for r in ir.relations:
-        counts[r.kind] = counts.get(r.kind, 0) + 1
-    rel_summary = ", ".join(f"{k} {v}" for k, v in sorted(counts.items())) or "none"
-    reasons = Counter(u.reason for u in ir.unresolved)
-    split = ", ".join(f"{reasons[r]} {label}" for r, label in (
-        ("ambiguous", "ambiguous"), ("outside", "outside the sources"),
-        ("unexplained", "unexplained")) if reasons[r])
-    print(
-        f"draftsman: {ir.files} files, {len(ir.types)} types, relations: {rel_summary}, "
-        f"{len(ir.unresolved)} unresolved{f' ({split})' if split else ''}, "
-        f"{len(ir.diagnostics)} diagnostics",
-        file=sys.stderr,
-    )
+    print(f"draftsman: {counts(ir)}", file=sys.stderr)
     return 0
+
+
+def extract(path: Path, langs: set[str], excludes: list[str],
+            wrappers: list[Path] = ()) -> IR | None:
+    """The IR of the sources under ``path``; None when there are none."""
+    root = path.resolve()
+    files = discover(root, langs, excludes)
+    if not files:
+        return None
+    src_root = root if root.is_dir() else root.parent
+    extractors = {}
+    raw_files = []
+    for file, rel in files:
+        spec = spec_for_path(file.name)
+        ex = extractors.setdefault(spec.name, Extractor(spec))
+        raw_files.append(ex.extract(file, rel, src_root))
+    return build_ir(str(path), raw_files, Wrappers.load(*wrappers))
 
 
 if __name__ == "__main__":

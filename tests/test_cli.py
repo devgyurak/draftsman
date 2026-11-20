@@ -118,3 +118,104 @@ def test_members_flag_overrides_view(tmp_path):
     # same classes and relations either way
     arrows = lambda out: sorted(l for l in out.splitlines() if "--" in l or ".." in l)
     assert arrows(full.stdout) == arrows(bare.stdout)
+
+
+def test_summary_focus_prints_overview_and_type(tmp_path):
+    ir = tmp_path / "ir.json"
+    run("extract.py", SHOP, "-o", ir)
+    out = run("summary.py", ir, "--focus", "PaymentGateway").stdout
+    assert out.startswith("root: ") and "most connected" in out
+    assert "in  implements  com.shop.pay.StripeGateway" in out
+    assert run("summary.py", ir, "--focus", "Nope").returncode == 1
+
+
+def test_draw_focus_in_one_step(tmp_path):
+    res = run("draw.py", SHOP, "--focus", "OrderService", "--hops", "1",
+              "--members", "public", "--work", tmp_path)
+    assert res.returncode == 0, res.stderr
+    assert res.stdout.startswith("classDiagram") and "+place(" in res.stdout
+    err = res.stderr
+    assert "draftsman: repository: 11 files, 16 types" in err
+    assert "draftsman: excluded: **/test/**, **/tests/**" in err
+    assert "draftsman: scope: focus com.shop.order.OrderService, 1 hop" in err
+    assert "draftsman: drawn: 7 types, 13 relations, 0 inferred" in err
+    assert "draftsman: one more hop adds 3 types: BaseEntity, StripeGateway, Product" in err
+    assert "Coupon" in err   # the unresolved reference of a drawn type
+    assert (tmp_path / "ir.json").is_file()
+    assert (tmp_path / "diagram.mmd").read_text() == res.stdout
+    # the diagram is the one render.py draws from the same view
+    view = tmp_path / "view.json"
+    view.write_text(json.dumps({"focus": "OrderService", "hops": 1, "members": "public"}))
+    assert run("render.py", tmp_path / "ir.json", view).stdout == res.stdout
+
+
+def test_draw_again_from_ir_json_with_a_view(tmp_path):
+    run("extract.py", SHOP, "-o", tmp_path / "ir.json")
+    view = tmp_path / "view.json"
+    view.write_text(json.dumps({"focus": "Order", "hops": 2, "members": "none",
+                                "notes": [{"target": "Order", "text": "aggregate root"}]}))
+    # flags override the view's keys; --hide adds to its hidden list
+    res = run("draw.py", tmp_path / "ir.json", "--view", view, "--hops", "1",
+              "--hide", "Customer")
+    assert res.returncode == 0, res.stderr
+    assert "note for Order" in res.stdout and "class Customer" not in res.stdout
+    assert "scope: focus com.shop.order.Order, 1 hop" in res.stderr
+    assert "hidden types: Customer (1)" in res.stderr
+    assert "excluded:" not in res.stderr   # nothing was extracted
+    assert (tmp_path / "diagram.mmd").is_file()
+
+
+def test_draw_refuses_too_many_types(tmp_path):
+    res = run("draw.py", SHOP, "--max-types", "5", "--work", tmp_path)
+    assert res.returncode == 3 and res.stdout == ""
+    assert "NOT DRAWN: 16 types is over --max-types 5" in res.stderr
+    assert "  --max-types 16: all 16 types" in res.stderr
+    assert "most connected: Order (8)" in res.stderr
+    assert "--relations" not in res.stderr   # it would not narrow a diagram without focus
+    # hops given: not changed; every option with its count, the ones keeping relations first
+    res = run("draw.py", tmp_path / "ir.json", "--focus", "Order", "--hops", "2",
+              "--max-types", "8")
+    assert res.returncode == 3
+    options = [l.split(":")[0].strip() for l in res.stderr.splitlines() if l.startswith("  --")]
+    assert options == ["--max-types 11", "--hops 1",
+                       "--relations extends,implements,association", "--format html"]
+    assert "  --hops 1: 8 types" in res.stderr
+
+
+def test_draw_chooses_hops_within_the_limit(tmp_path):
+    """Without --hops, the widest neighbourhood that fits, and the report says why."""
+    res = run("draw.py", SHOP, "--focus", "Order", "--max-types", "8", "--work", tmp_path)
+    assert res.returncode == 0, res.stderr
+    assert ("scope: focus com.shop.order.Order, 1 hop (chosen: 2 hops would draw 11 types, "
+            "over --max-types 8; --hops 2 --max-types 11 draws them)") in res.stderr
+    assert "drawn: 8 types" in res.stderr
+    wide = run("draw.py", tmp_path / "ir.json", "--focus", "Order")
+    assert "scope: focus com.shop.order.Order, 2 hops\n" in wide.stderr   # it fits: as asked
+    # never below one hop: a focus alone answers nothing
+    res = run("draw.py", tmp_path / "ir.json", "--focus", "Order", "--max-types", "3")
+    assert res.returncode == 3 and "  --hops 1: 8 types" in res.stderr
+
+
+def test_draw_html_and_errors(tmp_path):
+    out = tmp_path / "d.html"
+    res = run("draw.py", SHOP, "--focus", "OrderService", "-o", out, "--work", tmp_path)
+    assert res.returncode == 0, res.stderr
+    assert res.stdout == "" and f"html: {out}" in res.stderr   # format from -o
+    assert '"focus": "com.shop.order.OrderService"' in out.read_text()
+
+    res = run("draw.py", tmp_path / "ir.json", "--focus", "Nope")
+    assert res.returncode == 1 and "no type 'Nope'" in res.stderr
+    res = run("draw.py", tmp_path / "ir.json", "--relations", "extends,uses")
+    assert res.returncode == 1 and "unknown relation kinds" in res.stderr
+    assert run("draw.py", tmp_path / "missing").returncode == 1
+
+
+def test_draw_keeps_tests_on_request(tmp_path):
+    src = tmp_path / "src"
+    for rel, body in (("main/A.java", "class A { B b; }"), ("test/B.java", "class B {}")):
+        (src / rel).parent.mkdir(parents=True, exist_ok=True)
+        (src / rel).write_text(body)
+    without = run("draw.py", src, "--work", tmp_path / "w1")
+    assert "1 types" in without.stderr and "class B" not in without.stdout
+    keep = run("draw.py", src, "--tests", "--work", tmp_path / "w2")
+    assert "2 types" in keep.stderr and "A --> B : b" in keep.stdout

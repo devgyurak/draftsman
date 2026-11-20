@@ -7,6 +7,28 @@ Notes for anyone with `view.json` files written against a development build:
 - **0.3.0**: the entries below on nested types and annotations change the default
   focus diagram and the relations in `ir.json`; results measured with 0.2.0 (the
   benchmark's runs among them) are not comparable with 0.3.0 ones.
+- **One command draws a diagram, and the skill loads in one call** (#1). A run took about
+  twice the turns of the same request answered without the plugin (8.1 against 4.0 in the
+  benchmark), most of them steps the agent ran one by one. `scripts/draw.py` extracts,
+  scopes (`--focus`, `--hops`, `--members`, `--hide`, `--relations`, `--exclude`,
+  `--format`, or a `--view`), renders and checks the Mermaid syntax in one call, and prints
+  next to the diagram what judging the scope needs: the repository's size, what was drawn,
+  what one more hop would add, what was hidden, the unresolved references of the drawn
+  types. Test directories are excluded unless `--tests`. Without `--hops` it draws the
+  widest neighbourhood within `--max-types` (30), two hops or one, and says what two hops
+  would have drawn (Netty's `ChannelPipeline`: 630 types at two hops, 30 at one). Over the
+  limit it draws nothing and lists the options with their type counts, the ones that keep
+  every relation first (`--max-types N`, fewer hops, then `--relations` without
+  `dependency`, which drops the classes related only by use). The `ir.json` it leaves can
+  be passed instead of the path to draw again without extracting. Rendering is unchanged: for a given view
+  the diagram is the one `render.py` draws. The `/draftsman` command is gone: a plugin
+  command named like the skill is what the `Skill` tool loads for that name (reproduced
+  with a minimal plugin on Claude Code 2.1.326), so every run got the command's two
+  paragraphs, then searched the filesystem for `SKILL.md`. The skill is now the slash
+  command itself, `/draftsman` or in full `/draftsman:draftsman`, with the command's
+  arguments, and arrives with its directory. `SKILL.md` carries a minimal view, so `view-schema.md` is only read for the
+  rarer keys; the install fallbacks moved to `references/setup.md`. `summary.py --focus
+  Name` prints the overview and that type's relations in one call.
 - **A focus diagram folds nested types into their outer type** (#3). A type related only
   to a nested type of the focus was left out: jsoup's `CookieUtil` uses
   `Connection.Request`, and nesting is no relation. Now `Connection.Request` is drawn as

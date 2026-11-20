@@ -1,113 +1,118 @@
 ---
 name: draftsman
 description: Draws UML class diagrams from Java, C#, Kotlin, TypeScript, Python or C++ source where every class and relation comes from a tree-sitter parser, never from guessing. Outputs Mermaid, a static SVG, or a single-file interactive HTML viewer. Use when the user asks for a class diagram, a structure/architecture diagram of classes, inheritance or dependency relationships between classes, or says things like "클래스 다이어그램", "구조 그려줘", "상속 관계 보여줘".
+argument-hint: "[ClassName | path] [mermaid|svg|html] [members|public|no-members]"
 ---
 
 # Draftsman
 
-The parser measures, you draft. `extract.py` turns source into **ir.json** (facts).
-You decide what to show by writing **view.json** (editorial choices). `render.py`
-merges the two. You never edit ir.json and never write diagram text by hand.
-
-All paths below are relative to this skill's directory.
+The parser measures, you draft. The scripts turn source into **ir.json** (facts); you
+choose what to show; the renderer draws only facts. Paths below are relative to this
+skill's directory.
 
 ## Hard rules
 
-1. **No invented relations.** Every line in the diagram must come from ir.json. If you
-   believe a relation exists that ir.json lacks, it may only go in `inferred_edges`, with a
-   `rationale`; the renderer draws it dotted and labelled «inferred». `render.py` rejects
-   inferred edges whose endpoints are not ir.json types, externals, or unresolved names.
-2. **No hand-written diagrams.** If the output is wrong, change view.json and re-render.
-   If the facts are wrong, that is an extractor bug: tell the user, do not patch the output.
-3. **Report what you left out.** Mention hidden types/members and list unresolved
-   references at the end of your answer, by reason: *ambiguous* ones (a project type has
-   the name) and *unexplained* ones one by one, *outside* ones as a group.
+1. **No invented relations.** Every line in the diagram must come from ir.json. A relation
+   you believe in that ir.json lacks may only go in a view's `inferred_edges`, with a
+   `rationale`; it is drawn dotted and labelled «inferred».
+2. **No hand-written diagrams.** If the output is wrong, change the flags or the view and
+   draw again. If the facts are wrong, that is an extractor bug: tell the user.
+3. **Report what you left out:** hidden types and members, and the unresolved references by
+   reason: *ambiguous* and *unexplained* ones one by one, *outside* ones as a group.
 
-## Setup (once per session)
+Languages: Java, C#, Kotlin, TypeScript (incl. TSX), Python, C++. For anything else, say
+it is not supported rather than drawing from reading the code.
+
+## Draw
+
+One command extracts, scopes, renders, checks the Mermaid syntax and reports:
 
 ```bash
-python3 -c "import tree_sitter, tree_sitter_language_pack, yaml" \
-  || pip install "tree-sitter>=0.25" tree-sitter-language-pack pyyaml
+python3 scripts/draw.py <path> [--focus Type] [--hops 1|2] [--format mermaid|svg|html]
 ```
 
-If `pip` is unavailable or blocked, prefix every Python command with
-`uv run --with "tree-sitter>=0.25" --with tree-sitter-language-pack --with pyyaml`.
-In a sandbox without network access (e.g. Codex's default), request permission for the
-install command or ask the user to run it; do not fall back to drawing by hand.
+stdout is the Mermaid text (svg/html: the report names the file); stderr is the report:
+the repository's size, the scope drawn, what one more hop would add, what was hidden, the
+unresolved references, the Mermaid check, and the `ir.json` to pass instead of `<path>`
+when you draw again.
 
-SVG output and Mermaid validation also need node: `npm ci --prefix scripts` once
-(installs elkjs, mermaid, jsdom into `scripts/node_modules`). HTML output works without
-it (the viewer then loads its layout library from a CDN).
+- Test directories are excluded; `--tests` keeps them. `--exclude GLOB` for generated code
+  (`'**/Migrations/**'`, `'**/*.spec.ts'`, `'third_party/**'`), `--lang` in mixed
+  repositories (a Kotlin app with Java tests).
+- `--members all|public|none`, `--hide GLOB` (types `'*Dto'`, members `'*#get*'`,
+  `'*#toString'`), `--relations extends,implements,association`, `-o FILE` for a file the
+  user asked for.
+- Exit 2: a missing dependency; the message gives the install command
+  (`references/setup.md` covers uv, sandboxes and Node). Never fall back to drawing by hand.
+- Exit 3: more than `--max-types` (30) types; the report lists the options, with counts.
 
-Keep ir.json, view.json and the output in a scratch directory (`$WORK` below), not in
-the user's repository, unless the user asks for a file there.
+**Arguments** (`/draftsman:draftsman OrderService html`): a word that looks like a class
+is `--focus`; a path is `<path>` (default: the current repository); `mermaid`, `svg`,
+`html` set `--format`; `members`, `public`, `no-members` set `--members all|public|none`.
 
-## Workflow
+## Choose the scope
 
-1. **Target.** Confirm the source path. Languages: Java, C#, Kotlin, TypeScript (incl.
-   TSX), Python, C++. For anything else, say it is not supported rather than reading the
-   code and drawing a diagram yourself.
-2. **Extract.**
-   ```bash
-   python3 scripts/extract.py <path> -o $WORK/ir.json --exclude '**/test/**' --exclude '**/tests/**'
-   ```
-   Drop the excludes if the user wants test classes; add `--lang <name>` in mixed
-   repositories (e.g. a Kotlin app with Java tests), and more excludes for generated code
-   (`'**/Migrations/**'`, `'**/*.spec.ts'`, `'third_party/**'`). `--wrappers file.yaml`
-   adds project-specific container types (format: `config/wrappers.yaml`).
-3. **Survey.** `python3 scripts/summary.py $WORK/ir.json` — counts, namespaces, the
-   most connected types, annotations, unresolved references, parse diagnostics.
-   `--type Name` (repeatable) prints one type's members and incoming/outgoing
-   relations, its nested types' included; use it instead of reading ir.json, which gets
-   large.
-4. **Scope.**
-   - ≤ 30 types: draw everything (no `focus`).
-   - More: use the class the user named as `focus` with `hops: 2` (reduce to 1, or
-     restrict `relations` to `["extends","implements","association"]`, if still over
-     ~30 types). If they named none, show the top connected types from the summary and
-     ask which one to centre on — or offer the HTML viewer, which lets them explore.
-   - A focus diagram draws nested types inside their outer type (`Connection.Request` is
-     part of `Connection`'s box), so the users of a nested type are its neighbours;
-     `"nested": "boxes"` draws them separately.
-5. **Choose the output** (`output` in view.json, or `--format`):
-   - documentation, README, PR description, chat answer → `mermaid` (default)
-   - "show me", "let me explore", onboarding, or more than ~50 classes → `html`
-   - an image to embed or put on a slide → `svg`
-6. **Write view.json** (schema: `references/view-schema.md`). Decide:
-   - `hidden`: noise for this diagram's purpose — `*#get*`, `*#set*`, `*#toString`,
-     `*#equals`, `*#hashCode`, DTO/mapper packages, framework boilerplate. Prefer
-     `members: "public"` or `"none"` over long hide lists when the diagram is about
-     structure rather than API. Per class: `{"*": "none", "OrderService": "all"}`
-     (last match wins) — e.g. full detail for the focus, names only around it.
-   - `groups`: meaningful clusters (domain areas, layers), not just packages.
-   - `notes` / `highlights`: design smells you can point to *in the facts* — cycles,
-     deep inheritance, god classes (many associations), interfaces with one implementor.
-     In HTML they appear in the side panel next to the diagram.
-   - `inferred_edges`: only for entries in ir.json's `unresolved` list, with a rationale
-     citing the import or naming evidence.
-   - `externals: true` when framework base classes matter (e.g. Spring repositories).
-   - `annotations: false` when the arrows to marker annotations (`@InternalApi`,
-     `@UnstableApi`) clutter a diagram that is not about them; they never widen the focus
-     area.
-7. **Render.**
-   ```bash
-   python3 scripts/render.py $WORK/ir.json $WORK/view.json -o $WORK/diagram.<mmd|svg|html>
-   ```
-   Fix any `view error` and heed warnings (a hidden pattern that matched nothing is
-   usually a typo). Exit code 2 means a missing dependency; the message says which.
-8. **Validate Mermaid.** `scripts/validate.sh $WORK/diagram.mmd`. Exit 1: adjust the view
-   and re-render. Exit 2: no validator installed; say the diagram was not syntax-checked.
-9. **Answer** with the Mermaid block (or the path of the SVG/HTML file), then briefly:
-   scope (focus/hops, what was hidden), your notes, and the unresolved references with
-   their locations. Each entry of `unresolved` has a `reason`. Those with `"outside"`, only
-   explained by a wildcard or default import or by an external supertype (a nested type
-   such as `LayoutParams` inherited from `FrameLayout`), are almost always framework types:
-   `summary.py` lists them compactly; mention them as a group, not one by one.
+This is your judgement and it decides what the diagram covers; the report is there to
+check it.
 
-## References
+- Up to ~30 types: draw everything (no `--focus`).
+- More: the class the user named as `--focus`. Without `--hops`, `draw.py` draws the
+  widest neighbourhood within `--max-types`, two hops or one, and the report says what two
+  would have drawn. If they named none, exit 3 lists the most connected types: ask which
+  one to centre on, or offer `--format html` to explore.
+- "Directly related" / "its neighbours" means `--hops 1`. When the user asked for that
+  scope and exit 3 says it is larger than 30, raise `--max-types` to the count it gives
+  (within any limit the user set, e.g. "at most 80 classes") rather than narrowing:
+  `--relations` without `dependency` drops the classes related only by use, which the
+  user asked for. Narrow only when the user did not ask for a specific scope.
+- The report's *one more hop adds* line shows what lies just outside; if the user's
+  question needs some of it, draw again with other flags.
+- A focus diagram draws nested types inside their outer type (`Connection.Request` is part
+  of `Connection`'s box), so the users of a nested type are its neighbours.
 
-- `references/ir-schema.md` — ir.json fields and how each relation is derived.
-- `references/view-schema.md` — every view.json key, with examples.
-- `references/lang-notes.md` — per-language behaviour and known gaps; read only the
-  section for the language at hand.
-- `references/query-protocol.md` — only when adding or fixing a language.
+Output: `mermaid` for docs, PRs and chat answers (default); `html` for "show me", "let me
+explore", onboarding or more than ~50 classes; `svg` for an image to embed or put on a
+slide. svg needs Node (`references/setup.md`).
+
+## Editorial work: a view
+
+Groups, notes, highlights, inferred edges or per-class member detail go in a view.json,
+passed with `--view` (flags override its keys):
+
+```json
+{
+  "title": "Order placement", "focus": "OrderService", "hops": 1,
+  "members": {"*": "none", "OrderService": "all"},
+  "hidden": ["*#get*", "com.shop.dto.*"],
+  "groups": [{"name": "Payment", "members": ["PaymentGateway", "StripeGateway"]}],
+  "notes": [{"target": "PaymentGateway", "text": "Single implementation"}],
+  "highlights": [{"target": "Order", "reason": "bidirectional association"}],
+  "inferred_edges": [{"from": "StripeGateway", "to": "StripeClient", "kind": "association",
+                      "rationale": "field type from `import com.stripe.*`"}]
+}
+```
+
+- `groups`: meaningful clusters (domain areas, layers), not just packages.
+- `notes` / `highlights`: design smells you can point to *in the facts*: cycles, deep
+  inheritance, god classes, interfaces with one implementor. In HTML they go in the side panel.
+- `inferred_edges`: only to names in the report's unresolved references, with a rationale
+  citing the import or naming evidence.
+- `"externals": true` draws framework supertypes (Spring repositories);
+  `"annotations": false` drops arrows to marker annotations (`@UnstableApi`).
+
+Other keys (`nested`, `direction`, member globs) are in `references/view-schema.md`; read
+it only when you need one of them.
+
+## Answer
+
+The Mermaid block (or the SVG/HTML path), then briefly: the scope (focus, hops, what was
+hidden), your notes, and the unresolved references from the report.
+
+## More
+
+- `scripts/summary.py <ir.json> --focus Type` (overview, then the type's members and
+  relations) or `--type Type`: detail the diagram does not show.
+- `scripts/extract.py`, `render.py`, `validate.sh`: the steps `draw.py` runs.
+- `references/ir-schema.md` (ir.json fields and how each relation is derived),
+  `references/lang-notes.md` (per-language behaviour; read only the section for the
+  language at hand), `references/query-protocol.md` (only when adding or fixing a language).

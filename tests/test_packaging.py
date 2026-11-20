@@ -48,6 +48,22 @@ def test_skill_frontmatter():
     assert len(desc) <= 1024  # Agent Skills limit
 
 
+def test_no_command_shadows_the_skill():
+    """A plugin command named like a skill is what the Skill tool loads for that name
+    (Claude Code 2.1.326): the agent then gets the command's text, not SKILL.md and its
+    directory. The skill is a slash command of its own: /draftsman:draftsman, or /draftsman
+    while no other command has that name (both checked on 2.1.326)."""
+    commands = ROOT / "commands"
+    skills = {p.parent.name for p in (ROOT / "skills").glob("*/SKILL.md")}
+    clashing = {p.stem for p in commands.glob("*.md")} & skills if commands.is_dir() else set()
+    assert not clashing
+
+
+def test_skill_stays_small():
+    """SKILL.md is read in every run; detail belongs in references/."""
+    assert len((ROOT / "skills/draftsman/SKILL.md").read_text()) < 6500
+
+
 def test_elk_version_is_the_same_everywhere():
     """SVG (node) and the HTML viewer (inline or CDN) must lay out with one elkjs."""
     import json

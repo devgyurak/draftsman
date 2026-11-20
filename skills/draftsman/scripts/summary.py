@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Summarise ir.json so the diagram's scope can be chosen without reading it all.
 
-    python scripts/summary.py ir.json [--top 10]
+    python scripts/summary.py ir.json [--top 10] [--focus NAME | --type NAME...]
 
 Prints type/relation counts, namespaces, the most connected types, common
-annotations, unresolved references and parse diagnostics. With --type, prints
-the members and relations of the given types instead.
+annotations, unresolved references and parse diagnostics; with --focus, then
+the members and relations of that type. With --type, prints only the members
+and relations of the given types.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from draftsman.model import IR
+from draftsman.model import IR, Unresolved
 from draftsman.view import TypeLookup, ViewError
 
 
@@ -62,23 +63,78 @@ def _inside(t, outer: str, types: dict) -> bool:
     return False
 
 
+def counts(ir: IR) -> str:
+    """One line: files, types, relations by kind, unresolved by reason, diagnostics."""
+    kinds = Counter(r.kind for r in ir.relations)
+    rel_summary = ", ".join(f"{k} {v}" for k, v in sorted(kinds.items())) or "none"
+    reasons = Counter(u.reason for u in ir.unresolved)
+    split = ", ".join(f"{reasons[r]} {label}" for r, label in (
+        ("ambiguous", "ambiguous"), ("outside", "outside the sources"),
+        ("unexplained", "unexplained")) if reasons[r])
+    return (f"{ir.files} files, {len(ir.types)} types, relations: {rel_summary}, "
+            f"{len(ir.unresolved)} unresolved{f' ({split})' if split else ''}, "
+            f"{len(ir.diagnostics)} diagnostics")
+
+
+
+def degree(ir: IR) -> Counter:
+    """Type id -> how many distinct project types it is related to, either way."""
+    types = ir.type_index()
+    pairs = {frozenset((r.from_, r.to)) for r in ir.relations
+             if r.from_ in types and r.to in types and r.from_ != r.to}
+    return Counter(t for pair in pairs for t in pair)
+
+
+def unresolved_lines(ir: IR, entries: list[Unresolved],
+                     title: str = "unresolved references") -> list[str]:
+    """A heading, the ambiguous and unexplained references one per line, and the ones only
+    something outside the sources explains (a wildcard import, an external supertype:
+    `LayoutParams` inside a FrameLayout subclass), almost always framework types, as one
+    compact line."""
+    types = ir.type_index()
+    wild = [u for u in entries if u.reason == "outside"]
+    rest = [u for u in entries if u.reason != "outside"]
+    reasons = Counter(u.reason for u in entries if u.reason)
+    split = ", ".join(f"{n} {r}" for r, n in sorted(reasons.items()))
+    out = [f"{title} ({len(entries)}{': ' + split if split else ''}):"]
+    for u in rest:
+        where = f"{types[u.from_].display_name}" + (f".{u.via}" if u.via else "")
+        extra = []
+        if u.candidates:
+            extra.append("candidates: " + ", ".join(u.candidates))
+        if u.hint:
+            extra.append(u.hint)
+        tail = f"  [{'; '.join(extra)}]" if extra else ""
+        out.append(f"  {u.raw_type:24s} in {where}  ({u.location.file}:{u.location.line}){tail}")
+    if wild:
+        names = Counter(u.raw_type for u in wild)
+        out.append(f"  + {len(wild)} only explained by wildcard imports or external supertypes "
+                   "(likely external): "
+                   + ", ".join(f"{n} ×{c}" if c > 1 else n for n, c in names.most_common(40))
+                   + (" …" if len(names) > 40 else ""))
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("ir", type=Path)
     ap.add_argument("--top", type=int, default=10, help="how many connected types to list")
     ap.add_argument("--type", action="append", metavar="NAME",
-                    help="describe this type (id or unique name); repeatable")
+                    help="describe only this type (id or unique name); repeatable")
+    ap.add_argument("--focus", metavar="NAME",
+                    help="the overview, then this type as --type describes it")
     args = ap.parse_args(argv)
     ir = IR.load(args.ir)
     types = ir.type_index()
 
-    if args.type:
-        lookup = TypeLookup(ir)
-        try:
-            ids = [lookup.require(name, "--type") for name in args.type]
-        except ViewError as e:
-            print(f"draftsman: {e}", file=sys.stderr)
-            return 1
+    lookup = TypeLookup(ir)
+    try:
+        ids = [lookup.require(name, "--type") for name in args.type or ()]
+        focus = lookup.require(args.focus, "--focus") if args.focus else None
+    except ViewError as e:
+        print(f"draftsman: {e}", file=sys.stderr)
+        return 1
+    if ids:
         for i, tid in enumerate(ids):
             if i:
                 print()
@@ -97,11 +153,8 @@ def main(argv: list[str] | None = None) -> int:
     for ns, n in sorted(namespaces.items()):
         print(f"  {ns}: {n}")
 
-    pairs = {frozenset((r.from_, r.to)) for r in ir.relations
-             if r.from_ in types and r.to in types and r.from_ != r.to}
-    degree: Counter = Counter(t for pair in pairs for t in pair)
     print(f"\nmost connected (distinct related project types, top {args.top}):")
-    for tid, n in degree.most_common(args.top):
+    for tid, n in degree(ir).most_common(args.top):
         t = types[tid]
         print(f"  {n:3d}  {t.display_name:30s} {t.kind:14s} {tid}")
 
@@ -114,29 +167,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\nexternal supertypes: {', '.join(e.id for e in ir.externals)}")
 
     if ir.unresolved:
-        # names only explained by something outside the sources (a wildcard import, an
-        # external supertype: `LayoutParams` inside a FrameLayout subclass) are almost
-        # always framework types; list them compactly, the rest in full
-        wild = [u for u in ir.unresolved if u.reason == "outside"]
-        rest = [u for u in ir.unresolved if u not in wild]
-        reasons = Counter(u.reason for u in ir.unresolved if u.reason)
-        split = ", ".join(f"{n} {r}" for r, n in sorted(reasons.items()))
-        print(f"\nunresolved references ({len(ir.unresolved)}{': ' + split if split else ''}):")
-        for u in rest:
-            where = f"{types[u.from_].display_name}" + (f".{u.via}" if u.via else "")
-            extra = []
-            if u.candidates:
-                extra.append("candidates: " + ", ".join(u.candidates))
-            if u.hint:
-                extra.append(u.hint)
-            tail = f"  [{'; '.join(extra)}]" if extra else ""
-            print(f"  {u.raw_type:24s} in {where}  ({u.location.file}:{u.location.line}){tail}")
-        if wild:
-            names = Counter(u.raw_type for u in wild)
-            print(f"  + {len(wild)} only explained by wildcard imports or external supertypes "
-                  "(likely external): "
-                  + ", ".join(f"{n} ×{c}" if c > 1 else n for n, c in names.most_common(40))
-                  + (" …" if len(names) > 40 else ""))
+        print()
+        for line in unresolved_lines(ir, ir.unresolved):
+            print(line)
 
     if ir.diagnostics:
         files = len({d.file for d in ir.diagnostics})
@@ -146,6 +179,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {d.file}:{span}: {d.message}")
         if len(ir.diagnostics) > 40:
             print(f"  … {len(ir.diagnostics) - 40} more in ir.json")
+    if focus:
+        print()
+        describe(ir, focus)
     return 0
 
 

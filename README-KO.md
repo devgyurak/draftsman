@@ -43,7 +43,7 @@
 flowchart LR
     S[소스 코드] --> E["extract.py<br/>tree-sitter"]
     E --> IR[("ir.json<br/>사실")]
-    IR --> A["에이전트<br/>summary.py로 훑기"]
+    IR --> A["에이전트<br/>범위 판단"]
     A --> V[("view.json<br/>범위 · 숨김 · 그룹 · 해설")]
     IR --> R[render.py]
     V --> R
@@ -55,8 +55,10 @@ flowchart LR
 가운데 둘지, 몇 홉까지 볼지, 무엇을 숨기고 어떻게 묶을지, 무엇을 짚을지를 씁니다. `render.py`가 둘을 합치는데,
 `ir.json`에 없는 관계는 뷰가 근거와 함께 추정으로 표시하지 않는 한 거부합니다.
 
-요청은 매번 같은 단계를 거칩니다. 추출하고, 훑고, 범위를 정하고(타입이 30개쯤까지면 전부, 넘으면 포커스 클래스와
-그 이웃), 뷰를 쓰고, 렌더링하고, Mermaid를 검증한 뒤, 다이어그램과 고른 범위와 미해결 참조를 함께 답합니다.
+보통은 명령 하나, `draw.py`가 모든 단계를 돌립니다. 추출하고, 범위를 정하고(타입이 30개쯤까지면 전부, 넘으면
+포커스 클래스와 그 이웃), 렌더링하고, Mermaid를 검증합니다. 다이어그램과 함께 범위가 무엇을 담았는지, 한 홉 더
+가면 무엇이 더해지는지, 무엇을 해석하지 못했는지를 보고하고, 에이전트는 그 보고로 고른 범위를 확인해 틀렸으면
+다시 그린 뒤, 다이어그램과 범위와 미해결 참조를 함께 답합니다. 그룹, 해설, 강조는 같은 명령에 넘기는 뷰에 씁니다.
 
 ## 설치
 
@@ -78,7 +80,7 @@ codex plugin add draftsman@draftsman
 
 Codex 안에서 `/plugins`를 실행해 *Draftsman*을 골라도 됩니다.
 
-**스킬만** — 플러그인의 `/draftsman` 명령 없이 쓸 때:
+**스킬만**, 플러그인 없이 쓸 때:
 
 | 에이전트 | 설치 |
 |---|---|
@@ -107,6 +109,7 @@ SVG 출력과 Mermaid 문법 검사에는 Node.js도 필요합니다:
 
 ```text
 /draftsman [클래스이름 | 경로] [mermaid|svg|html] [members|public|no-members]   # Claude Code
+/draftsman:draftsman OrderService html   # 같은 명령의 전체 이름(다른 /draftsman이 있을 때 필요)
 $draftsman:draftsman                # Codex(플러그인). 스킬만 설치했다면 $draftsman
 ```
 
@@ -136,6 +139,8 @@ $draftsman:draftsman                # Codex(플러그인). 스킬만 설치했�
 
 ```bash
 cd skills/draftsman
+python3 scripts/draw.py path/to/src --focus Order --hops 1   # 아래 단계를 한 번에
+python3 scripts/draw.py /tmp/draftsman-…/ir.json --view view.json --format svg -o d.svg
 python3 scripts/extract.py path/to/src -o ir.json --exclude '**/test/**'   # *.gradle.kts는 건너뜀
 python3 scripts/summary.py ir.json                  # 규모, 허브 클래스, 미해결 참조
 python3 scripts/summary.py ir.json --type Order     # 타입 하나 자세히
@@ -200,14 +205,13 @@ skills/draftsman/
 ├── SKILL.md            작업 흐름, 절대 규칙, 범위와 출력 고르는 법
 ├── agents/openai.yaml  Codex 표시 이름과 기본 프롬프트
 ├── queries/            언어마다 tree-sitter 쿼리 하나: 무엇을 잡을지
-├── scripts/            extract.py · summary.py · render.py · validate.sh · layout.mjs
+├── scripts/            draw.py · extract.py · summary.py · render.py · validate.sh · layout.mjs
 │   └── draftsman/      라이브러리: 추출기, 이름 해석, 장면, 렌더러, langs/
 ├── assets/             draw.js(SVG와 뷰어가 함께 씀) · viewer.html
 ├── config/             wrappers.yaml: 꿰뚫어 볼 컨테이너 타입(List<T> → T, *)
 └── references/         스키마와 언어 노트, 필요할 때만 읽음
 .claude-plugin/         Claude Code 플러그인·마켓플레이스 매니페스트
 .codex-plugin/ · .agents/   Codex 플러그인 매니페스트와 마켓플레이스
-commands/               /draftsman 슬래시 커맨드(Claude Code)
 ```
 
 | 문서 | 내용 |
@@ -215,6 +219,7 @@ commands/               /draftsman 슬래시 커맨드(Claude Code)
 | [`SKILL.md`](skills/draftsman/SKILL.md) | 에이전트의 작업 흐름, 절대 규칙, 범위와 출력 고르는 법 |
 | [`ir-schema.md`](skills/draftsman/references/ir-schema.md) | `ir.json`의 모든 필드와 관계마다 어디서 나오는지 |
 | [`view-schema.md`](skills/draftsman/references/view-schema.md) | `view.json`의 모든 키, 세 가지 출력, 예시 |
+| [`setup.md`](skills/draftsman/references/setup.md) | 의존성: pip, uv 대안, 샌드박스, SVG와 Mermaid 검사용 Node |
 | [`lang-notes.md`](skills/draftsman/references/lang-notes.md) | 언어별 동작과 알려진 한계 |
 | [`query-protocol.md`](skills/draftsman/references/query-protocol.md) | 언어 쿼리가 쓰는 캡처 이름, 언어 추가하기 |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 설계 노트: 배경, 원칙, 아키텍처, 로드맵 |
