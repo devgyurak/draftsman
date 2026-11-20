@@ -24,6 +24,19 @@ ALWAYS = {'unsupported', 'indirect', 'wrong_kind_or_direction', 'undecidable'}
 # rows the labelling session listed as uncertain (its report)
 FLAGGED = {'E0032', 'E0259', 'E0071', 'E0149', 'E0132', 'E0461', 'E0256', 'E0243',
            'E0278', 'E0227', 'E0206', 'E0275'}
+_PD = 'common/src/main/java/io/netty/util/internal/PlatformDependent.java:622'
+_SSL = 'microbench/src/main/java/io/netty/microbench/handler/ssl/AbstractSslEngineBenchmark.java:128'
+_ANON = 'RUBRIC "Decided at review": anonymous class as a node, strongest evidence of the pair'
+_UNDECIDABLE = 'RUBRIC "Decided at review": the focus file decides the name'
+_NESTED = 'RUBRIC "Decided at review": outer-to-nested use, self at the top level'
+# edge -> (verdict, label_drawn, file_line_drawn, label_top, file_line_top, note), prefilled
+DECIDED = {
+    **{e: ('change', 'declared', _PD, 'declared', _PD, _ANON) for e in ('E0027', 'E0091', 'E0297')},
+    'E0028': ('change', 'declared', _SSL, 'declared', _SSL, _ANON),
+    **{e: ('agree', '', '', '', '', _UNDECIDABLE)
+       for e in ('E0003', 'E0086', 'E0242', 'E0415', 'E0258', 'E0085', 'E0270')},
+    **{e: ('agree', '', '', '', '', _NESTED) for e in ('E0004', 'E0094', 'E0369', 'E0408')},
+}
 
 
 def top(fqn: str) -> str:
@@ -84,12 +97,14 @@ def main() -> None:
                       if re.search(rf'\b{re.escape(a)}\b', t) and re.search(rf'\b{re.escape(b)}\b', t))
         focus = r['focus']
         incident = focus != '-' and top(focus) in (top(r['source_fqn']), top(r['target_fqn']))
+        verdict, drawn, line_drawn, top_, line_top, note = DECIDED.get(r['edge_id'], ('',) * 6)
         out.append({**r, 'review_because': why(r) or 'sample',
                     'focus_incident': str(incident).lower(),
                     'cited_drawn': cited(r['repo'], r['file_line_drawn']),
                     'cited_top': cited(r['repo'], r['file_line_top']),
                     'files_naming_both': ' '.join(both[:12]) + (f' (+{len(both) - 12})' if len(both) > 12 else ''),
-                    'verdict': '', 'new_label_drawn': '', 'new_label_top': '', 'reviewer_note': ''})
+                    'verdict': verdict, 'new_label_drawn': drawn, 'new_file_line_drawn': line_drawn,
+                    'new_label_top': top_, 'new_file_line_top': line_top, 'reviewer_note': note})
     with open(BENCH / 'labels' / 'review.csv', 'w', newline='') as fh:
         w = csv.DictWriter(fh, fieldnames=list(out[0]))
         w.writeheader()

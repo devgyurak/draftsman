@@ -122,6 +122,17 @@ looked at by arm:
   (cite that declaration); *wrong kind or direction* when reversed; otherwise it is judged
   like any edge that is not inheritance.
 
+### Decided at review
+
+Settled after the first labels and before any edge was read by arm, on cases the labeller
+reported as undecided by the rules above:
+
+| Case | Rule |
+|---|---|
+| An anonymous class drawn as a named node (`PDNoopBuf --\|> CleanableDirectBuffer` for `new CleanableDirectBuffer() {…}` inside `PlatformDependent`) | the node is that anonymous class, renamed; it belongs to its enclosing named type, so inheritance drawn from it is right when the anonymous class inherits, and the label takes the pair's strongest evidence at each level |
+| Same simple name that the focus file's imports do not decide, though the other end would | stays *undecidable*, as *Names* says; counted and reported |
+| An outer type drawn as using its nested type, with no use | *wrong kind or direction* as drawn, *self* at the top level; it stays out of the main scoring |
+
 ## Labelling procedure
 
 1. Pool the edges of all runs, deduplicate, shuffle, and drop the arm and run: the

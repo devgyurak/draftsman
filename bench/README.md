@@ -130,3 +130,9 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
   Inheritance drawn between nested types (`A.X --|> B`) is not wrong kind once collapsed;
   the top-level citation check accepts the name of a type nested in the other end; recall
   finds a pair from an edge of any kind, in its direction or undirected.
+- 2026-11-20, after the first labels, before review and before any edge was read by arm:
+  three cases the labeller reported as undecided are settled (RUBRIC.md, "Decided at
+  review"). Four edges drawn from an anonymous class as a named node, labelled *wrong kind
+  or direction*, become *declared* at both levels: the anonymous class does implement the
+  target, and its enclosing type declares the target elsewhere. The seven *undecidable*
+  same-name edges and the four outer-to-nested uses keep their labels.
