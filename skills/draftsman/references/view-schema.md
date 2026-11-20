@@ -10,10 +10,12 @@ unambiguous. A name that matches nothing in ir.json is an error.
 | `title` | string | – | diagram title |
 | `focus` | type | `null` | draw only types within `hops` relations of this type |
 | `hops` | int ≥ 0 | `2` | radius around `focus`; relations count in both directions |
+| `nested` | `"fold"` \| `"boxes"` | `"fold"` with `focus`, else `"boxes"` | nested types drawn inside their outer type, or as boxes of their own (see below) |
 | `relations` | list | all four | relation kinds to draw *and* to traverse for focus: `extends`, `implements`, `association`, `dependency` |
 | `hidden` | list of patterns | `[]` | types or members to leave out (see below) |
 | `members` | `"all"` \| `"public"` \| `"none"`, or `{type glob: level}` | `"all"` | member detail (see below); enum constants always shown unless `"none"` |
 | `externals` | bool | `false` | draw external supertypes (e.g. `CrudRepository`) as `<<external>>` boxes |
+| `annotations` | bool | `true` | draw the dependencies annotations create (`via` `@Name`, see below) |
 | `groups` | `[{name, members: [type]}]` | `[]` | clusters (Mermaid `namespace`); a type may be in one group only |
 | `highlights` | `[{target, reason}]` | `[]` | red outline; `reason` is kept as a comment |
 | `notes` | `[{target, text}]` | `[]` | note attached to a type |
@@ -32,6 +34,47 @@ Shell-style globs (`*`, `?`, `[...]`), case-sensitive.
   An empty side means `*` (`#equals` hides `equals` everywhere). Relations produced by a
   hidden member go too: hiding `Order#lines` removes the `lines` association, and a
   dependency disappears once every member that produced it is hidden.
+
+## nested
+
+A nested type (`Connection.Request`, `Order.Status`) is related to the rest of the code on
+its own: `CookieUtil` uses `Connection.Request`, not `Connection`. Nesting is no relation,
+so a focus on `Connection` would not reach `CookieUtil` if nested types were boxes of their
+own.
+
+- `"fold"` (the default with `focus`): every nested type is drawn as its outermost type, in
+  the neighbourhood and in the drawing. `CookieUtil → Connection.Request` is one arrow
+  `CookieUtil → Connection`; a relation between two types that fold onto the same box
+  (`Order.status: Order.Status`) draws nothing. Inheritance is the exception: that
+  `Element.TextAccumulator` implements `NodeVisitor` does not make `Element` one, so a
+  folded `extends`/`implements` is drawn as a dependency labelled with whose it is
+  (`Element ..> NodeVisitor : TextAccumulator implements`), unless the outer types
+  themselves inherit. The fact behind a folded arrow is kept:
+  its source location still points into the nested type, an association's label names it
+  (`Response.cookies`), and the HTML viewer lists the nested types of each box and says
+  which nested type a relation really goes to. A focus on a nested type keeps its own
+  box, and its own nested types fold into it.
+- `"boxes"`: today's drawing, one box per nested type. With `focus`, the neighbourhood
+  starts from the focus *and* its nested types, so the same types are reached; the
+  diagram is larger (jsoup's `Connection` at one hop: 20 boxes, against 11 folded).
+
+Without `focus` nested types stay boxes unless `"nested": "fold"` is set: a whole-repository
+view is where a reader looks for that structure. Notes, highlights and groups on a folded
+type go to its box, with a warning for notes and highlights.
+
+## annotations
+
+An annotation whose type is a project type, and every project type named in an
+annotation's arguments (`@Import(Hints.class)`, `[JsonConverter(typeof(Conv))]`,
+`@Module({imports: [UsersModule]})`), is a dependency of the annotated type, `via` the
+annotation (`@Import`). Marker annotations (`@UnstableApi`, `@KtorDsl`) can tie many types
+to one, so in the focus neighbourhood an annotation leads only from the annotated type to
+what it names, never back: a class marked `@UnstableApi` brings in `UnstableApi`, not the
+other classes marked with it (133 types in Netty, nested ones counted on their own). A
+focus on the annotation type itself does show the types that carry it, one hop away:
+`UnstableApi` at one hop draws 124 boxes with nested types folded, 134 as `"boxes"`. A pair connected by a signature too is followed both
+ways, as usual. `"annotations": false` leaves out the dependencies that only annotations
+create altogether.
 
 ## members
 
@@ -66,7 +109,8 @@ view's setting for one render, e.g. to export the same view with and without mem
   badge, notes as note boxes, groups as dashed zones, highlights and cycles in red, inferred
   edges as blue dotted construction lines.
 - **html** — one self-contained file (ELK inlined when installed). It contains *every*
-  class the view allows; `focus`/`hops` only set where it starts. Readers can search,
+  class the view allows; `focus`/`hops` only set where it starts. With `focus`, nested
+  types are folded as in the focus diagram; search still finds them, in their box. Readers can search,
   change focus and hops, toggle dependencies/inferred edges/cycle highlighting, expand
   members, and read your notes, highlights, cycles and unresolved references in a side
   panel.

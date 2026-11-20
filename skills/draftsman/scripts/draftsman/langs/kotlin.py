@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import re
+
 from .base import LanguageSpec
+
+_DOTTED_NAME = re.compile(r"^\w+(?:\s*\.\s*\w+)*$")
 
 # Kotlin's default imports (kotlinlang.org/docs/packages.html#default-imports): kotlin.*,
 # kotlin.annotation.*, kotlin.collections.*, kotlin.comparisons.*, kotlin.io.*,
@@ -219,8 +223,21 @@ class KotlinSpec(LanguageSpec):
         "control_structure_body",
     })
     static_scope_nodes = frozenset({"companion_object"})
+    static_scope_names = frozenset({"Companion"})
     annotation_nodes = frozenset({"annotation"})
+    annotation_value_args = frozenset({"navigation_expression"})   # `Kind.A`
     annotation_name_field = "-"   # no name field: use the annotation's text
+
+    def annotation_arg(self, node, text):
+        if node.type in ("callable_reference", "navigation_expression") and \
+                "::" in (written := text(node)):
+            # `X::class`, `Outer.Inner::class` (a navigation to `::class`); `X::create`
+            # names X or a value
+            head, tail = (p.strip() for p in written.rsplit("::", 1))
+            if _DOTTED_NAME.match(head):
+                return head, tail == "class"
+            return None   # `listOf(A::class)` inside a call: look inside it
+        return super().annotation_arg(node, text)
     # `dynamic` is Kotlin/JS's dynamic type: a soft keyword, never a class
     builtins = frozenset(_CORE) | {"dynamic"}
     visibility_keywords = {

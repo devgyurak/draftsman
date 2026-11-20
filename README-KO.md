@@ -25,7 +25,7 @@
 **제도사(draftsman)**는 측량된 수치를 받아, 숫자 하나 바꾸지 않고 도면으로 옮깁니다. Draftsman은 일을 그렇게
 나누는 스킬입니다. 파서가 코드를 재고, 에이전트는 무엇을 보여줄지만 정하며, 렌더러가 그립니다.
 
-- **파서가 잰 사실** — 클래스, 멤버, 상속, 다중성이 붙은 필드 연관, 시그니처 의존. 모두 소스 위치가 붙습니다.
+- **파서가 잰 사실** — 클래스, 멤버, 상속, 다중성이 붙은 필드 연관, 시그니처와 어노테이션에서 나온 의존. 모두 소스 위치가 붙습니다.
 - **편집할 뿐 지어내지 않음** — 에이전트는 숨기고, 묶고, 해설을 달 수 있습니다. 파서가 찾지 못한 관계는 근거를 단
   *추정* 엣지로만 넣을 수 있고, 점선으로 그려집니다.
 - **어떤 크기에서도 읽히는 도면** — 한 클래스와 그 주변 *N*홉에 초점을 맞추고, getter·DTO·프레임워크 잡음은 패턴으로
@@ -162,18 +162,18 @@ scripts/validate.sh diagram.mmd
 
 | 언어 | 프로젝트 | 파일 | 타입 | 관계 | 미해결 | 파싱 진단 |
 |---|---|---:|---:|---:|---:|---:|
-| Java | [spring-petclinic](docs/e2e/java/spring-petclinic.md) | 30 | 25 | 73 | 0 | 0 |
+| Java | [spring-petclinic](docs/e2e/java/spring-petclinic.md) | 30 | 25 | 74 | 0 | 0 |
 | Java | [jsoup](docs/e2e/java/jsoup.md) | 105 | 230 | 1310 | 2 (2 outside) | 0 |
-| Java | [Netty](docs/e2e/java/netty.md) | 2076 | 2752 | 17600 | 6 (5 outside, 1 unexplained) | 0 |
-| C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 356 | 199 (1 ambiguous, 198 outside) | 0 |
-| C# | [eShop](docs/e2e/csharp/eshop.md) `src/` | 497 | 506 | 924 | 525 (7 ambiguous, 514 outside, 4 unexplained) | 0 |
-| C# | [Serilog](docs/e2e/csharp/serilog.md) `src/Serilog` | 113 | 119 | 560 | 23 (23 outside) | 0 |
-| Kotlin | [nowinandroid](docs/e2e/kotlin/nowinandroid.md) | 226 | 237 | 388 | 4 (3 outside, 1 unexplained) | 0 |
-| Kotlin | [Ktor](docs/e2e/kotlin/ktor.md) | 1578 | 2137 | 6451 | 541 (49 ambiguous, 492 outside) | 0 |
-| TypeScript | [nest](docs/e2e/typescript/nest.md) `packages/` | 730 | 738 | 2304 | 0 | 0 |
+| Java | [Netty](docs/e2e/java/netty.md) | 2076 | 2752 | 17812 | 6 (5 outside, 1 unexplained) | 0 |
+| C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 366 | 199 (1 ambiguous, 198 outside) | 0 |
+| C# | [eShop](docs/e2e/csharp/eshop.md) `src/` | 497 | 506 | 959 | 526 (7 ambiguous, 515 outside, 4 unexplained) | 0 |
+| C# | [Serilog](docs/e2e/csharp/serilog.md) `src/Serilog` | 113 | 119 | 566 | 23 (23 outside) | 0 |
+| Kotlin | [nowinandroid](docs/e2e/kotlin/nowinandroid.md) | 226 | 237 | 416 | 4 (3 outside, 1 unexplained) | 0 |
+| Kotlin | [Ktor](docs/e2e/kotlin/ktor.md) | 1578 | 2137 | 6897 | 586 (49 ambiguous, 537 outside) | 0 |
+| TypeScript | [nest](docs/e2e/typescript/nest.md) `packages/` | 730 | 738 | 2307 | 0 | 0 |
 | TypeScript | [TypeORM](docs/e2e/typescript/typeorm.md) `packages/typeorm/src` | 496 | 694 | 3968 | 1 (1 unexplained) | 0 |
 | Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 | 0 | 0 |
-| Python | [Django](docs/e2e/python/django.md) `django/` | 879 | 1964 | 1853 | 0 | 0 |
+| Python | [Django](docs/e2e/python/django.md) `django/` | 879 | 1964 | 1865 | 0 | 0 |
 | C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 | 2 (2 unexplained) | 8개 파일에 9구간 (5구간은 함수 본문; `extern "C"`, `__has_include`, gMock 매크로, 멤버 함수 포인터 필드 하나) |
 | C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2066 | 9983 | 309 (1 ambiguous, 4 outside, 304 unexplained; 시스템·라이브러리 헤더, POCO의 `#define` 타입) | 121개 파일에 333구간 (`#if` 분기, 멤버 포인터, 명시적 인스턴스화, `typeid`) |
 
@@ -186,7 +186,7 @@ scripts/validate.sh diagram.mmd
 
 - **관계를 추측하지 않습니다.** `ir.json`에 없는 것은 거부합니다. 예외는 알려진 이름이나 미해결 이름 사이의 추정
   엣지뿐이고, 그것도 점선으로 그립니다.
-- **메서드 본문을 읽지 않습니다.** 관계는 상위 타입 선언, 필드 타입, 시그니처에서만 나옵니다. 호출 그래프나 시퀀스
+- **메서드 본문을 읽지 않습니다.** 관계는 상위 타입 선언, 필드 타입, 시그니처, 어노테이션에서만 나옵니다. 호출 그래프나 시퀀스
   다이어그램 도구가 아닙니다.
 - **컴포지션과 집합을 구분하지 않습니다** — 문법으로는 알 수 없습니다. 예외는 C++ 소유권입니다(값과
   `unique_ptr` 대 포인터·참조·`shared_ptr`).

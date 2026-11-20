@@ -23,6 +23,11 @@
 (record_declaration (super_interfaces (type_list (_) @super.implements)))
 (interface_declaration (extends_interfaces (type_list (_) @super.extends)))
 
+; ---------------------------------------------------------------- annotations
+; on a type, a member or a parameter: the annotation type and the types its arguments name
+(marker_annotation name: (_) @annotation.ref.name) @annotation.ref
+(annotation name: (_) @annotation.ref.name arguments: (_) @annotation.ref.args) @annotation.ref
+
 ; ---------------------------------------------------------------- members
 (field_declaration
   (modifiers)? @modifiers

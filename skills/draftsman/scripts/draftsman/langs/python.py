@@ -43,6 +43,7 @@ class PythonSpec(LanguageSpec):
     extensions = (".py", ".pyi")
     separator = "."
     opaque_nodes = frozenset({"function_definition", "lambda"})
+    annotation_value_args = frozenset({"identifier", "attribute"})   # `@register(Model)`
     builtins = frozenset(_BUILTINS)
     import_suffix_match = True
     inherited_member_types = False

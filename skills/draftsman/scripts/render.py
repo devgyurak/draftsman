@@ -48,12 +48,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.members:
             view = replace(view, members=args.members)
         fmt = args.format or view.output
-        scene = build_scene(ir, view)
-        if fmt == "html" and scene.focus:
-            # the viewer gets everything the view allows; focus is only its start
-            full = build_scene(ir, replace(view, focus=None))
-            full.focus, full.hops = scene.focus, scene.hops
-            scene = full
+        # the viewer gets everything the view allows; focus is only its start
+        scene = build_scene(ir, view, whole=fmt == "html")
     except (ViewError, ValueError) as e:
         print(f"draftsman: view error: {e}", file=sys.stderr)
         return 1

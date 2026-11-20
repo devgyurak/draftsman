@@ -43,6 +43,17 @@ class RawMember:
 
 
 @dataclass
+class RawAnnotation:
+    """An annotation, decorator or attribute written on a type, a member or a parameter,
+    with the names in its arguments that may be types: (name, certainly a type, line)."""
+
+    name: str
+    line: int
+    scope: FileScope
+    args: list[tuple[str, bool, int]] = field(default_factory=list)
+
+
+@dataclass
 class RawType:
     qualified_name: str
     name: str
@@ -57,6 +68,7 @@ class RawType:
     generics: list[str] = field(default_factory=list)
     members: list[RawMember] = field(default_factory=list)
     supers: list[RawSuper] = field(default_factory=list)
+    annotation_refs: list[RawAnnotation] = field(default_factory=list)
 
 
 @dataclass
@@ -414,6 +426,13 @@ class Extractor:
                                     **{k: v[0] for k, v in members_by_node.items()}}
         callables = {k: v[0] for k, v in members_by_node.items()
                      if v[0].member.kind in ("method", "constructor")}
+        # annotations, by node: a pattern naming the declaration they apply to wins over
+        # one that does not (TS `export @Dec() class`)
+        annotation_refs: dict[int, dict] = {}
+        for caps in other:
+            if (n := _first(caps, "annotation.ref")) is not None:
+                if n.id not in annotation_refs or "annotation.ref.target" in caps:
+                    annotation_refs[n.id] = caps
         for caps in other:
             if (n := _first(caps, "param")) is not None:
                 owner, _ = self._owner(n, callables, stops=types_by_node)
@@ -473,6 +492,10 @@ class Extractor:
                 if owner is not None:
                     owner.supers.append(RawSuper(kind, _text(n, src), _line(n), scope))
 
+        for nid in sorted(annotation_refs, key=lambda i: annotation_refs[i]["annotation.ref"][0].start_byte):
+            self._annotation_ref(annotation_refs[nid], src, scope, types_by_node,
+                                 set(annotation_refs))
+
         # what the build imports into every file (implicit usings), after the file's own
         for ns, origin in build_imports:
             scope.imports.append(Import(ns, wildcard=True, sep=spec.separator, project_wide=True,
@@ -481,6 +504,40 @@ class Extractor:
         for rt in raw.types:
             spec.finalize_type(rt)
         return raw
+
+    def _annotation_ref(self, caps, src, scope, types_by_node, refs: set[int]) -> None:
+        """An annotation on a declaration: its type name and the names in its arguments,
+        recorded on the nearest enclosing type (the type itself for its own annotations)."""
+        node, name_node = _first(caps, "annotation.ref"), _first(caps, "annotation.ref.name")
+        if name_node is None:
+            return
+        target = _first(caps, "annotation.ref.target")
+        owner = types_by_node.get(target.id) if target is not None else None
+        if owner is None:
+            owner, _ = self._owner(node, types_by_node)
+        if owner is None:
+            return   # in a body, a lambda or a local type: not the declaration's
+        ann = RawAnnotation(annotation_name(_text(name_node, src)), _line(node), scope)
+        args = _first(caps, "annotation.ref.args")
+        if args is not None:
+            text = lambda n: _text(n, src)   # noqa: E731
+            stack = [args]
+            while stack:
+                n = stack.pop()
+                found = []
+                for i, c in enumerate(n.children):
+                    if not c.is_named or "comment" in c.type or c.id in refs:
+                        continue   # a nested annotation is an entry of its own
+                    if n.field_name_for_child(i) in ("name", "key"):
+                        continue   # `using = X.class`: the argument's name, not a value
+                    hit = self.spec.annotation_arg(c, text)
+                    if hit is not None:
+                        if hit[0]:
+                            ann.args.append((hit[0], hit[1], _line(c)))
+                    else:
+                        found.append(c)
+                stack.extend(reversed(found))
+        owner.annotation_refs.append(ann)
 
     def _qualify(self, node, name, types_by_node, namespaces, scope) -> Optional[str]:
         """Qualified name for a declaration that is not a type (aliases)."""

@@ -8,7 +8,7 @@ An HTTP client: sync and async clients, transports, typed models.
 | Commit | `7cff5f79bc` (2026-11-16) |
 | Extracted | the `httpx/` package |
 
-Measured on 2026-11-17 with Draftsman `6c455fc`.
+Measured on 2026-11-20 with Draftsman 0.3.0.
 
 ## Run
 
@@ -48,7 +48,7 @@ draftsman: 23 files, 87 types, relations: association 31, dependency 188, extend
 
 Types by kind: 83 classes, 2 records, 2 enums.
 
-The Mermaid and SVG renders of the view draw 11 types and 27 relations (`Client` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 87 types and 142 relations and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 11 types and 27 relations (`Client` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 87 types, as 85 boxes with 2 nested types folded into their outer types, and 141 relations and opens on the same focus. No inferred edges.
 
 ## Unresolved
 

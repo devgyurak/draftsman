@@ -34,7 +34,8 @@ interprets **matches** (not individual captures) by capture name. Captures start
 | `@value` | in member | initialiser text (Python `self.x = param`) |
 | `@super.extends` / `.implements` / `.inherits` | – | a supertype; `inherits` = decide by the target's kind |
 | `@tparam` (+ `@tparam.target`) | – | a type parameter; `target` names the declaration when it is not an ancestor (C++ `template<>` wraps the class) |
-| `@annotation` + `@annotation.target` | – | an annotation/decorator/attribute and the declaration it applies to |
+| `@annotation` + `@annotation.target` | – | an annotation/decorator/attribute and the declaration it applies to (its name in `annotations`) |
+| `@annotation.ref` + `.name`, `.args`, `.target` | yes | an annotation on a declaration or a parameter, for its relations: `.name` the annotation type as written, `.args` its arguments, `.target` the declaration when it does not enclose the annotation (Python `decorated_definition`, TS `export @Dec() class`) |
 | `@param` + `@param.name`, `@param.type`, `@param.declarator`, `@param.varargs` | yes | a parameter |
 | `@throws` | yes | a type a method declares it throws (a dependency, not shown) |
 
@@ -47,13 +48,22 @@ Captures are attached to declarations by position in the tree, not by the query:
   their `__init__`);
 - a `@param` belongs to the nearest enclosing method/constructor (dropped if a type is
   reached first);
-- a `@tparam` belongs to the nearest type or method, unless `@tparam.target` says otherwise.
+- a `@tparam` belongs to the nearest type or method, unless `@tparam.target` says otherwise;
+- an `@annotation.ref` belongs to its `.target` when that is a type, else to the nearest
+  enclosing type: the type itself for its own annotations, the enclosing type for those on
+  members and parameters. Its `.args` are walked by `LanguageSpec.annotation_arg`, which
+  says which nodes name a type (`annotation_type_args`: `X.class`, `typeof(X)`) and which
+  may name a type or a value (`annotation_value_args`: `E.V`, `Model`); argument names
+  (`using = `) and nested `@annotation.ref` nodes are skipped.
+  `LanguageSpec.annotation_type_names` maps the written name to the types it may stand
+  for (C# `[Obsolete]` → `ObsoleteAttribute`).
 
 If an **opaque node** (`LanguageSpec.is_opaque`: method bodies, lambdas, anonymous class
 expressions, inline object types, …) lies on the way up, the capture is dropped. The same
 rule skips local and anonymous types. Crossing a **static scope** node (Kotlin companion
 object) makes the member static, unless the node is itself a `@type.*` (a companion with
-supertypes). `LanguageSpec.type_name` names a type whose `@name` capture is not its name
+supertypes); its name in a qualified type name (`static_scope_names`: `X.Companion.Inner`)
+is skipped, since the types declared in it are recorded as `X`'s. `LanguageSpec.type_name` names a type whose `@name` capture is not its name
 (`companion` → `Companion`), and `LanguageSpec.member_name` the name a member is listed
 under (Kotlin's primary constructor is `constructor`). `LanguageSpec.is_import` drops an
 `@import*` capture that does not import (C++ `using` in a class body), and

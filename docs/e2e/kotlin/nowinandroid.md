@@ -8,7 +8,7 @@ Google's Android sample: Compose, Hilt, Room, DataStore, many Gradle modules.
 | Commit | `2982e63cb6` (2026-10-20) |
 | Extracted | the whole repository without tests, test fixtures and generated `build/` output; `*.gradle.kts` build scripts are never extracted |
 
-Measured on 2026-11-17 with Draftsman `3a4f253`.
+Measured on 2026-11-20 with Draftsman 0.3.0.
 
 ## Run
 
@@ -39,16 +39,16 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 226 files, 237 types, relations: association 106, dependency 172, extends 27, implements 83, 4 unresolved (3 outside the sources, 1 unexplained), 0 diagnostics
+draftsman: 226 files, 237 types, relations: association 106, dependency 200, extends 27, implements 83, 4 unresolved (3 outside the sources, 1 unexplained), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 226 | 237 | 106 | 172 | 27 | 83 | 4 (3 outside, 1 unexplained) | 0 |
+| 226 | 237 | 106 | 200 | 27 | 83 | 4 (3 outside, 1 unexplained) | 0 |
 
 Types by kind: 131 classes, 14 abstract classes, 38 interfaces, 41 objects, 9 enums, 4 annotation classes.
 
-The Mermaid and SVG renders of the view draw 15 types and 19 relations (`UserDataRepository` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 237 types and 255 relations and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 15 boxes and 19 relations (`UserDataRepository` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 237 types, as 198 boxes with 39 nested types folded into their outer types, and 242 relations and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
@@ -61,3 +61,4 @@ The Mermaid and SVG renders of the view draw 15 types and 19 relations (`UserDat
 - 41 `object`s and 4 annotation classes (`@Dispatcher`, `@ApplicationScope`, `@ThemePreviews`, `@DevicePreviews`).
 - Hilt `@Inject constructor(...)`: a primary constructor with a plain parameter is listed and its parameters are dependencies; one made only of `val` properties is not.
 - AndroidX supertypes (`ViewModel`, `ComponentActivity`, `DataMigration`, ...) as qualified external ids through Kotlin's imports.
+- Annotations: Room's `@Database(entities = [X::class], autoMigrations = [AutoMigration(spec = DatabaseMigrations.Schema2to3::class)])`, `@Entity` foreign keys, `@HiltViewModel(assistedFactory = ...)` and the project's Hilt qualifiers (`@Dispatcher(IO)`, `@ApplicationScope`) are dependencies.

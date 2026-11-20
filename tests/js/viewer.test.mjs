@@ -102,6 +102,24 @@ test("search finds a class by part of its name and jumps to it", () => {
   key("Escape");
 });
 
+test("a folded nested type is found by search and shown in its outer type", () => {
+  assert.ok(!graph.nodes.some((n) => n.label === "Receipt.Money"), "Money is folded");
+  assert.match($("#side").textContent, /nested types folded/);
+  const input = $("#search");
+  input.value = "money";
+  input.dispatchEvent(new window.Event("input"));
+  const hit = $$("#results button")[0];
+  assert.equal(hit.querySelector(".rn").textContent, "Receipt.Money");
+  assert.equal(hit.querySelector(".rs").textContent, "folded in Receipt");
+  key("Enter", input);
+  assert.match($("#side .tb .head .v").textContent, /^Receipt$/);
+  assert.ok($$("#side .chip").some((c) => c.textContent === "Receipt.Money"));
+  // StripeGateway.fee is a Receipt.Money: the arrow goes to Receipt and says so
+  const fee = $$("#side .rel").find((r) => r.querySelector(".rn").textContent === "StripeGateway");
+  assert.match(fee.querySelector(".rm").textContent, /fee to Receipt\.Money/);
+  key("Escape");
+});
+
 test("a kind row fades the other kinds", () => {
   $("#side tr[data-kind=interface]").click();
   for (const n of nodes()) {

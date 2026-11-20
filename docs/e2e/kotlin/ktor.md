@@ -8,7 +8,7 @@ An asynchronous client and server framework, Kotlin Multiplatform: common code w
 | Commit | `cc3d345bc2` (2026-11-16) |
 | Extracted | the whole repository without test source sets (`<module>/<platform>/test`), test-support modules (`ktor-server-test-host`, `ktor-client-tests`, ...), the compiler plugin's test data and the Gradle build logic |
 
-Measured on 2026-11-17 with Draftsman `2e6c77b`.
+Measured on 2026-11-20 with Draftsman 0.3.0.
 
 ## Run
 
@@ -44,20 +44,20 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 1578 files, 2137 types, relations: association 1686, dependency 3329, extends 714, implements 722, 541 unresolved (49 ambiguous, 492 outside the sources), 0 diagnostics
+draftsman: 1578 files, 2137 types, relations: association 1686, dependency 3775, extends 714, implements 722, 586 unresolved (49 ambiguous, 537 outside the sources), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 1578 | 2137 | 1686 | 3329 | 714 | 722 | 541 (49 ambiguous, 492 outside) | 0 |
+| 1578 | 2137 | 1686 | 3775 | 714 | 722 | 586 (49 ambiguous, 537 outside) | 0 |
 
 Types by kind: 1406 classes, 73 abstract classes, 277 interfaces, 266 objects, 69 enums, 46 annotation classes.
 
-The Mermaid and SVG renders of the view draw 34 types and 73 relations (`HttpClientCall` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2137 types and 4577 relations and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 32 boxes and 80 relations (`HttpClientCall` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2137 types, as 1688 boxes with 449 nested types folded into their outer types, and 4249 relations and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
-541 references to 242 names, every one with a hint: 49 ambiguous, 492 outside the sources.
+586 references to 252 names, every one with a hint: 49 ambiguous, 537 outside the sources.
 Ktor imports almost everything with star imports (`import kotlinx.coroutines.*`):
 
 - Coroutine, reflection and serialization types are resolved through the Kotlin library
@@ -88,9 +88,15 @@ Ktor imports almost everything with star imports (`import kotlinx.coroutines.*`)
   `IOException`, `Config`, `File`.
 - 32 are dotted names whose head is itself one of the above (`Map.Entry`,
   `Flow.Subscription`).
+- 45 are opt-in markers named as class literals in `@OptIn(...)`, star-imported from
+  `kotlinx.cinterop` (`ExperimentalForeignApi` 21, `UnsafeNumber` 7),
+  `kotlinx.coroutines` (`ExperimentalCoroutinesApi` 7, `DelicateCoroutinesApi`) and
+  `kotlin.experimental` and friends; `ExperimentalUnsignedTypes` is a default import that
+  the `kotlinx.cinterop.*` star import could shadow.
 
-65 of the 541 are supertypes; the rest are member types, which would draw nothing if
-resolved (fields and signatures of external types make no relation).
+65 of the 586 are supertypes; the rest are member types and annotation arguments, which
+would draw nothing if resolved (fields, signatures and annotations of external types make no
+relation).
 
 ## What it covers
 
@@ -100,3 +106,4 @@ resolved (fields and signatures of external types make no relation).
   library supertypes (`CoroutineScope`, `AbstractDecoder`, `JsAny`, ...) are drawn as external
   boxes; the numbers above do not count them, as the view leaves externals out.
 - Function types (`suspend (HttpResponse) -> Boolean`, `HttpRequestBuilder.() -> Unit`, also in supertypes such as `ClientHook<suspend (HttpResponse) -> HttpResponse?>`): every project type they name is a dependency.
+- Annotations: 446 dependencies, mostly opt-in and DSL markers (`InternalAPI` named by 203 types, `KtorDsl` by 119); `"annotations": false` leaves them out of a diagram. `@Serializable(with = X.Companion.Serializer::class)` reaches the serializer nested in a plain companion object.

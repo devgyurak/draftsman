@@ -187,6 +187,11 @@ SCOPE_RULES = {
         **_ALL,
         "python": ("PaymentGateway", "dependency", "Order"),       # shop.order.__init__
     },
+    "companion object named in a path": {
+        **_ALL,
+        # `Receipt.Companion.Parser`: the types of a plain companion are Receipt's
+        "kotlin": ("StripeGateway", "dependency", "Parser"),
+    },
     "package re-export by wildcard": {
         **_ALL,
         # shop/pay/__init__.py: from .gateway import *
@@ -1300,3 +1305,29 @@ def test_typescript_import_alias_of_a_namespace_member(tmp_path):
         "u.ts": "import { Outer } from './o';\nimport Inner = Outer.Inner;\nexport class U { i?: Inner; }\n"})
     assert {(r.from_, r.to) for r in ir.relations} == {("u.U", "o.Outer.Inner")}
     assert not ir.unresolved
+
+
+def test_focus_diagram_folds_nested_types(lang_ir):
+    """`StripeGateway.fee: Receipt.Money` is drawn as one arrow to Receipt in a diagram
+    focused on Receipt; `Receipt.amount: Money` folds onto Receipt itself and draws
+    nothing; the fact behind the arrow still names the nested type."""
+    from draftsman.scene import FoldedRelation, build_scene
+    from draftsman.view import View
+
+    lang, ir = lang_ir
+    if lang == "typescript":
+        return   # TS classes cannot nest classes: nothing to fold
+    receipt = by_name(ir, "Receipt").id
+    scene = build_scene(ir, View.from_dict({"focus": receipt, "hops": 1}))
+    shown = {short(t.id) for t in scene.types}
+    assert "Money" not in shown and "Receipt" in shown and "StripeGateway" in shown
+    assert by_name(ir, "Money").id in scene.folded[receipt]
+    fee = [r for r in scene.relations if short(r.from_) == "StripeGateway"
+           and r.kind == "association"]
+    assert [(short(r.to), short(r.fact.to)) for r in fee] == [("Receipt", "Money")]
+    assert isinstance(fee[0], FoldedRelation) and fee[0].via == fee[0].fact.via
+    assert not [r for r in scene.relations if r.from_ == r.to]
+
+    boxes = build_scene(ir, View.from_dict({"focus": receipt, "hops": 1, "nested": "boxes"}))
+    assert {"Money", "Receipt", "StripeGateway"} <= {short(t.id) for t in boxes.types}
+    assert not boxes.folded and not any(isinstance(r, FoldedRelation) for r in boxes.relations)

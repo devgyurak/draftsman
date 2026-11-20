@@ -8,24 +8,24 @@ project.
 
 | Language | Project | Commit | Files | Types | Relations | Unresolved | Diagnostics |
 |---|---|---|---:|---:|---:|---:|---:|
-| Java | [spring-petclinic](java/spring-petclinic.md) | `500158f732` (2026-09-29) | 30 | 25 | 73 | 0 | 0 |
+| Java | [spring-petclinic](java/spring-petclinic.md) | `500158f732` (2026-09-29) | 30 | 25 | 74 | 0 | 0 |
 | Java | [jsoup](java/jsoup.md) | `d90d57521d` (2026-11-04) | 105 | 230 | 1310 | 2 (2 outside) | 0 |
-| Java | [Netty](java/netty.md) | `e3cab70052` (2026-11-16) | 2076 | 2752 | 17600 | 6 (5 outside, 1 unexplained) | 0 |
-| C# | [eShopOnWeb](csharp/eshoponweb.md) | `4da8212117` (2025-01-13) | 209 | 208 | 356 | 199 (1 ambiguous, 198 outside) | 0 |
-| C# | [eShop](csharp/eshop.md) | `5e526931f7` (2026-11-16) | 497 | 506 | 924 | 525 (7 ambiguous, 514 outside, 4 unexplained) | 0 |
-| C# | [Serilog](csharp/serilog.md) | `43105b3509` (2026-10-24) | 113 | 119 | 560 | 23 (23 outside) | 0 |
-| Kotlin | [nowinandroid](kotlin/nowinandroid.md) | `2982e63cb6` (2026-10-20) | 226 | 237 | 388 | 4 (3 outside, 1 unexplained) | 0 |
-| Kotlin | [Ktor](kotlin/ktor.md) | `cc3d345bc2` (2026-11-16) | 1578 | 2137 | 6451 | 541 (49 ambiguous, 492 outside) | 0 |
-| TypeScript | [nest](typescript/nest.md) | `09b656cb8d` (2026-11-16) | 730 | 738 | 2304 | 0 | 0 |
+| Java | [Netty](java/netty.md) | `e3cab70052` (2026-11-16) | 2076 | 2752 | 17812 | 6 (5 outside, 1 unexplained) | 0 |
+| C# | [eShopOnWeb](csharp/eshoponweb.md) | `4da8212117` (2025-01-13) | 209 | 208 | 366 | 199 (1 ambiguous, 198 outside) | 0 |
+| C# | [eShop](csharp/eshop.md) | `5e526931f7` (2026-11-16) | 497 | 506 | 959 | 526 (7 ambiguous, 515 outside, 4 unexplained) | 0 |
+| C# | [Serilog](csharp/serilog.md) | `43105b3509` (2026-10-24) | 113 | 119 | 566 | 23 (23 outside) | 0 |
+| Kotlin | [nowinandroid](kotlin/nowinandroid.md) | `2982e63cb6` (2026-10-20) | 226 | 237 | 416 | 4 (3 outside, 1 unexplained) | 0 |
+| Kotlin | [Ktor](kotlin/ktor.md) | `cc3d345bc2` (2026-11-16) | 1578 | 2137 | 6897 | 586 (49 ambiguous, 537 outside) | 0 |
+| TypeScript | [nest](typescript/nest.md) | `09b656cb8d` (2026-11-16) | 730 | 738 | 2307 | 0 | 0 |
 | TypeScript | [TypeORM](typescript/typeorm.md) | `d5b143dd7e` (2026-11-16) | 496 | 694 | 3968 | 1 (1 unexplained) | 0 |
 | Python | [httpx](python/httpx.md) | `7cff5f79bc` (2026-11-16) | 23 | 87 | 283 | 0 | 0 |
-| Python | [Django](python/django.md) | `d3954c9813` (2026-11-16) | 879 | 1964 | 1853 | 0 | 0 |
+| Python | [Django](python/django.md) | `d3954c9813` (2026-11-16) | 879 | 1964 | 1865 | 0 | 0 |
 | C++ | [leveldb](cpp/leveldb.md) | `29465588d3` (2026-11-12) | 102 | 161 | 885 | 2 (2 unexplained) | 9 |
 | C++ | [POCO](cpp/poco.md) | `2ef5cec8a9` (2026-11-17) | 2317 | 2066 | 9983 | 309 (1 ambiguous, 4 outside, 304 unexplained) | 333 |
 
 Unresolved references are split by reason as `extract.py` prints them: ambiguous, outside
 (the sources), unexplained; see [`ir-schema.md`](../../skills/draftsman/references/ir-schema.md#unresolved).
-Measured on 2026-11-17 (the pages say with which Draftsman). The README's status table summarises this one; changes to the numbers are
+Measured on 2026-11-20 (the pages say with which Draftsman). The README's status table summarises this one; changes to the numbers are
 recorded in [`CHANGELOG.md`](../../CHANGELOG.md).
 
 ## Re-running

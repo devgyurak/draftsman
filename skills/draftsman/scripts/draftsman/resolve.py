@@ -318,13 +318,17 @@ class Resolver:
         outer = self.index.get(rtype.outer) if rtype.outer else None
         return self._external_supers(outer) if outer else []
 
-    def _nested_path(self, target: str, rest: str, sep: str, inherit: bool) -> Optional[Resolution]:
+    def _nested_path(self, target: str, rest: str, sep: str, inherit: bool,
+                     spec=None) -> Optional[Resolution]:
         for part in rest.split(sep):
             if target not in self.index:
                 # `NamespaceManager::NamespaceMap::const_iterator`: a member of what the
                 # alias names, as `NamespaceMap::const_iterator` inside the class
                 return Resolution(ALIAS)
-            target = self._member_type(self.index[target], part, sep, inherit, set())
+            found = self._member_type(self.index[target], part, sep, inherit, set())
+            if found is None and spec is not None and part in spec.static_scope_names:
+                continue   # `X.Companion.Serializer`: the companion's types are X's
+            target = found
             if target is None:
                 return None
         return self._found(target)
@@ -370,7 +374,7 @@ class Resolver:
                                 else self._not_found(imp.path + sep + rest, spec))
             first = self.resolve(head, rtype, member, inherit, scope)
             if first.status == PROJECT:
-                found = self._nested_path(first.target, rest, sep, inherit)
+                found = self._nested_path(first.target, rest, sep, inherit, spec)
                 if found:
                     return found
                 target = self.index[first.target]
@@ -650,6 +654,7 @@ class _Builder:
                     continue
             existing.members.append(rm)
         existing.supers.extend(t.supers)
+        existing.annotation_refs.extend(t.annotation_refs)
         existing.generics += [g for g in t.generics if g not in existing.generics]
         for m in t.modifiers:
             if m not in existing.modifiers:
@@ -675,6 +680,7 @@ class _Builder:
     def build(self) -> IR:
         for rtype in self.types.values():
             self._supers(rtype)
+            self._annotations(rtype)
             for rm in rtype.members:
                 m = rm.member
                 if m.kind in ("field", "property") and m.static:
@@ -742,6 +748,65 @@ class _Builder:
                 self.relations.append(Relation(rtype.qualified_name, ext_id, kind, loc))
             elif res.status == UNRESOLVED:
                 self._unresolved(rtype, ref.name, res, loc, via=None)
+
+    def _annotations(self, rtype: RawType) -> None:
+        """A dependency on the annotation type when it is the project's, and on the project
+        types its arguments name (`@Import(Hints.class)`), `via` the annotation. Framework
+        annotations stay names only; a class literal that names nothing known is
+        unresolved, as in a signature, but a name that may be a value is never."""
+        spec = LANGUAGES[rtype.language]
+        sep = spec.separator
+        for ann in rtype.annotation_refs:
+            via = "@" + ann.name
+            loc = Location(ann.scope.file, ann.line)
+            maybe = None
+            for name in spec.annotation_type_names(ann.name):
+                res = self.resolver.resolve(name, rtype, None, scope=ann.scope)
+                if res.status in (PROJECT, ALIAS):
+                    self._annotation_target(rtype, res, via, loc)
+                    break
+                # the project declares an annotation of the name that this one may be;
+                # a class of the name that is no annotation is not (eShopOnWeb's static
+                # class `Route` is not ASP.NET's `[Route]`)
+                cands = [c for c in res.candidates if self.types[c].kind == "annotation"
+                         or self.types[c].name.endswith("Attribute")]
+                if res.status == UNRESOLVED and cands and maybe is None:
+                    maybe = (name, Resolution(UNRESOLVED, hint=res.hint, candidates=cands,
+                                              outside=res.outside))
+            else:
+                if maybe is not None:
+                    self._unresolved(rtype, maybe[0], maybe[1], loc, via=via)
+            for text, is_type, line in ann.args:
+                loc = Location(ann.scope.file, line)
+                if is_type:
+                    ref = parse_type(spec.normalize_type(text))
+                    for name, arity in named_refs(ref, lambda n: self.resolver.resolve(
+                            n, rtype, None, scope=ann.scope).status == PROJECT):
+                        if self.wrappers.is_wrapper(name):
+                            continue
+                        res = self.resolver.resolve(name, rtype, None, scope=ann.scope,
+                                                    arity=arity)
+                        self._annotation_target(rtype, res, via, loc)
+                        if res.status == UNRESOLVED:
+                            self._unresolved(rtype, name, res, loc, via=via)
+                    continue
+                # `Kind.A`: the type Kind, or a constant of one; `Model`: a class or a value
+                name = text.replace(" ", "")
+                while name:
+                    res = self.resolver.resolve(name, rtype, None, scope=ann.scope)
+                    if res.status in (PROJECT, ALIAS):
+                        self._annotation_target(rtype, res, via, loc)
+                        break
+                    name = name.rsplit(sep, 1)[0] if sep in name else ""
+
+    def _annotation_target(self, rtype: RawType, res: Resolution, via: str,
+                           loc: Location) -> None:
+        targets = [res.target] if res.status == PROJECT else \
+            self._expand_alias(res.target)[1] if res.status == ALIAS and res.target else []
+        for target in targets:
+            if target != rtype.qualified_name:
+                self.relations.append(Relation(
+                    rtype.qualified_name, target, "dependency", loc, via=via))
 
     def _association(self, rtype: RawType, rm: RawMember) -> None:
         m = rm.member

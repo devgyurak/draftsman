@@ -8,7 +8,7 @@ An asynchronous network framework: buffers, channels, pipelines, codecs and nati
 | Commit | `e3cab70052` (2026-11-16) |
 | Extracted | the whole repository without `src/test`, the `testsuite*` and `*-tests` modules, `microbench/` and `example/` |
 
-Measured on 2026-11-17 with Draftsman `2e6c77b`.
+Measured on 2026-11-20 with Draftsman 0.3.0.
 
 ## Run
 
@@ -41,16 +41,16 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 2076 files, 2752 types, relations: association 1752, dependency 13686, extends 1383, implements 779, 6 unresolved (5 outside the sources, 1 unexplained), 0 diagnostics
+draftsman: 2076 files, 2752 types, relations: association 1752, dependency 13898, extends 1383, implements 779, 6 unresolved (5 outside the sources, 1 unexplained), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 2076 | 2752 | 1752 | 13686 | 1383 | 779 | 6 (5 outside, 1 unexplained) | 0 |
+| 2076 | 2752 | 1752 | 13898 | 1383 | 779 | 6 (5 outside, 1 unexplained) | 0 |
 
 Types by kind: 1931 classes, 222 abstract classes, 422 interfaces, 161 enums, 16 annotation types.
 
-The Mermaid and SVG renders of the view draw 25 types and 96 relations (`DefaultChannelPipeline` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2752 types and 8015 relations and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 22 boxes and 93 relations (`DefaultChannelPipeline` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2752 types, as 1979 boxes with 773 nested types folded into their outer types, and 6820 relations and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
@@ -62,6 +62,7 @@ The Mermaid and SVG renders of the view draw 25 types and 96 relations (`Default
 
 ## What it covers
 
-- Scale: 38 modules in one extraction, the largest Java run. Dependencies outnumber every other kind (13686), which is why the view hides getters and setters and stays at one hop.
+- Scale: 38 modules in one extraction, the largest Java run. Dependencies outnumber every other kind (13898), which is why the view hides getters and setters and stays at one hop.
 - 773 nested types (`ChannelOutboundBuffer.Entry`, ...) and 180 generic types (`Future<V>`, `Promise<V>`, ...).
 - 116 external types with qualified ids: the JDK (`java.lang.Runnable`, `javax.net.ssl.SSLEngine`, ...) and libraries outside the sources (`io.netty.internal.tcnative.*` from netty-tcnative, JCTools).
+- Annotations: 212 dependencies, on `@UnstableApi` (133 types), `@ChannelHandler.Sharable` (41, most written `@Sharable` with an import of the nested annotation) and the `jfr-stub` annotations (`@Label`, `@Description`) of the allocator events.

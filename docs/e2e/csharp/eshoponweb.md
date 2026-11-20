@@ -8,7 +8,7 @@ A reference ASP.NET Core application: MVC, Razor Pages, Blazor admin, a public A
 | Commit | `4da8212117` (2025-01-13) |
 | Extracted | `src/` (tests are under `tests/`) |
 
-Measured on 2026-11-17 with Draftsman `3a4f253`.
+Measured on 2026-11-20 with Draftsman 0.3.0.
 
 ## Run
 
@@ -39,16 +39,16 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 209 files, 208 types, relations: association 96, dependency 199, extends 34, implements 27, 199 unresolved (1 ambiguous, 198 outside the sources), 0 diagnostics
+draftsman: 209 files, 208 types, relations: association 96, dependency 209, extends 34, implements 27, 199 unresolved (1 ambiguous, 198 outside the sources), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 209 | 208 | 96 | 199 | 34 | 27 | 199 (1 ambiguous, 198 outside) | 0 |
+| 209 | 208 | 96 | 209 | 34 | 27 | 199 (1 ambiguous, 198 outside) | 0 |
 
 Types by kind: 185 classes, 5 abstract classes, 16 interfaces, 1 record, 1 enum.
 
-The Mermaid and SVG renders of the view draw 5 types and 5 relations (`BasketService` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 208 types and 252 relations and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 5 types and 5 relations (`BasketService` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 208 types, as 204 boxes with 4 nested types folded into their outer types, and 259 relations and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
@@ -64,3 +64,4 @@ The Mermaid and SVG renders of the view draw 5 types and 5 relations (`BasketSer
 - SDK implicit usings and `global using`s are imports of every file of their `.csproj`.
 - A record, `0..1` associations from nullable types, and generic repositories (`IRepository<T>`, the most connected type).
 - The only external supertypes are `System.Attribute`, `System.Exception` and `System.IDisposable`; framework base classes are unresolved, see above.
+- Attributes: `[DbContext(typeof(X))]` on EF migrations, the project's `[Endpoint]` (`EndpointAttribute`) and `[Authorize(Roles = Constants.Roles.ADMINISTRATORS)]`; ASP.NET's `[Route]` is not the project's static class `Route`.

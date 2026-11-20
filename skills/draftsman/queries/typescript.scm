@@ -34,6 +34,18 @@
 (class_declaration
   decorator: (decorator [(identifier) @annotation (call_expression function: (_) @annotation)]))
   @annotation.target
+; the decorator and the names its arguments pass, on a class, a member or a parameter;
+; `export @Dec() class` puts the decorator outside the class
+(decorator [(identifier) (member_expression)] @annotation.ref.name) @annotation.ref
+(decorator (call_expression function: (_) @annotation.ref.name arguments: (_) @annotation.ref.args))
+  @annotation.ref
+(export_statement
+  decorator: (decorator [(identifier) (member_expression)] @annotation.ref.name) @annotation.ref
+  declaration: (_) @annotation.ref.target)
+(export_statement
+  decorator: (decorator (call_expression function: (_) @annotation.ref.name
+                                         arguments: (_) @annotation.ref.args)) @annotation.ref
+  declaration: (_) @annotation.ref.target)
 
 ; ---------------------------------------------------------------- supertypes
 (class_heritage (extends_clause value: (_) @super.extends))

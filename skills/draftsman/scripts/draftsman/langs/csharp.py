@@ -200,6 +200,20 @@ class CSharpSpec(LanguageSpec):
         "accessor_list", "local_function_statement",
     })
     annotation_nodes = frozenset({"attribute"})
+    # `E.V`, and a bare name, which in `nameof(Order)` is a type
+    annotation_value_args = frozenset({"member_access_expression", "identifier"})
+
+    def annotation_arg(self, node, text):
+        if node.type == "typeof_expression":   # `typeof(X)`
+            t = node.child_by_field_name("type")
+            return (text(t), True) if t is not None else None
+        return super().annotation_arg(node, text)
+
+    def annotation_type_names(self, name):
+        # `[Obsolete]` is ObsoleteAttribute, `[ObsoleteAttribute]` may be written too. A
+        # class `Route` is no attribute unless it derives from Attribute, which the name
+        # alone cannot tell; by convention attribute classes end in Attribute
+        return [name] if name.endswith("Attribute") else [name + "Attribute"]
     builtins = frozenset(_BUILTINS)
     visibility_keywords = {
         "public": "public", "protected": "protected", "private": "private",

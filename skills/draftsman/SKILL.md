@@ -58,13 +58,17 @@ the user's repository, unless the user asks for a file there.
 3. **Survey.** `python3 scripts/summary.py $WORK/ir.json` — counts, namespaces, the
    most connected types, annotations, unresolved references, parse diagnostics.
    `--type Name` (repeatable) prints one type's members and incoming/outgoing
-   relations; use it instead of reading ir.json, which gets large.
+   relations, its nested types' included; use it instead of reading ir.json, which gets
+   large.
 4. **Scope.**
    - ≤ 30 types: draw everything (no `focus`).
    - More: use the class the user named as `focus` with `hops: 2` (reduce to 1, or
      restrict `relations` to `["extends","implements","association"]`, if still over
      ~30 types). If they named none, show the top connected types from the summary and
      ask which one to centre on — or offer the HTML viewer, which lets them explore.
+   - A focus diagram draws nested types inside their outer type (`Connection.Request` is
+     part of `Connection`'s box), so the users of a nested type are its neighbours;
+     `"nested": "boxes"` draws them separately.
 5. **Choose the output** (`output` in view.json, or `--format`):
    - documentation, README, PR description, chat answer → `mermaid` (default)
    - "show me", "let me explore", onboarding, or more than ~50 classes → `html`
@@ -82,6 +86,9 @@ the user's repository, unless the user asks for a file there.
    - `inferred_edges`: only for entries in ir.json's `unresolved` list, with a rationale
      citing the import or naming evidence.
    - `externals: true` when framework base classes matter (e.g. Spring repositories).
+   - `annotations: false` when the arrows to marker annotations (`@InternalApi`,
+     `@UnstableApi`) clutter a diagram that is not about them; they never widen the focus
+     area.
 7. **Render.**
    ```bash
    python3 scripts/render.py $WORK/ir.json $WORK/view.json -o $WORK/diagram.<mmd|svg|html>

@@ -34,12 +34,32 @@ def describe(ir: IR, tid: str) -> None:
             sig += "(" + ", ".join(f"{p.type_ref} {p.name}" for p in m.params) + ")"
         typ = f": {m.type_ref}" if m.type_ref else ""
         print(f"  {m.visibility:9s} {m.kind:13s} {sig}{typ}{'  ' + flags if flags else ''}")
-    out_rel = [r for r in ir.relations if r.from_ == tid]
-    in_rel = [r for r in ir.relations if r.to == tid]
-    for label, rels, other in (("out", out_rel, "to"), ("in", in_rel, "from_")):
+    # a focus diagram folds nested types into this one: their relations are its too
+    nested = [n for n in ir.types if _inside(n, tid, ir.type_index())]
+    if nested:
+        print("  nested: " + ", ".join(n.display_name for n in nested)
+              + "  (folded into this type in a focus diagram; relations marked [Name])")
+    own = {tid} | {n.id for n in nested}
+    names = {n.id: n.display_name for n in nested}
+    # the type's own relations as before; its nested types' only where they leave it
+    out_rel = [r for r in ir.relations if r.from_ == tid or (r.from_ in own and r.to not in own)]
+    in_rel = [r for r in ir.relations if r.to == tid or (r.to in own and r.from_ not in own)]
+    for label, rels, other, end in (("out", out_rel, "to", "from_"),
+                                    ("in", in_rel, "from_", "to")):
         for r in rels:
-            extra = " ".join(x for x in (r.multiplicity, f"via {r.via}" if r.via else None) if x)
+            extra = " ".join(x for x in (r.multiplicity, f"via {r.via}" if r.via else None,
+                                         f"[{names[getattr(r, end)]}]"
+                                         if getattr(r, end) in names else None) if x)
             print(f"  {label:3s} {r.kind:11s} {getattr(r, other)}  {extra}".rstrip())
+
+
+def _inside(t, outer: str, types: dict) -> bool:
+    cur = t.outer
+    while cur is not None and cur in types:
+        if cur == outer:
+            return True
+        cur = types[cur].outer
+    return False
 
 
 def main(argv: list[str] | None = None) -> int:

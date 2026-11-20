@@ -136,7 +136,9 @@
       // describe (the target); an inferred edge keeps its tag in the middle
       const roleText = e.via ? (e.multiplicity ? `${e.via} ${e.multiplicity}` : e.via)
         : e.multiplicity;
+      // a nested type's inheritance drawn between outer types says whose it is
       const label = e.inferred ? { text: "«inferred» " + e.kind, placement: "CENTER" }
+        : e.label ? { text: e.label, placement: "CENTER" }
         : roleText ? { text: roleText, placement: "HEAD" } : null;
       if (label) {
         elkEdge.labels = [{ text: label.text, width: textWidth(label.text) * 0.92 + 4,
@@ -355,8 +357,7 @@
     const types = graph.nodes.filter((n) => n.kind !== "external" && n.kind !== "inferred").length;
     const facts = graph.edges.filter((e) => !e.inferred).length;
     const inferred = graph.edges.length - facts;
-    const focus = graph.focus && graph.nodes.find((n) => n.id === graph.focus);
-    const scope = focus ? `${focus.label} ±${graph.hops}` : "all";
+    const scope = scopeText(graph);
     const cells = [["CLASSES", String(types)], ["RELATIONS", facts + (inferred ? ` +${inferred}` : "")],
       ["SCOPE", scope]];
     const cw = (w - s.markW) / cells.length;
@@ -378,10 +379,18 @@
     return out.join("");
   }
 
+  // what the sheet covers: the focus and its radius, and whether nested types are
+  // drawn inside their outer types
+  function scopeText(graph) {
+    const focus = graph.focus && graph.nodes.find((n) => n.id === graph.focus);
+    const folded = graph.nodes.some((n) => (n.folded || []).length);
+    return (focus ? `${focus.label} ±${graph.hops}` : "all") + (folded ? " · nested folded" : "");
+  }
+
   function tbWidth(graph) {
     const title = textWidth(graph.title || "Class diagram") * 1.2;
-    const focus = graph.focus && graph.nodes.find((n) => n.id === graph.focus);
-    const scope = focus ? textWidth(focus.label + " ±0") * 3 : 0;
+    const scope = graph.focus || graph.nodes.some((n) => (n.folded || []).length)
+      ? textWidth(scopeText(graph).replace(/±\d+/, "±0")) * 3 : 0;
     return Math.ceil(Math.max(340, SHEET.markW + title + 24, SHEET.markW + scope + 40));
   }
 

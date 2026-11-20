@@ -8,7 +8,7 @@ An HTML parser: a deep node and evaluator hierarchy with many nested types.
 | Commit | `d90d57521d` (2026-11-04) |
 | Extracted | `src/main` (language detected) |
 
-Measured on 2026-11-17 with Draftsman `3a4f253`.
+Measured on 2026-11-20 with Draftsman 0.3.0.
 
 ## Run
 
@@ -48,7 +48,7 @@ draftsman: 105 files, 230 types, relations: association 147, dependency 1014, ex
 
 Types by kind: 187 classes, 17 abstract classes, 13 interfaces, 13 enums.
 
-The Mermaid and SVG renders of the view draw 101 types and 327 relations (`Element` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 230 types and 666 relations and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 39 boxes and 182 relations (`Element` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 230 types, as 96 boxes with 134 nested types folded into their outer types, and 349 relations and opens on the same focus. No inferred edges.
 
 ## Unresolved
 

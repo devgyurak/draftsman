@@ -45,6 +45,13 @@ test("role names sit at the target end, inferred tags in the middle", () => {
   assert.equal(inferred.labels[0].layoutOptions["elk.edgeLabels.placement"], "CENTER");
 });
 
+test("a nested type's folded inheritance is labelled in the middle of the arrow", () => {
+  const g = tiny([{ from: "A", to: "B", kind: "dependency", label: "Acc implements" }]);
+  const [edge] = D.toElk(g, {}).edges;
+  assert.equal(edge.labels[0].text, "Acc implements");
+  assert.equal(edge.labels[0].layoutOptions["elk.edgeLabels.placement"], "CENTER");
+});
+
 test("dependencies, inferred edges and invisible classes can be left out", () => {
   const kindOf = (x) => graph.edges.find((e) => e.id === x.id);
   const noDeps = D.toElk(graph, { showDependencies: false }).edges.map(kindOf).filter(Boolean);
@@ -79,6 +86,7 @@ test("a standalone SVG is a sheet with a title block; the viewer's is bare", asy
   const laid = await layout(graph, { notes: true });
   const sheet = D.toSvg(graph, laid, { standalone: true });
   assert.ok(sheet.includes('class="sheet"') && sheet.includes('class="titleblock"'));
+  assert.ok(sheet.includes("OrderService ±1 · nested folded"));
   const bare = D.toSvg(graph, laid, {});
   assert.ok(!bare.includes('class="sheet"') && !bare.includes('class="titleblock"'));
   assert.equal(count(bare, 'class="node '), graph.nodes.length);

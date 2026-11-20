@@ -8,7 +8,7 @@ A web framework: ORM, forms, templates, admin, many contrib apps. Most of the co
 | Commit | `d3954c9813` (2026-11-16) |
 | Extracted | the `django/` package without the contrib apps' generated `migrations/` (tests are under `tests/`) |
 
-Measured on 2026-11-17 with Draftsman `6c455fc`.
+Measured on 2026-11-20 with Draftsman 0.3.0.
 
 ## Run
 
@@ -38,16 +38,16 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 879 files, 1964 types, relations: association 4, dependency 1, extends 1848, 0 unresolved, 0 diagnostics
+draftsman: 879 files, 1964 types, relations: association 4, dependency 13, extends 1848, 0 unresolved, 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 879 | 1964 | 4 | 1 | 1848 | 0 | 0 | 0 |
+| 879 | 1964 | 4 | 13 | 1848 | 0 | 0 | 0 |
 
 Types by kind: 1949 classes, 1 abstract class, 14 enums.
 
-The Mermaid and SVG renders of the view draw 30 types and 29 relations (`Field`, its base and its subclasses), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 1964 types and 1664 relations and opens on the same focus; the other 189 relations point at external types (`Exception`, `list`, ...). No inferred edges.
+The Mermaid and SVG renders of the view draw 30 types and 29 relations (`Field`, its base and its subclasses), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 1964 types, as 1936 boxes with 28 nested types folded into their outer types, and 1674 relations and opens on the same focus; the other 189 relations point at external types (`Exception`, `list`, ...). No inferred edges.
 
 ## Unresolved
 
@@ -55,7 +55,8 @@ None.
 
 ## What it covers
 
-- An unannotated code base: Draftsman reads declared types only, so nearly every relation is `extends`. The 5 others come from the annotated `django.tasks` dataclasses and one annotated parameter in `listurls`.
+- An unannotated code base: Draftsman reads declared types only, so nearly every relation is `extends`. Of the 17 others, 5 come from the annotated `django.tasks` dataclasses and one annotated parameter in `listurls`, and 12 from decorators (below).
 - Multiple inheritance: 231 classes have several bases (mixins; `BaseDateDetailView` has 5).
 - Package re-exports: `from django.db.models import Field` reaches `django.db.models.fields.Field` through `from django.db.models.fields import *` in the package's `__init__.py`. Ids carry the `django.` prefix, since `django/` is a package.
 - External bases from the standard library and from drivers keep their module path (`argparse.ArgumentParser`, `ctypes.Structure`, `psycopg.adapt.Dumper`).
+- Decorators: `@admin.register(User)` makes the admin class depend on the model, and `@classproperty` and `@deprecate_posargs(RemovedInDjango2028Warning, ...)` name project classes.

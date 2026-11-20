@@ -31,6 +31,11 @@ is that type. Aliases of aliases are followed.
   length, so line numbers are exact). Annotations on array levels (`String @A []`) are
   read and ignored.
 - `throws E` makes the method depend on `E` (it is not listed in the signature).
+- Annotations on the type, its members and their parameters are dependencies of the type
+  (`via` `@Name`): on the annotation type when it is the project's (`@Sharable` imported
+  from `ChannelHandler`), on class literals in the arguments (`X.class`, `X[].class`),
+  and on the type of an enum constant or field written there (`Include.NON_NULL`), when
+  that is a project type. A bare name in an argument is a constant and draws nothing.
 - Not handled: static imports of nested types, `permits` clauses.
 
 ## C#
@@ -77,6 +82,11 @@ is that type. Aliases of aliases are followed.
   with the usual hint. `IComparer<T>`/`IEqualityComparer<T>` and their non-generic
   versions are told apart by their type arguments. A project type of the same name
   always wins.
+- Attributes on the type, its members and their parameters are dependencies of the type
+  (`via` `@Name`): `[Marker]` names `MarkerAttribute` (a project class without the
+  `Attribute` suffix is not taken for one), `typeof(X)` in the arguments is a type
+  reference, and `E.V`, `nameof(X)` and bare names are drawn when they are project types.
+  `[assembly: ...]` attributes belong to no type.
 - Not handled: extension methods (they stay members of their static class, which is
   correct but not linked to the extended type), alias and static `<Using>` items in the
   project file, the .NET 8 rule that drops `System.Net.Http` for .NET Framework targets.
@@ -143,6 +153,15 @@ is that type. Aliases of aliases are followed.
 - Function types (`Route.() -> Unit`, `suspend (Call) -> Unit`, `context(Log) () -> Unit`,
   also inside containers) make a dependency on every project type they name; a field of such a type is no
   association. Supertypes with a function type among their arguments are read too.
+- Annotations on the type, its members, constructor properties and parameters are
+  dependencies of the type (`via` `@Name`): on the annotation class when it is the
+  project's (`@OptIn(InternalAPI::class)` depends on `InternalAPI` twice over: `@OptIn`
+  is Kotlin's, the class literal is the project's), on `X::class` and `Outer.Inner::class`
+  in the arguments, and on `E.V` when `E` is a project type. Opt-in markers make some
+  annotation classes hubs (Ktor's `InternalAPI` is named by 203 types); a focus area does
+  not spread through them, and `"annotations": false` in the view leaves those arrows out.
+- A plain `companion object`'s types are recorded as the class's (`Receipt.Parser`), so
+  `Receipt.Companion.Parser` is read as `Receipt.Parser`.
 - `typealias` is an alias (see the note on aliases below). Not handled: delegation targets
   (`by x`).
 
@@ -186,6 +205,11 @@ is that type. Aliases of aliases are followed.
   initialisers are not evaluated.
 - Default imports are resolved by the local name. Not handled: `declare module`, global
   scripts without imports/exports, mixins built with functions.
+- Decorators on a class, its members and parameters: the names their arguments pass are
+  dependencies of the class (`via` `@Name`) when they are project classes,
+  `@Module({imports: [UsersModule]})`, `@Type(() => Foo)`, `@InjectRepository(User)`,
+  `pay.Receipt`; constants (`@Inject(TOKEN)`) draw nothing. A decorator is a function, so
+  its own name draws nothing unless it is a project class.
 
 ## Python
 
@@ -223,6 +247,9 @@ is that type. Aliases of aliases are followed.
   subscript: a class called `Literal` in another language (`Literal l;`, `Literal[]`) is a
   type. `tuple[P, Q]` relates to `P` and `Q` once each, `tuple[P, ...]` to many `P`.
   `*args: Item` and `**kw: Status` are parameters.
+- Decorators on a class and its methods: a decorator that is a project class
+  (`@classproperty`) and the project classes passed in its arguments (`@admin.register(User)`)
+  are dependencies of the class (`via` `@Name`); other names draw nothing.
 - Not handled: `__all__` (a `*` re-export is taken to expose every name the module
   defines), attributes created outside `__init__`, untyped values (no association
   without a type hint), `__getattr__` magic.

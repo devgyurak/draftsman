@@ -28,6 +28,12 @@
 (delegation_specifier (user_type) @super.inherits)
 (delegation_specifier (explicit_delegation (user_type) @super.inherits))
 
+; ---------------------------------------------------------------- annotations
+; on a type, a member or a parameter: the annotation type and the types its arguments name
+(annotation (user_type) @annotation.ref.name) @annotation.ref
+(annotation (constructor_invocation (user_type) @annotation.ref.name
+                                    (value_arguments) @annotation.ref.args)) @annotation.ref
+
 ; ---------------------------------------------------------------- members
 (property_declaration
   (modifiers)? @modifiers

@@ -18,6 +18,9 @@
 (type_parameter_list (type_parameter name: (identifier) @tparam))
 
 (_ (attribute_list (attribute name: (_) @annotation))) @annotation.target
+; the attribute type and the types its arguments name, on a type, a member or a parameter
+(attribute name: (_) @annotation.ref.name (attribute_argument_list)? @annotation.ref.args)
+  @annotation.ref
 
 ; ---------------------------------------------------------------- supertypes
 (base_list [(identifier) (generic_name) (qualified_name)] @super.inherits)

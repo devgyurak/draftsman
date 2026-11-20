@@ -11,7 +11,7 @@ exception classes.
 | Commit | `2ef5cec8a9` (2026-11-17) |
 | Extracted | the whole repository without tests (`testsuite/`, `Data/DataTest`, `CppUnit/`), `samples/`, `fuzzing/`, `Benchmark/` and the bundled third-party code (`dependencies/`, `Data/SQLParser`) |
 
-Measured on 2026-11-17 with Draftsman `526b88a`.
+Measured on 2026-11-20 with Draftsman 0.3.0.
 
 ## Run
 
@@ -58,7 +58,7 @@ draftsman: 2317 files, 2066 types, relations: association 1920, dependency 6989,
 
 Types by kind: 1374 classes, 273 structs, 2 unions, 74 abstract classes, 65 interfaces, 278 enums.
 
-The Mermaid and SVG renders of the view draw 37 types and 83 relations (`Poco::Logger` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2066 types and 5376 relations and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 35 boxes and 87 relations (`Poco::Logger` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2066 types, as 1626 boxes with 440 nested types folded into their outer types, and 4833 relations and opens on the same focus. No inferred edges.
 
 ## Unresolved
 

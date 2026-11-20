@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Optional
 
 from .model import IR, STEREOTYPES, VISIBILITY_SYMBOLS, Member, Relation, Type
-from .scene import Scene
+from .scene import FoldedRelation, Scene, is_annotation
 
 
 def member_text(m: Member) -> str:
@@ -94,6 +94,8 @@ def find_cycles(nodes: list[str], relations: list[Relation]) -> list[list[str]]:
 
 def build_graph(scene: Scene, ir: Optional[IR] = None) -> dict:
     group_of = {tid: name for name, ids in scene.groups for tid in ids}
+    by_id = ir.type_index() if ir is not None else {}
+    nested_label = lambda tid: by_id[tid].display_name if tid in by_id else tid  # noqa: E731
     nodes = []
     for t in scene.types:
         nodes.append({
@@ -109,6 +111,12 @@ def build_graph(scene: Scene, ir: Optional[IR] = None) -> dict:
             "language": t.language,
             "group": group_of.get(t.id),
         })
+        if t.outer:
+            nodes[-1]["outer"] = t.outer
+        if scene.folded.get(t.id):
+            nodes[-1]["folded"] = [{"id": n, "label": nested_label(n),
+                                    "kind": by_id[n].kind if n in by_id else "class"}
+                                   for n in scene.folded[t.id]]
     for e in scene.externals:
         nodes.append({"id": e.id, "label": e.name, "namespace": None, "kind": "external",
                       "stereotype": "external", "abstract": False, "members": [],
@@ -129,8 +137,16 @@ def build_graph(scene: Scene, ir: Optional[IR] = None) -> dict:
             "ownership": r.ownership,
             "via": r.via if r.kind == "association" else None,
             "inferred": False,
+            "annotation": is_annotation(r),
             "location": f"{r.source_location.file}:{r.source_location.line}",
         })
+        if isinstance(r, FoldedRelation) and r.label:
+            edges[-1]["label"] = r.label
+        if isinstance(r, FoldedRelation) and r.fact is not None:
+            # the relation as ir.json states it, between the nested types
+            edges[-1]["fact"] = {"from": r.fact.from_, "to": r.fact.to, "via": r.fact.via,
+                                 "from_label": nested_label(r.fact.from_),
+                                 "to_label": nested_label(r.fact.to)}
     for i, e in enumerate(scene.inferred):
         edges.append({"id": f"i{i}", "from": e.from_, "to": e.to, "kind": e.kind,
                       "multiplicity": None, "ownership": None, "via": None,
@@ -141,6 +157,7 @@ def build_graph(scene: Scene, ir: Optional[IR] = None) -> dict:
         "title": scene.title,
         "focus": scene.focus,
         "hops": scene.hops,
+        "nested": scene.nested,
         "direction": scene.direction or "TB",
         "nodes": nodes,
         "edges": edges,
@@ -150,7 +167,7 @@ def build_graph(scene: Scene, ir: Optional[IR] = None) -> dict:
         "cycles": find_cycles(project_ids, scene.relations),
     }
     if ir is not None:
-        shown = set(project_ids)
+        shown = set(project_ids) | {n for ids in scene.folded.values() for n in ids}
         graph["unresolved"] = [
             {"from": u.from_, "raw_type": u.raw_type, "via": u.via, "hint": u.hint,
              "location": f"{u.location.file}:{u.location.line}"}

@@ -90,11 +90,20 @@ class LanguageSpec:
     # Node types whose members belong to the enclosing type as static members
     # (Kotlin companion objects).
     static_scope_nodes: frozenset[str] = frozenset()
+    # Names of those scopes in a qualified type name (`X.Companion.Inner`): the types
+    # declared in one are recorded as the enclosing type's, so the name is skipped.
+    static_scope_names: frozenset[str] = frozenset()
 
     # Node types inside a modifiers capture that carry an annotation/decorator,
     # and the field holding its name.
     annotation_nodes: frozenset[str] = frozenset()
     annotation_name_field: str = "name"
+
+    # Nodes in an annotation's arguments that name a type (`X.class`, `typeof(X)`,
+    # `X::class`; see annotation_arg), and nodes that name a type or a value (`E.V`,
+    # `Model`), drawn only when they turn out to be a project type.
+    annotation_type_args: frozenset[str] = frozenset()
+    annotation_value_args: frozenset[str] = frozenset()
 
     # For grammars without a modifiers node: direct children of a declaration
     # that count as modifiers, by node type or by keyword text.
@@ -248,6 +257,23 @@ class LanguageSpec:
     def finalize_type(self, raw: "RawType") -> None:
         """Last chance to adjust a type after all its captures were attached."""
 
+    def annotation_arg(self, node, text: Callable[["ts.Node"], str]) -> Optional[tuple[str, bool]]:
+        """(the type name, whether it certainly is a type) for a node of an annotation's
+        arguments, ``text`` giving a node's source text: `X.class` -> ("X", True),
+        `Kind.A` -> ("Kind.A", False); None to look inside the node instead."""
+        if node.type in self.annotation_type_args:
+            return text(node), True
+        if node.type in self.annotation_value_args:
+            written = text(node)
+            # a dotted name, not an expression such as a call (`a.b(c)`): look inside that
+            return (written, False) if _DOTTED.match(written) else None
+        return None
+
+    def annotation_type_names(self, name: str) -> list[str]:
+        """The type names an annotation written ``name`` may stand for, first match wins
+        (C# `[Obsolete]` is `ObsoleteAttribute`)."""
+        return [name]
+
     # ------------------------------------------------------------- members
 
     def ownership_start(self, caps: dict, root: "ts.Node") -> Optional["ts.Node"]:
@@ -274,6 +300,9 @@ class LanguageSpec:
     def is_abstract(self, owner_kind: str, member_kind: str, modifiers: list[str],
                     has_body: bool, marker: Optional[str] = None) -> bool:
         return "abstract" in modifiers
+
+
+_DOTTED = re.compile(r"^[\w$]+(?:\s*\.\s*[\w$]+)*$")
 
 
 def annotation_name(text: str) -> str:

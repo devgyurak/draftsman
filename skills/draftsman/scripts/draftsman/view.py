@@ -18,10 +18,12 @@ from .model import IR, RELATION_KINDS, Type
 OUTPUTS = ("mermaid", "svg", "html")
 MEMBER_DETAIL = ("all", "public", "none")
 DIRECTIONS = ("TB", "BT", "LR", "RL")
+NESTED = ("fold", "boxes")
 
 _KEYS = {
     "focus", "hops", "hidden", "groups", "highlights", "notes", "inferred_edges",
-    "members", "relations", "externals", "direction", "output", "title",
+    "members", "relations", "externals", "direction", "output", "title", "nested",
+    "annotations",
 }
 
 
@@ -71,6 +73,17 @@ class View:
     direction: Optional[str] = None
     output: str = "mermaid"
     title: Optional[str] = None
+    # nested types drawn inside their outer type ("fold") or as boxes of their own
+    # ("boxes"); None: fold in a focus diagram, boxes otherwise
+    nested: Optional[str] = None
+    # draw the dependencies annotations create (`via` "@Name")
+    annotations: bool = True
+
+    @property
+    def nested_mode(self) -> str:
+        if self.nested is not None:
+            return self.nested
+        return "fold" if self.focus else "boxes"
 
     @classmethod
     def load(cls, path: Optional[Path]) -> "View":
@@ -117,6 +130,8 @@ class View:
             direction=d.get("direction"),
             output=d.get("output", "mermaid"),
             title=d.get("title"),
+            nested=d.get("nested"),
+            annotations=d.get("annotations", True),
         )
         if not isinstance(v.hops, int) or v.hops < 0:
             raise ViewError("hops must be a non-negative integer")
@@ -131,6 +146,10 @@ class View:
                             "or an object of {type glob: level}")
         if v.output not in OUTPUTS:
             raise ViewError(f"output must be one of {OUTPUTS}")
+        if not isinstance(v.annotations, bool):
+            raise ViewError("annotations must be true or false")
+        if v.nested is not None and v.nested not in NESTED:
+            raise ViewError(f"nested must be one of {NESTED}")
         if v.direction is not None and v.direction not in DIRECTIONS:
             raise ViewError(f"direction must be one of {DIRECTIONS}")
         bad = [k for k in v.relations if k not in RELATION_KINDS]

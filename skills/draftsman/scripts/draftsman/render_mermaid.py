@@ -104,6 +104,9 @@ def render(scene: Scene) -> str:
     meta = f"%% draftsman: {len(scene.types)} types"
     if scene.focus:
         meta += f", focus {scene.focus} ({scene.hops} hops)"
+    folded = sum(len(v) for v in scene.folded.values())
+    if folded:
+        meta += f", {folded} nested types folded into their outer types"
     out.append("  " + meta)
     if scene.direction:
         out.append(f"  direction {scene.direction}")
@@ -136,6 +139,8 @@ def render(scene: Scene) -> str:
             mult = f' "{r.multiplicity}"' if r.multiplicity and r.multiplicity != "1" else ""
             label = f" : {r.via}" if r.via else ""
             out.append(f"  {a} {arrow}{mult} {b}{label}")
+        elif getattr(r, "label", None):
+            out.append(f"  {a} ..> {b} : {_mm_type(r.label)}")
         else:
             out.append(f"  {a} ..> {b}")
     for e in scene.inferred:

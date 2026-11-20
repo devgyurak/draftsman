@@ -61,6 +61,7 @@ class JavaSpec(LanguageSpec):
         "enum_constant", "static_initializer", "switch_expression",
     })
     annotation_nodes = frozenset({"marker_annotation", "annotation"})
+    annotation_value_args = frozenset({"field_access"})   # `Include.NON_NULL`
     builtins = frozenset(_PRIMITIVES | _JAVA_LANG | _JDK_COMMON)
     visibility_keywords = {
         "public": "public", "protected": "protected", "private": "private",
@@ -68,6 +69,11 @@ class JavaSpec(LanguageSpec):
 
     def preprocess(self, src):
         return _VARARGS_ANNOTATIONS.sub(_blank, src)
+
+    def annotation_arg(self, node, text):
+        if node.type == "class_literal":   # `X.class`, `X[].class`
+            return text(node.named_children[0]), True
+        return super().annotation_arg(node, text)
 
     def builtin_id(self, name: str) -> str:
         return "java.lang." + name if name in _JAVA_LANG else name

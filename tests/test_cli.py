@@ -58,10 +58,16 @@ def test_html_and_svg_formats(tmp_path):
     view.write_text(json.dumps({"focus": "OrderService", "hops": 1, "output": "html"}))
     res = run("render.py", ir, view, "-o", tmp_path / "d.html")
     assert res.returncode == 0, res.stderr
-    # the viewer gets every class; focus/hops are only where it starts
-    assert "rendered 16 types" in res.stderr
+    # the viewer gets every class; focus/hops are only where it starts. Its 5 nested
+    # types are folded into their outer types, as around the focus
+    assert "rendered 11 types" in res.stderr
     html = (tmp_path / "d.html").read_text()
     assert '"focus": "com.shop.order.OrderService"' in html
+    assert '"nested": "fold"' in html
+    view.write_text(json.dumps({"focus": "OrderService", "hops": 1, "output": "html",
+                                "nested": "boxes"}))
+    res = run("render.py", ir, view, "-o", tmp_path / "d.html")
+    assert "rendered 16 types" in res.stderr
 
     res = run("render.py", ir, "--format", "svg", "-o", tmp_path / "d.svg")
     if res.returncode == 2:  # no node/elkjs here: a clear message, no traceback
@@ -79,6 +85,11 @@ def test_summary_describes_a_type(tmp_path):
     assert "charge(Order order): Receipt  abstract" in res.stdout
     assert "in  implements  com.shop.pay.StripeGateway" in res.stdout
     assert run("summary.py", ir, "--type", "Nope").returncode == 1
+    # a nested type's relations are its outer type's in a focus diagram: listed, marked
+    out = run("summary.py", ir, "--type", "Receipt").stdout
+    assert "  nested: Receipt.Money" in out
+    assert "in  association com.shop.pay.StripeGateway  1 via fee [Receipt.Money]" in out
+    assert "out association com.shop.pay.Receipt.Money  1 via amount" in out
 
 
 def test_summary_groups_likely_external_names(tmp_path):

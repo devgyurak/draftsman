@@ -8,7 +8,7 @@ Google's key-value store: plain C++ with a C API, ports and benchmarks.
 | Commit | `29465588d3` (2026-11-12) |
 | Extracted | the whole repository without `*_test.cc` and `third_party/` |
 
-Measured on 2026-11-17 with Draftsman `35f87dd`.
+Measured on 2026-11-20 with Draftsman 0.3.0.
 
 ## Run
 
@@ -48,7 +48,7 @@ draftsman: 102 files, 161 types, relations: association 227, dependency 616, ext
 
 Types by kind: 90 classes, 48 structs, 4 abstract classes, 8 interfaces, 11 enums.
 
-The Mermaid and SVG renders of the view draw 31 types and 105 relations (`DBImpl` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 161 types and 479 relations and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 30 boxes and 125 relations (`DBImpl` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 161 types, as 131 boxes with 30 nested types folded into their outer types, and 424 relations and opens on the same focus. No inferred edges.
 
 ## Unresolved
 

@@ -29,7 +29,7 @@ sources always give byte-identical output.
 | `namespace` | package / namespace / module, or `null` |
 | `outer` | id of the enclosing type for nested types, else `null` |
 | `modifiers` | keywords as written (`public`, `abstract`, `sealed`, ...) |
-| `annotations` | annotation/decorator names (`Entity`, `Service`) — useful for grouping and noise |
+| `annotations` | annotation/decorator names as written (`Entity`, `ChannelHandler.Sharable`) — useful for grouping and noise; the project ones are also relations (below) |
 | `generics` | type parameter names (`["T"]`) |
 | `location` | `{file, line}`, file relative to `root` |
 | `members` | list of Member, source order |
@@ -59,7 +59,7 @@ header/source).
 | `kind` | see below |
 | `multiplicity` | associations only: `"1"`, `"0..1"`, `"*"` |
 | `ownership` | C++ associations only: `owned` (value, `unique_ptr`) or `shared` (pointer, `shared_ptr`) |
-| `via` | member that produced it (field name for associations, method name for dependencies) |
+| `via` | member that produced it (field name for associations, method name for dependencies), or the annotation, as `@Name`, for a dependency an annotation produced |
 | `source_location` | `{file, line}` of the declaration that produced it |
 
 How each kind is derived:
@@ -78,9 +78,26 @@ How each kind is derived:
   (constants and singletons are not instance structure). One relation per member, never
   to the type itself. The renderer collapses these to one arrow per pair and drops them
   where an association or inheritance already connects the pair.
+- **dependency from an annotation** — an annotation, attribute or decorator on the type,
+  one of its members or one of their parameters, `via` `@Name` as written:
+  - on the annotation type, when it is a project type (`@Sharable` imported from
+    `ChannelHandler`, C# `[Marker]` naming `MarkerAttribute`); framework annotations stay
+    names in `annotations`, and one is unresolved only when the project declares an
+    annotation of that name it may mean;
+  - on each project type its arguments name: a class literal (`X.class`, `X::class`,
+    `typeof(X)`, unresolved like a signature type when it names nothing known), and a name
+    that may be a type or a value (`Include.NON_NULL` → `Include`, `nameof(Order)`, a class
+    passed to a decorator, `@Module({imports: [UsersModule]})`), drawn only when it is a
+    project type and never unresolved. A nested annotation (`@A(@B(X.class))`) is an
+    entry of its own.
+  Annotations inside bodies (locals, lambdas) are not part of the declaration.
 
 Composition vs. aggregation is not inferred (except C++ `ownership`), and nothing from
 method bodies is used.
+
+A nested type is a type of its own with its own relations; nesting itself is no relation
+(`outer` records it). A focus diagram folds nested types into their outer type (see
+`view-schema.md`), which is a drawing decision: ir.json always keeps the nested type.
 
 Type aliases (`type X = ...`, `typedef`, `typealias`, `using X = ...`) are not types in
 the IR; a reference to one is drawn as a reference to the project types the alias names

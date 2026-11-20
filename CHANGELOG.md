@@ -4,6 +4,53 @@
 
 Notes for anyone with `view.json` files written against a development build:
 
+- **0.3.0**: the entries below on nested types and annotations change the default
+  focus diagram and the relations in `ir.json`; results measured with 0.2.0 (the
+  benchmark's runs among them) are not comparable with 0.3.0 ones.
+- **A focus diagram folds nested types into their outer type** (#3). A type related only
+  to a nested type of the focus was left out: jsoup's `CookieUtil` uses
+  `Connection.Request`, and nesting is no relation. Now `Connection.Request` is drawn as
+  part of `Connection`, so `CookieUtil → Connection.Request` is one arrow to `Connection`
+  and a relation inside one box draws nothing. A nested type's `extends`/`implements` is
+  no inheritance of its outer type: it is drawn as a labelled dependency (`Element ..>
+  NodeVisitor : TextAccumulator implements`), unless the outer types inherit themselves
+  (jsoup's `NodeVisitor`:
+  `W3CDom`, `Element`, `StreamParser`, `Cleaner` and the example `HtmlToPlainText`). The arrow
+  keeps its nested source location,
+  an association's label names the nested member (`Response.cookies`), and the HTML viewer
+  and the SVG title block say that nested types were folded. jsoup's `Connection` at one
+  hop: 12 boxes, missing `CookieUtil`, `UrlBuilder` and `StreamParser` -> 11 boxes with all
+  three. The new view key `nested` restores one box per nested type (`"boxes"`), and then
+  the neighbourhood starts from the focus and its nested types (20 boxes). Without a focus
+  nothing is folded unless `"nested": "fold"` is set; a focus on a nested type keeps its
+  box. The HTML viewer of a focused view folds as the diagram does (jsoup's 230 types are
+  96 boxes); its search still finds nested types, in their box. `summary.py --type` lists
+  the relations of a type's nested types too. Every e2e page's render numbers changed
+  (jsoup `Element` ±1: 101 -> 39 boxes; 63 of the 101 were nested types, 42 of them
+  `Evaluator`'s, now drawn as their outer types).
+- **Annotations create relations** (#4). An annotation, attribute or decorator on a type,
+  a member or a parameter is a dependency of the type, `via` `@Name`: on the annotation
+  type when it is the project's (Netty `@Sharable` -> `ChannelHandler.Sharable`), and on
+  the project types named in its arguments: class literals (`@ImportRuntimeHints(
+  PetClinicRuntimeHints.class)`, `typeof(X)`, `X::class`, unresolved like a signature
+  type when they name nothing known), and names that may be types or values (`E.V`,
+  `nameof(X)`, `@admin.register(User)`, `@Module({imports: [UsersModule]})`), drawn only
+  when they are project types. Framework annotations stay names. C# `[Marker]` is
+  `MarkerAttribute`. A focus area follows an annotation only from the annotated type to
+  what it names, so a marker does not pull in every other type that carries it (Netty's
+  `channel.unix.Unix` at two hops: 2 types, not 124 through `@UnstableApi`); a focus on
+  the annotation type still shows its users (`UnstableApi` ±1: 124 boxes folded, 134 as
+  `"boxes"`). `"annotations": false` leaves the arrows
+  out (Ktor's `InternalAPI` is named by 203 types).
+  Relations: spring-petclinic 73 -> 74, Netty 17600 -> 17812, eShopOnWeb 356 -> 366,
+  eShop 924 -> 959, Serilog 560 -> 566, nowinandroid 388 -> 416, Ktor 6451 -> 6897, nest
+  2304 -> 2307, Django 1853 -> 1865; jsoup, TypeORM, httpx, leveldb and POCO unchanged.
+  Unresolved: eShop 525 -> 526 (`typeof(JsonStringEnumConverter<OrderStatus>)`), Ktor 541
+  -> 586 (class literals of opt-in markers from `kotlinx.*` star imports), all outside the
+  sources.
+- Kotlin: `X.Companion.Inner` names `X.Inner`, the nested type of a plain companion object
+  (24 `@Serializable(with = X.Companion.Serializer::class)` in Ktor).
+
 - **Python type ids now carry the package prefix** when the extraction root sits inside a
   package: extracting `django/db/models` gives `django.db.models.query.QuerySet`, not
   `query.QuerySet`. `focus`, `hidden`, `groups`, `notes` and `highlights` that used the

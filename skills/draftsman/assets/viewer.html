@@ -361,6 +361,11 @@ const D = window.DraftsmanDraw;
 const elk = new ELK();
 const $ = (id) => document.getElementById(id);
 const byId = new Map(GRAPH.nodes.map((n) => [n.id, n]));
+// nested types folded into the box of their outer type: id -> label, and search entries
+const FOLDED = new Map(GRAPH.nodes.flatMap((n) => (n.folded || []).map((f) => [f.id, f.label])));
+const FOLDED_IN = new Map(GRAPH.nodes.flatMap((n) => (n.folded || []).map((f) => [f.id, n.id])));
+const FOLDED_ENTRIES = GRAPH.nodes.flatMap((n) => (n.folded || []).map((f) =>
+  ({ id: f.id, label: f.label, kind: f.kind, inside: n.id })));
 const notesFor = new Map();
 for (const n of GRAPH.notes || []) {
   if (!notesFor.has(n.target)) notesFor.set(n.target, []);
@@ -418,28 +423,33 @@ const state = {
 function esc(s) {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-const label = (id) => byId.get(id)?.label || id;
+const label = (id) => byId.get(id)?.label || FOLDED.get(id) || id;
 
 function shownEdges() {
   return GRAPH.edges.filter((e) =>
     (state.deps || e.kind !== "dependency" || e.inferred) && (state.inferred || !e.inferred));
 }
 
+// an annotation leads from the annotated class to what it names, not back to the other
+// classes that carry it; only the focus looks back along annotations (its users)
 function visibleSet() {
   if (!state.focus || !byId.has(state.focus)) return null;
-  const adj = new Map();
+  const adj = new Map(), back = new Map();
+  const add = (m, a, b) => { if (!m.has(a)) m.set(a, []); m.get(a).push(b); };
   for (const e of shownEdges()) {
-    if (!adj.has(e.from)) adj.set(e.from, []);
-    if (!adj.has(e.to)) adj.set(e.to, []);
-    adj.get(e.from).push(e.to);
-    adj.get(e.to).push(e.from);
+    add(adj, e.from, e.to);
+    add(e.annotation ? back : adj, e.to, e.from);
   }
-  const seen = new Set([state.focus]);
-  let frontier = [state.focus];
+  // nested types drawn as boxes of their own are where the focus's neighbourhood starts
+  const inside = (n) => { for (let o = n.outer; o; o = byId.get(o)?.outer) if (o === state.focus) return true; return false; };
+  const starts = new Set([state.focus, ...GRAPH.nodes.filter(inside).map((n) => n.id)]);
+  const seen = new Set(starts);
+  let frontier = [...starts];
   for (let d = 0; d < state.hops; d++) {
     const next = [];
-    for (const id of frontier) for (const m of adj.get(id) || []) {
-      if (!seen.has(m)) { seen.add(m); next.push(m); }
+    for (const id of frontier) {
+      const near = (adj.get(id) || []).concat(starts.has(id) ? back.get(id) || [] : []);
+      for (const m of near) if (!seen.has(m)) { seen.add(m); next.push(m); }
     }
     frontier = next;
   }
@@ -714,9 +724,13 @@ function memberHtml(m) {
 }
 
 function relRow(e, other) {
-  const meta = [e.via, e.multiplicity].filter(Boolean).join(" ");
+  // a folded arrow names the nested types its ends really are
+  const nested = e.fact ? [e.fact.from !== e.from ? "from " + e.fact.from_label : "",
+    e.fact.to !== e.to ? "to " + e.fact.to_label : ""].filter(Boolean).join(" ") : "";
+  const meta = [e.via, e.multiplicity, nested].filter(Boolean).join(" ");
   const tag = e.inferred ? `<span class="inf">inferred</span>` : "";
-  const tip = e.inferred ? e.rationale : e.kind + (e.location ? " — " + e.location : "");
+  const tip = e.inferred ? e.rationale : e.kind + (e.fact ? ` ${e.fact.from_label} → ${e.fact.to_label}` : "") +
+    (e.location ? " — " + e.location : "");
   return `<button class="rel" data-goto="${esc(other)}" title="${esc(tip)}">
     ${lineFor(e)}<span class="rn">${esc(label(other))}${tag}</span><span class="rm">${esc(meta)}</span></button>`;
 }
@@ -739,6 +753,7 @@ function renderDetail(sel) {
       <div class="cell"><span class="k">Members</span><span class="v">${sel.members.length}</span></div></div>
     ${sel.namespace ? `<div class="row"><div class="cell wide"><span class="k">Package</span><span class="v s">${esc(sel.namespace)}</span></div></div>` : ""}
     ${sel.location ? `<div class="row"><div class="cell wide"><span class="k">Source</span><span class="v s">${esc(sel.location)}</span></div></div>` : ""}
+    ${(sel.folded || []).length ? `<div class="row"><div class="cell wide"><span class="k">Nested, folded in</span><div class="chips">${sel.folded.map((n) => `<span class="chip">${esc(n.label)}</span>`).join("")}</div></div></div>` : ""}
     ${(sel.annotations || []).length ? `<div class="row"><div class="cell wide"><span class="k">Annotations</span><div class="chips">${sel.annotations.map((a) => `<span class="chip">@${esc(a)}</span>`).join("")}</div></div></div>` : ""}
   </div>`);
   p.push(`<div class="actions"><button class="btn primary" data-focus="${esc(sel.id)}"${focused ? " disabled" : ""}>${focused ? "Focused" : "Focus here"}</button>` +
@@ -752,7 +767,8 @@ function renderDetail(sel) {
   if (out.length || inc.length) p.push(sec("Relations", out.length + inc.length,
     (out.length ? `<div class="sub">OUTGOING</div>${out.map((e) => relRow(e, e.to)).join("")}` : "") +
     (inc.length ? `<div class="sub">INCOMING</div>${inc.map((e) => relRow(e, e.from)).join("")}` : "")));
-  const unres = (GRAPH.unresolved || []).filter((u) => u.from === sel.id);
+  const own = new Set([sel.id, ...(sel.folded || []).map((f) => f.id)]);
+  const unres = (GRAPH.unresolved || []).filter((u) => own.has(u.from));
   if (unres.length) p.push(sec("Unresolved", unres.length, unres.map(unresolvedItem).join("")));
   return p.join("");
 }
@@ -779,7 +795,7 @@ function renderOverview() {
     <div class="row"><button class="cell${cycles.length ? " red" : ""}" data-jump="cycles"><span class="k">Cycles</span><span class="v">${cycles.length}</span></button>
       <button class="cell" data-jump="unresolved"><span class="k">Unresolved</span><span class="v">${unresolved.length}</span></button></div>
     <div class="row"><div class="cell"><span class="k">Scope</span><span class="v s">${state.focus && vis
-      ? `<a class="go" data-goto="${esc(state.focus)}">${esc(label(state.focus))}</a> ±${state.hops}` : "all classes"}</span></div>
+      ? `<a class="go" data-goto="${esc(state.focus)}">${esc(label(state.focus))}</a> ±${state.hops}` : "all classes"}${FOLDED.size ? `<small> · nested types folded</small>` : ""}</span></div>
       <div class="cell"><span class="k">Language</span><span class="v s">${esc(langs || "—")}</span></div></div>
   </div>`);
 
@@ -837,6 +853,7 @@ function select(id, center) {
 }
 
 function goTo(id) {
+  id = FOLDED_IN.get(id) || id;   // a folded nested type is drawn as its outer type
   if (!byId.has(id)) return;
   const vis = visibleSet();
   if (vis && !vis.has(id)) { state.focus = id; state.selected = id; renderSide(); relayout(true); return; }
@@ -974,7 +991,7 @@ let hits = [], cursor = 0;
 function runSearch() {
   const q = search.value.trim().toLowerCase();
   if (!q) { closeResults(); return; }
-  hits = GRAPH.nodes.map((n) => {
+  hits = GRAPH.nodes.concat(FOLDED_ENTRIES).map((n) => {
     const l = n.label.toLowerCase(), i = l.indexOf(q);
     const score = i === 0 ? 0 : i > 0 ? 1 + i / 100 : (n.id.toLowerCase().includes(q) ? 3 : -1);
     return { n, i, score };
@@ -983,7 +1000,8 @@ function runSearch() {
   results.innerHTML = hits.length ? hits.map((h, j) => {
     const l = h.n.label;
     const name = h.i >= 0 ? esc(l.slice(0, h.i)) + "<mark>" + esc(l.slice(h.i, h.i + q.length)) + "</mark>" + esc(l.slice(h.i + q.length)) : esc(l);
-    return `<button role="option" data-id="${esc(h.n.id)}" aria-selected="${j === 0}">${badge(h.n.kind)}<span class="rn">${name}</span><span class="rs">${esc(h.n.namespace || h.n.kind)}</span></button>`;
+    const where = h.n.inside ? "folded in " + label(h.n.inside) : h.n.namespace || h.n.kind;
+    return `<button role="option" data-id="${esc(h.n.inside || h.n.id)}" aria-selected="${j === 0}">${badge(h.n.kind)}<span class="rn">${name}</span><span class="rs">${esc(where)}</span></button>`;
   }).join("") : `<div class="none">No class matches “${esc(search.value)}”.</div>`;
   results.hidden = false;
   search.setAttribute("aria-expanded", "true");

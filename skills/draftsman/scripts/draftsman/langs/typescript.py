@@ -106,6 +106,8 @@ class TypeScriptSpec(LanguageSpec):
         "object_type",  # inline `{ a: T }` types: their properties are not members
     })
     modifier_node_types = frozenset({"accessibility_modifier", "override_modifier"})
+    # `@Module({imports: [UsersModule]})`, `@Type(() => Foo)`, `@Inject(a.B)`
+    annotation_value_args = frozenset({"identifier", "member_expression"})
     modifier_keywords = frozenset({"static", "readonly", "abstract", "async", "declare",
                                    "get", "set"})
     builtins = frozenset(_BUILTINS)

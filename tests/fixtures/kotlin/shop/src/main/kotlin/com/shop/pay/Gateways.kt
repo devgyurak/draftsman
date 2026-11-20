@@ -15,10 +15,15 @@ class StripeGateway : PaymentGateway, Closeable {
 
     override suspend fun charge(order: Order): Receipt = TODO()
     override fun close() {}
+    fun parse(text: String, parser: Receipt.Companion.Parser): Receipt = TODO()
 }
 
 data class Receipt(val id: String, val amount: Money) {
     data class Money(val cents: Long, val currency: String)
+
+    companion object {
+        class Parser   // Receipt.Parser, also named Receipt.Companion.Parser
+    }
 }
 
 object GatewayRegistry {

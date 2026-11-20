@@ -8,7 +8,7 @@ A structured logging library: the logger pipeline, enrichers, sinks, formatting 
 | Commit | `43105b3509` (2026-10-24) |
 | Extracted | `src/Serilog` (tests are under `test/`) |
 
-Measured on 2026-11-17 with Draftsman `3a4f253`.
+Measured on 2026-11-20 with Draftsman 0.3.0.
 
 ## Run
 
@@ -38,16 +38,16 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 113 files, 119 types, relations: association 94, dependency 393, extends 14, implements 59, 23 unresolved (23 outside the sources), 0 diagnostics
+draftsman: 113 files, 119 types, relations: association 94, dependency 399, extends 14, implements 59, 23 unresolved (23 outside the sources), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|
-| 113 | 119 | 94 | 393 | 14 | 59 | 23 (23 outside) | 0 |
+| 113 | 119 | 94 | 399 | 14 | 59 | 23 (23 outside) | 0 |
 
 Types by kind: 91 classes, 5 abstract classes, 14 interfaces, 5 structs, 4 enums.
 
-The Mermaid and SVG renders of the view draw 12 types and 35 relations (`Logger` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 119 types and 328 relations and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 13 boxes and 38 relations (`Logger` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 119 types, as 111 boxes with 8 nested types folded into their outer types, and 321 relations and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
@@ -58,3 +58,4 @@ All 23 (17 names) are outside the sources, .NET library types reached through `u
 - Project-wide imports: SDK implicit usings, the `global using`s of `GlobalUsings.cs`, and `<Using Remove="System.Net.Http" />` in the `.csproj` (hence 6 implicit namespaces, not 7).
 - `#if` in 27 files, read with the first branch of each; no parse diagnostics.
 - 5 structs and nested types (`EnricherStack.Enumerator`); `System.IDisposable`, `System.IAsyncDisposable` and `System.IFormattable` as external interfaces, and the generic and non-generic `IEqualityComparer` told apart.
+- Attributes: the project's `[MessageTemplateFormatMethod]`, `[CustomDefaultMethodImplementation]` and the bundled JetBrains `[NoEnumeration]` are dependencies of the types that use them.

@@ -23,6 +23,14 @@
 (decorated_definition
   (decorator [(identifier) (attribute) (call function: (_) @annotation)] @annotation)
   definition: (_) @annotation.target)
+; the decorator and the names its arguments pass; a class decorator belongs to the class
+(decorated_definition
+  (decorator [(identifier) (attribute)] @annotation.ref.name) @annotation.ref
+  definition: (_) @annotation.ref.target)
+(decorated_definition
+  (decorator (call function: (_) @annotation.ref.name arguments: (_) @annotation.ref.args))
+    @annotation.ref
+  definition: (_) @annotation.ref.target)
 
 ; ---------------------------------------------------------------- members
 ; class-level assignments: dataclass fields, class variables, enum members
