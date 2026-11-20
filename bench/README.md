@@ -136,3 +136,9 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
   or direction*, become *declared* at both levels: the anonymous class does implement the
   target, and its enclosing type declares the target elsewhere. The seven *undecidable*
   same-name edges and the four outer-to-nested uses keep their labels.
+- 2026-11-20, human review: the reviewer read the 123 rows by eye and changed none beyond
+  the four above; the sheet records each row as agreed. `score.py` applies the review,
+  unblinds the labels and scores the runs. No label disagrees with another after
+  collapsing to top-level types, and no relation labelled real is missing from the recall
+  denominators (three nesting edges, declarations rather than uses, are not counted as
+  missing).
