@@ -18,17 +18,20 @@ import java.util.TreeSet;
 import java.util.stream.Stream;
 
 /**
- * The members a class outside the JDK inherits by name from a JDK supertype: the nested
- * types and fields that are public or protected, the JDK's own and those it inherits.
+ * The members of JDK types a class outside the JDK sees by name: the nested types and
+ * fields that are public or protected, the type's own and those it inherits: "types", the
+ * nested types; "fields", the instance fields; "static", the static fields and nested
+ * types. A subclass inherits them all, `import static T.*` the static ones.
  * `oracle.py jdk` writes skills/draftsman/scripts/draftsman/langs/java_jdk.json with it:
  *
  *   java JdkMembers.java OUT.json
  *
- * Only types a class can extend or implement (no final classes) with at least one such
- * member are listed; "supers" names the listed supertypes, whose members are inherited.
+ * Every public type with at least one such member is listed, final ones too (Math, for
+ * static imports); "supers" names the listed supertypes, whose members are inherited.
  */
 public class JdkMembers {
-    record Entry(List<String> supers, TreeSet<String> types, TreeSet<String> fields) {}
+    record Entry(List<String> supers, TreeSet<String> types, TreeSet<String> fields,
+                 TreeSet<String> statics) {}
 
     public static void main(String[] args) throws IOException {
         Map<String, Class<?>> all = new TreeMap<>();
@@ -67,15 +70,19 @@ public class JdkMembers {
         Map<String, Entry> own = new TreeMap<>();
         for (Class<?> c : all.values()) {
             TreeSet<String> types = new TreeSet<>();
+            TreeSet<String> statics = new TreeSet<>();
             for (Class<?> m : c.getDeclaredClasses()) {
                 if (inherited(m.getModifiers())) {
                     types.add(m.getSimpleName());
+                    if (Modifier.isStatic(m.getModifiers())) {
+                        statics.add(m.getSimpleName());
+                    }
                 }
             }
             TreeSet<String> fields = new TreeSet<>();
             for (Field f : c.getDeclaredFields()) {
                 if (inherited(f.getModifiers()) && !f.isSynthetic()) {
-                    fields.add(f.getName());
+                    (Modifier.isStatic(f.getModifiers()) ? statics : fields).add(f.getName());
                 }
             }
             List<String> supers = new ArrayList<>();
@@ -85,19 +92,18 @@ public class JdkMembers {
             for (Class<?> i : c.getInterfaces()) {
                 supers.add(i.getCanonicalName());
             }
-            own.put(c.getCanonicalName(), new Entry(supers, types, fields));
+            own.put(c.getCanonicalName(), new Entry(supers, types, fields, statics));
         }
 
         Map<String, Entry> out = new LinkedHashMap<>();
         for (Map.Entry<String, Entry> e : own.entrySet()) {
-            Class<?> c = all.get(e.getKey());
-            if (Modifier.isFinal(c.getModifiers()) || c.isEnum() || c.isRecord()
-                    || c.isAnnotation() || !hasMembers(e.getKey(), own)) {
+            if (!hasMembers(e.getKey(), own)) {
                 continue;
             }
-            List<String> supers = e.getValue().supers().stream()
+            Entry v = e.getValue();
+            List<String> supers = v.supers().stream()
                     .filter(s -> own.containsKey(s) && hasMembers(s, own)).toList();
-            out.put(e.getKey(), new Entry(supers, e.getValue().types(), e.getValue().fields()));
+            out.put(e.getKey(), new Entry(supers, v.types(), v.fields(), v.statics()));
         }
 
         try (PrintWriter w = new PrintWriter(Files.newBufferedWriter(Path.of(args[0]),
@@ -109,7 +115,8 @@ public class JdkMembers {
             for (Map.Entry<String, Entry> e : out.entrySet()) {
                 Entry v = e.getValue();
                 w.print("    \"" + e.getKey() + "\": {\"supers\": " + list(v.supers())
-                        + ", \"types\": " + list(v.types()) + ", \"fields\": " + list(v.fields()) + "}");
+                        + ", \"types\": " + list(v.types()) + ", \"fields\": " + list(v.fields())
+                        + ", \"static\": " + list(v.statics()) + "}");
                 w.println(++i < out.size() ? "," : "");
             }
             w.println("  }");
@@ -136,7 +143,7 @@ public class JdkMembers {
         if (e == null) {
             return false;
         }
-        if (!e.types().isEmpty() || !e.fields().isEmpty()) {
+        if (!e.types().isEmpty() || !e.fields().isEmpty() || !e.statics().isEmpty()) {
             return true;
         }
         for (String s : e.supers()) {

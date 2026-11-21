@@ -4,8 +4,9 @@
 ; ---------------------------------------------------------------- file scope
 (package_declaration [(identifier) (scoped_identifier)] @package)
 
-(import_declaration [(identifier) (scoped_identifier)] @import .)
-(import_declaration [(identifier) (scoped_identifier)] @import.wildcard (asterisk))
+(import_declaration "static"? @import.static [(identifier) (scoped_identifier)] @import .)
+(import_declaration "static"? @import.static [(identifier) (scoped_identifier)] @import.wildcard
+  (asterisk))
 
 ; ---------------------------------------------------------------- types
 (class_declaration (modifiers)? @modifiers name: (identifier) @name) @type.class
@@ -97,10 +98,18 @@
 (record_pattern [(identifier) (scoped_identifier)] @body.ref.type)
 ; `o.new Inner()`: a member of o's type, which the scope does not tell
 (object_creation_expression (_) . "." . "new"
-  type: [(type_identifier) @body.qualified (generic_type (type_identifier) @body.qualified)])
+  type: [(type_identifier) @body.unread (generic_type (type_identifier) @body.unread)])
+; `X.super::m`: X is the name, in type position; `super` is none
+((type_identifier) @body.unread (#eq? @body.unread "super"))
+(method_reference . (scoped_type_identifier (type_identifier) @_s .) @body.unread
+  (#eq? @_s "super"))
 ; `X.this`, `X.super.m()`: only a type can stand before them; `X.this.m()` is no receiver X,
 ; and the extractor drops the receiver of `X.super.m()` (the type pattern below records it)
 (method_invocation object: [(identifier) (field_access field: (identifier))] @body.ref.receiver)
+; `Foo.X`, `case Kind.A`, `Foo.X.m()`; `Foo::m`, `Foo::new` (`Foo[]::new` is a type)
+(field_access object: [(identifier) (field_access field: (identifier))] @body.ref.receiver
+  field: (identifier))
+(method_reference . [(identifier) (field_access field: (identifier))] @body.ref.receiver)
 (field_access object: (_) @body.ref.type field: (this))
 (method_invocation object: (_) @body.ref.type . (super))
 

@@ -55,8 +55,9 @@ _JDK_COMMON = {
 }
 
 
-# The nested types and fields JDK supertypes pass on by name: public and protected ones,
-# their own and those they inherit (bench/javac_oracle/oracle.py jdk writes it).
+# The nested types and fields of JDK types a class outside the JDK sees by name: public
+# and protected ones, their own and those they inherit; "static" lists what `import
+# static` brings in (bench/javac_oracle/oracle.py jdk writes it).
 _JDK_TABLE = Path(__file__).with_name("java_jdk.json")
 
 
@@ -79,6 +80,18 @@ def _jdk_types(qname: str) -> dict[str, str]:
 
 
 @cache
+def _jdk_fields(qname: str, static: bool) -> frozenset[str]:
+    """The fields of the JDK type, inherited ones too; only the static ones if ``static``."""
+    entry = _jdk().get(qname)
+    if entry is None:
+        return frozenset()
+    own = set(entry["static"]) - set(entry["types"])
+    if not static:
+        own |= set(entry["fields"])
+    return frozenset(own.union(*(_jdk_fields(s, static) for s in entry["supers"])))
+
+
+@cache
 def _jdk_named(simple: str) -> Optional[str]:
     """The listed JDK type of a simple name (a builtin kept unqualified: `Random`), when
     exactly one has it."""
@@ -97,6 +110,7 @@ class JavaSpec(LanguageSpec):
     })
     annotation_nodes = frozenset({"marker_annotation", "annotation"})
     type_argument_nodes = frozenset({"type_arguments"})
+    receiver_part_nodes = frozenset({"identifier"})
     annotation_value_args = frozenset({"field_access"})   # `Include.NON_NULL`
     builtins = frozenset(_PRIMITIVES | _JAVA_LANG | _JDK_COMMON)
     visibility_keywords = {
@@ -114,6 +128,10 @@ class JavaSpec(LanguageSpec):
     def inherited_type(self, super_id: str, name: str) -> Optional[str]:
         qname = super_id if "." in super_id else _jdk_named(super_id)
         return _jdk_types(qname).get(name) if qname else None
+
+    def inherited_field(self, super_id: str, name: str, static: bool = False) -> bool:
+        qname = super_id if "." in super_id else _jdk_named(super_id)
+        return bool(qname) and name in _jdk_fields(qname, static)
 
     def builtin_id(self, name: str) -> str:
         return "java.lang." + name if name in _JAVA_LANG else name

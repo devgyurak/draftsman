@@ -13,6 +13,7 @@ interprets **matches** (not individual captures) by capture name. Captures start
 | `@namespace` + `@namespace.name` | a namespace *block*; types inside get its name prepended |
 | `@import` (+ `@import.alias`) | an import of one type by full path |
 | `@import.wildcard` | a namespace whose members all become visible (`a.b.*`, `using X;`) |
+| `@import.static` | with `@import` or `@import.wildcard`: a Java `import static`, of a type's members (`a.B.N`, `a.B.*`) |
 | `@import.from` + `@import.name` (+ `@import.alias`) | `from module import Name` style; the module text goes through `LanguageSpec.module_id` |
 | `@import.module` (+ `@import.alias`) | a whole module bound to a local name (`import * as pay`, `import typing as t`) |
 | `@alias` (+ `@alias.type`) | a type alias declaration and the type it names; references to it are drawn as references to that type |
@@ -49,7 +50,7 @@ a body is, which names it writes, and what may hide them there.
 | `@body.region` | – | a body: a method or constructor body, a field initializer, an enum constant's arguments and body. A name is read only below one, so a signature's `List<Foo>` is not |
 | `@body.init` (+ `@body.init.name`) | – | a body of no listed member, `via` `.name` when given (a record's compact constructor), else its text before `{` plus `{}` (initializer blocks: `static {}`, `{}`). Only a named type's own count |
 | `@body.ref.type` / `@body.ref.receiver` | yes | a name written in a body: `.type` where only a type can stand (every type name: `new Foo()`, a cast, `X.class`, `X.this`), `.receiver` where a variable can too (`Foo.bar()`). A capture whose parent is captured too is part of that name and dropped (`Foo` in `p.Foo`), and so is one captured as `@body.type` (`T` in `<T extends Foo>`). The name is its identifiers joined by `.`, leaving out annotations, comments and `LanguageSpec.type_argument_nodes` (`Outer<T>.Inner` is `Outer.Inner`, and `T` a name of its own); each part keeps its line and column, in UTF-16 code units as javac counts them |
-| `@body.qualified` | – | a type name looked up in the type of an expression, not in the scope (Java `o.new Inner()`): never recorded |
+| `@body.unread` | – | a type node that is no name of the scope, never recorded: looked up in the type of an expression (Java `o.new Inner()`), or no name at all (`X.super` in `X.super::m`, where `X` is) |
 | `@body.var` | – | a variable declared in a member: parameters, locals, lambda, catch, for and pattern variables, resources, fields of local classes |
 | `@body.type` | – | a type name declared in a member: local classes, type parameters |
 | `@body.class` + `@body.class.super` | – | the body of an anonymous or local class and one supertype it names; the members it inherits are in scope inside it. Not for `o.new Inner() { }`, whose supertype is a member of o's type |

@@ -41,6 +41,7 @@ class Import:
     # modules it may name when several workspace packages share its package name
     ambiguous: tuple[str, ...] = ()
     sep: str = "."
+    static: bool = False   # Java `import static`: members of a type (`a.B.N`, `a.B.*`)
 
     @property
     def local_name(self) -> str:
@@ -100,6 +101,9 @@ class LanguageSpec:
     annotation_name_field: str = "name"
     # Nodes of the type arguments inside a type name (`Outer<T>.Inner`): no part of the name
     type_argument_nodes: frozenset[str] = frozenset()
+    # Nodes a receiver in a body (`@body.ref.receiver`) may be made of: a dotted name, not an
+    # expression (`this.x`, `a[0].B`)
+    receiver_part_nodes: frozenset[str] = frozenset()
 
     # Nodes in an annotation's arguments that name a type (`X.class`, `typeof(X)`,
     # `X::class`; see annotation_arg), and nodes that name a type or a value (`E.V`,
@@ -250,6 +254,11 @@ class LanguageSpec:
         passes on to its subclasses, when the language knows that library and it does;
         else None (also when it does not know)."""
         return None
+
+    def inherited_field(self, super_id: str, name: str, static: bool = False) -> bool:
+        """Whether the external type ``super_id`` is known to have a field ``name`` its
+        subclasses inherit (``static``: one `import static` brings in)."""
+        return False
 
     def is_builtin(self, name: str) -> bool:
         return name in self.builtins

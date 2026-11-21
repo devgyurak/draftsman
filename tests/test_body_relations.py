@@ -137,15 +137,6 @@ def test_a_body_name_has_its_column_in_characters(tmp_path):
     assert ref.places == [(2, line.index("Foo") + 1)]
 
 
-# marked names the extractor does not record yet, (file, line, answer); each step that
-# reads a new form takes its lines off
-_NOT_YET = sorted([
-    # receivers other than a call's: `Util.VALUE`, `Owner::getName`
-    ("p/Forms.java", 25, "p.Util"), ("p/Forms.java", 26, "p.Owner"),
-    ("p/Kind.java", 4, "p.Util"), ("p/Kind.java", 5, "p.Util"),
-    ("p/ExternalStatic.java", 7, "java.lang.Thread.State"),
-    ("p/Inherits.java", 14, "java.lang.Thread.State"),
-])
 # marked names never recorded: `Inner` in `o.new Inner()` is a member of o's type, which
 # the scope does not tell
 _UNREAD = [("p/Qualified.java", n, "p.Outer.Inner") for n in (15, 16, 23)] + \
@@ -156,7 +147,7 @@ def test_body_names_stand_where_the_hand_written_answers_say():
     # tests/fixtures/java/body, which the oracle's selftest checks against javac: every part
     # of a name the extractor records is in the position its marker gives, one no marker
     # lists is a variable or a package (lower case), and every marked name is recorded but
-    # _NOT_YET's and _UNREAD's
+    # _UNREAD's
     want = expected(FIXTURE)
     problems, recorded = [], set()
     for path in sorted(FIXTURE.rglob("*.java")):
@@ -178,7 +169,7 @@ def test_body_names_stand_where_the_hand_written_answers_say():
     assert problems == []
     missed = sorted((rel, line, answer) for (rel, line, col), (answer, _) in want.items()
                     if answer != "-" and (rel, line, col) not in recorded)
-    assert missed == sorted(_NOT_YET + _UNREAD)
+    assert missed == sorted(_UNREAD)
 
 
 def _body(ir) -> list[tuple]:

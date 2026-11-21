@@ -261,13 +261,14 @@ class Extractor:
         spec, sep = self.spec, self.spec.separator
         alias_node = _first(caps, "import.alias")
         alias = _text(alias_node, src) if alias_node is not None else None
+        static = _first(caps, "import.static") is not None   # Java `import static`
         if (n := _first(caps, "import")) is not None:
-            return Import(_text(n, src), alias=alias, sep=sep)
+            return Import(_text(n, src), alias=alias, sep=sep, static=static)
         if (n := _first(caps, "import.wildcard")) is not None:
             text = _text(n, src).strip("'\"")
             target, inside, alts = self._module_target(text, rel)
             return Import(target or text, wildcard=True, external=target is None and not alts,
-                          local=inside, ambiguous=alts, sep=sep,
+                          local=inside, ambiguous=alts, sep=sep, static=static,
                           project_wide=spec.is_project_wide(n),
                           origin="global using" if spec.is_project_wide(n) else None)
         if (n := _first(caps, "import.module")) is not None:
@@ -585,7 +586,7 @@ class Extractor:
         inits: dict[int, str] = {}           # initializer block -> its `via`
         classes: dict[int, list[str]] = {}   # body of an anonymous or local class -> supertypes
         refs, declared = [], []
-        qualified: set[int] = set()   # names looked up in an expression's type
+        unread: set[int] = set()   # type nodes that are no name of the scope
         for caps in other:
             if (n := _first(caps, "body.region")) is not None:
                 regions.add(n.id)
@@ -611,8 +612,8 @@ class Extractor:
                 declared.append((n, "variables"))
             elif (n := _first(caps, "body.type")) is not None:
                 declared.append((n, "types"))
-            elif (n := _first(caps, "body.qualified")) is not None:
-                qualified.add(n.id)
+            elif (n := _first(caps, "body.unread")) is not None:
+                unread.add(n.id)
         if not refs:
             return
         names: dict[int, BodyNames] = {}   # by the node of the member or initializer
@@ -635,11 +636,14 @@ class Extractor:
                     getattr(names.setdefault(a[0], BodyNames()), kind).add(_text(node, src))
                     break
                 cur = cur.parent
-        whole = {n.id for _, n in refs}
         # `T` in `<T extends Foo>` is declared there; `Inner` in `o.new Inner()` is o's
-        not_refs = {n.id for n, _ in declared} | qualified
+        not_refs = {n.id for n, _ in declared} | unread
+        # a receiver is a dotted name, not an expression (`this.x.m()`, `a[0].B.m()`)
+        refs = [(p, n) for p, n in refs if n.id not in not_refs and (
+            p != "receiver" or all(c.type in self.spec.receiver_part_nodes for c in self._parts(n)))]
+        whole = {n.id for _, n in refs}
         for position, node in sorted(refs, key=lambda r: r[1].start_byte):
-            if node.parent.id in whole or node.id in not_refs:
+            if node.parent.id in whole:
                 continue   # `Foo` in `p.Foo`: the whole name is recorded
             in_body, place, around = False, None, []
             cur = node.parent
