@@ -245,6 +245,12 @@ class LanguageSpec:
         star import of another package could shadow (Kotlin java.lang.*), else None."""
         return None
 
+    def inherited_type(self, super_id: str, name: str) -> Optional[str]:
+        """The qualified name of the nested type ``name`` the external supertype ``super_id``
+        passes on to its subclasses, when the language knows that library and it does;
+        else None (also when it does not know)."""
+        return None
+
     def is_builtin(self, name: str) -> bool:
         return name in self.builtins
 

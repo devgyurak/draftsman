@@ -22,10 +22,20 @@ is that type. Aliases of aliases are followed.
   supertypes → single-type imports → same package → wildcard imports → `java.lang` and
   common JDK types. Inherited member types are found through project supertypes at
   every level, including a nested type's supertype clause (`class Impl implements
-  Listener` where the enclosing class inherits `Listener`). Names that can only come from
-  an external wildcard import or an external supertype (`LayoutParams` in a `FrameLayout`
-  subclass) stay unresolved with a hint — they could also be same-package generated code
-  outside the sources, so they are not guessed.
+  Listener` where the enclosing class inherits `Listener`). A JDK supertype passes on the
+  nested types the JDK declares (`Entry` in a `HashMap` subclass is `java.util.Map.Entry`,
+  also over the package's own `Entry`): `langs/java_jdk.json` lists the public and
+  protected nested types and fields of the JDK 21 types a class can extend, their
+  inherited ones too (`bench/javac_oracle/oracle.py jdk` writes it). Names that can only
+  come from an external wildcard import or another external supertype (`LayoutParams` in
+  a `FrameLayout` subclass) stay unresolved with a hint — they could also be same-package
+  generated code outside the sources, so they are not guessed.
+- Known limit: a nested type of a supertype outside the JDK (Spring, Android) is not
+  known, so it does not hide a project type of the same name: a `Validator` subclass
+  writing `Foo` gets the project's `Foo` even if `Validator` declared one. The parser
+  cannot tell; javac can. Nor does a JDK type that a JDK after 21 gives a new nested type.
+- Known miss: project types declared in `java.lang` (Netty's stubs of `java.lang.Module`
+  for older JDKs) are not implicitly imported; `Module` stays the JDK's.
 - Type annotations right before varargs (`X509Certificate @Nullable ... certs`) are valid
   Java 8 that the tree-sitter grammar rejects; they are blanked before parsing (same
   length, so line numbers are exact). Annotations on array levels (`String @A []`) are

@@ -10,6 +10,7 @@ script runs it and reads its output.
     uv run bench/javac_oracle/oracle.py scope REPO OUT.jsonl ir.json
     uv run bench/javac_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR [-v]
     uv run bench/javac_oracle/oracle.py measure OUT.jsonl [--ir ir.json]
+    uv run bench/javac_oracle/oracle.py jdk
 
 `selftest` checks the oracle against the hand-written answers in
 tests/fixtures/java/body (its README gives the marker format), so that a mismatch later
@@ -19,7 +20,9 @@ classpath. `scope` fails unless the oracle saw the same Java types, declared
 in the same files, as ir.json of those sources: every comparison with ir.json rests on
 it. `compare` extracts the same sources and checks every name a body relation is drawn
 from against what javac resolved at its place; it fails on any mismatch outside the files
-javac could not compile (after `scope`, on the IR it builds). `measure` prints the counts the rules of the receiver position are decided by.
+javac could not compile (after `scope`, on the IR it builds). `measure` prints the counts
+the rules of the receiver position are decided by. `jdk` writes the table of the nested
+types and fields JDK supertypes pass on (JdkMembers.java), which the extractor reads.
 
 The JDK is $JAVA_HOME, else Homebrew's openjdk@21 (/usr/bin/javac on macOS is a stub).
 """
@@ -344,6 +347,17 @@ def compare(args) -> int:
     return 1 if problems["mismatch"] else 0
 
 
+# ------------------------------------------------------------------ jdk
+
+JDK_TABLE = ROOT / "skills" / "draftsman" / "scripts" / "draftsman" / "langs" / "java_jdk.json"
+
+
+def jdk_table(_args) -> int:
+    subprocess.run([jdk() / "bin" / "java", HERE / "JdkMembers.java", JDK_TABLE], check=True)
+    print(f"{JDK_TABLE.relative_to(ROOT)}: {len(json.loads(JDK_TABLE.read_text())['types'])} types")
+    return 0
+
+
 # ------------------------------------------------------------------ measure
 
 def measure(args) -> int:
@@ -430,6 +444,7 @@ def main(argv=None) -> int:
     k.add_argument("--checkout", type=Path, required=True)
     k.add_argument("-v", "--verbose", action="store_true", help="list every miss and mismatch")
     k.set_defaults(fn=compare)
+    sub.add_parser("jdk").set_defaults(fn=jdk_table)
     m = sub.add_parser("measure")
     m.add_argument("oracle", type=Path)
     m.add_argument("--ir", type=Path, help="ir.json of the same sources: count only what it lacks")

@@ -219,14 +219,16 @@ def test_an_anonymous_class_sees_the_nested_types_its_project_super_inherits(tmp
         "p/Entry.java": "package p; public class Entry { }",
         "p/Base.java": "package p; public class Base { public static class Entry { } }",
         "p/Sub.java": "package p; public class Sub extends Base { }",
+        "p/State.java": "package p; public class State { }",
         "p/A.java": """package p;
 class A {
     void project() { new Sub() { void f() { new Entry(); } }; }
-    void outside() { new Thread() { public void run() { new Entry(); } }; }
+    void outside() { new Thread() { public void run() { new State(); new Entry(); } }; }
 }
 """})
-    # under Thread a nested type of an outside class may be meant: nothing is drawn
-    assert _body(ir) == [("p.A", "p.Base.Entry", "project", 3), ("p.A", "p.Sub", "project", 3)]
+    # Thread passes on Thread.State (java_jdk.json), and no Entry
+    assert _body(ir) == [("p.A", "p.Base.Entry", "project", 3), ("p.A", "p.Entry", "outside", 4),
+                         ("p.A", "p.Sub", "project", 3)]
 
 
 def test_a_name_two_wildcard_imports_provide_draws_nothing(tmp_path):
@@ -237,14 +239,6 @@ def test_a_name_two_wildcard_imports_provide_draws_nothing(tmp_path):
         "b/Bar.java": "package b; public class Bar { }",
         "p/A.java": "package p; import a.*; import b.*; class A { void m() { new Foo(); new Bar(); } }"})
     assert _body(ir) == [("p.A", "b.Bar", "m", 1)]
-
-
-# names drawn where javac resolves them to something else, (file, line, javac's answer)
-_KNOWN_WRONG = [
-    # a nested type of a supertype outside the sources (HashMap's Map.Entry) wins over the
-    # package's own Entry: what the outside class declares is not known
-    ("p/Inherits.java", 7, "java.util.Map.Entry"),
-]
 
 
 def test_body_relations_go_where_the_hand_written_answers_say():
@@ -259,7 +253,7 @@ def test_body_relations_go_where_the_hand_written_answers_say():
         answer, _ = want[(file, line, col)]
         if answer != to:
             wrong.append((file, line, answer))
-    assert wrong == _KNOWN_WRONG
+    assert wrong == []
     # every project type in type position is drawn, but the part of a longer name
     # (`Util` in `new Util.Helper()`) and a type's own name
     missed = [(file, line, answer) for (file, line, col), (answer, position) in want.items()

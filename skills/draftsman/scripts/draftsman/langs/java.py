@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
 import re
+from functools import cache
+from pathlib import Path
+from typing import Optional
 
 from .base import LanguageSpec
 
@@ -51,6 +55,37 @@ _JDK_COMMON = {
 }
 
 
+# The nested types and fields JDK supertypes pass on by name: public and protected ones,
+# their own and those they inherit (bench/javac_oracle/oracle.py jdk writes it).
+_JDK_TABLE = Path(__file__).with_name("java_jdk.json")
+
+
+@cache
+def _jdk() -> dict:
+    return json.loads(_JDK_TABLE.read_text(encoding="utf-8"))["types"]
+
+
+@cache
+def _jdk_types(qname: str) -> dict[str, str]:
+    """Simple name -> qualified name of the nested types the JDK type passes on."""
+    entry = _jdk().get(qname)
+    if entry is None:
+        return {}
+    out: dict[str, str] = {}
+    for sup in entry["supers"]:
+        out.update(_jdk_types(sup))
+    out.update({n: f"{qname}.{n}" for n in entry["types"]})   # its own hide its supers'
+    return out
+
+
+@cache
+def _jdk_named(simple: str) -> Optional[str]:
+    """The listed JDK type of a simple name (a builtin kept unqualified: `Random`), when
+    exactly one has it."""
+    hits = [q for q in _jdk() if q.rsplit(".", 1)[-1] == simple]
+    return hits[0] if len(hits) == 1 else None
+
+
 class JavaSpec(LanguageSpec):
     name = "java"
     grammar = "java"
@@ -75,6 +110,10 @@ class JavaSpec(LanguageSpec):
         if node.type == "class_literal":   # `X.class`, `X[].class`
             return text(node.named_children[0]), True
         return super().annotation_arg(node, text)
+
+    def inherited_type(self, super_id: str, name: str) -> Optional[str]:
+        qname = super_id if "." in super_id else _jdk_named(super_id)
+        return _jdk_types(qname).get(name) if qname else None
 
     def builtin_id(self, name: str) -> str:
         return "java.lang." + name if name in _JAVA_LANG else name

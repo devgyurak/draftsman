@@ -193,11 +193,25 @@ def test_nested_types_inherited_from_supertypes(tmp_path):
 
 def test_unresolved_hint_for_external_supertype(tmp_path):
     ir = extract_source(tmp_path, {
-        "p/Dataset.java": "package p; import java.util.AbstractMap;"
-                          " class Dataset extends AbstractMap<String, String> { Entry first; }",
+        "p/Dataset.java": "package p; import org.lib.Table;"
+                          " class Dataset extends Table<String, String> { Entry first; }",
     })
     (u,) = ir.unresolved
-    assert u.hint == "may be a nested type inherited from java.util.AbstractMap"
+    assert u.hint == "may be a nested type inherited from org.lib.Table"
+
+
+def test_a_jdk_supertype_passes_on_its_nested_types(tmp_path):
+    # java_jdk.json: HashMap inherits Map.Entry, which hides the package's own Entry; a
+    # supertype the table does not know hides nothing
+    ir = extract_source(tmp_path, {
+        "p/Entry.java": "package p; public class Entry { }",
+        "p/Dataset.java": "package p; import java.util.HashMap;"
+                          " class Dataset extends HashMap<String, String> { Entry first; }",
+        "p/Other.java": "package p; import org.lib.Table; class Other extends Table { Entry e; }",
+    })
+    assert not ir.unresolved
+    assert [(r.from_, r.to) for r in ir.relations if r.kind == "association"] == \
+        [("p.Other", "p.Entry")]
 
 
 def test_java_lang_supertypes_are_qualified(tmp_path):
