@@ -1,0 +1,13 @@
+# Arm B's plugin replaced in an existing image; built by update_draftsman.sh.
+ARG BASE
+FROM ${BASE}
+
+USER root
+RUN rm -rf /opt/bench/plugins/draftsman
+USER bench
+COPY --chown=bench plugins/draftsman/ /opt/bench/plugins/draftsman/
+RUN npm ci --prefix /opt/bench/plugins/draftsman/skills/draftsman/scripts --no-audit --no-fund
+
+ARG BASE_ID
+ARG DRAFTSMAN_COMMIT
+LABEL bench.draftsman=${DRAFTSMAN_COMMIT} bench.base=${BASE_ID}

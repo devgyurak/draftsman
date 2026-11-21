@@ -21,7 +21,9 @@ done
 # bench/, docs/ and the READMEs hold the answer key and must not reach any arm.
 draftsman_commit=$(git -C "$root" rev-parse HEAD)
 mkdir -p "$ctx/plugins/draftsman"
-git -C "$root" archive HEAD .claude-plugin skills commands assets/icon.png LICENSE NOTICE \
+# (commands/ went in 0.3.0; list only what HEAD has)
+plugin_files=$(git -C "$root" ls-tree --name-only HEAD -- .claude-plugin skills commands assets/icon.png LICENSE NOTICE)
+git -C "$root" archive HEAD $plugin_files \
   | tar -x -C "$ctx/plugins/draftsman"
 
 # arm C: night-market's cartograph plugin at the pinned commit

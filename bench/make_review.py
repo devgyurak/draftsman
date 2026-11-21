@@ -6,7 +6,10 @@ a 20% sample of the rest (fixed seed). Each row carries the cited lines and the
 production files in which both simple names appear, so an empty list confirms
 *unsupported* at once. No arm or run: the sheet stays blind.
 
-    python3 bench/make_review.py --repos <dir with the checkouts>
+    python3 bench/make_review.py --repos <dir with the checkouts> [--round v2]
+
+A later round reviews only the edges it labelled anew; the carried ones were reviewed with
+the round they came from. A sheet that already holds verdicts is never overwritten.
 """
 
 import argparse
@@ -17,20 +20,23 @@ from pathlib import Path
 
 import yaml
 
+import rounds
 from select_focus import excluded
 
 BENCH = Path(__file__).resolve().parent
 ALWAYS = {'unsupported', 'indirect', 'wrong_kind_or_direction', 'undecidable'}
-# rows the labelling session listed as uncertain (its report)
-FLAGGED = {'E0032', 'E0259', 'E0071', 'E0149', 'E0132', 'E0461', 'E0256', 'E0243',
-           'E0278', 'E0227', 'E0206', 'E0275'}
+# rows the labelling session listed as uncertain (its report), per round
+FLAGGED = {'v1': {'E0032', 'E0259', 'E0071', 'E0149', 'E0132', 'E0461', 'E0256', 'E0243',
+           'E0278', 'E0227', 'E0206', 'E0275'},
+           'v2': {f'V2-{n:04d}' for n in (6, 116, 264, 498, 79, 356, 37, 188, 393, 313, 29, 262, 9,
+                                          308, 340, 94, 121, 197, 436, 123, 339)}}
 _PD = 'common/src/main/java/io/netty/util/internal/PlatformDependent.java:622'
 _SSL = 'microbench/src/main/java/io/netty/microbench/handler/ssl/AbstractSslEngineBenchmark.java:128'
 _ANON = 'RUBRIC "Decided at review": anonymous class as a node, strongest evidence of the pair'
 _UNDECIDABLE = 'RUBRIC "Decided at review": the focus file decides the name'
 _NESTED = 'RUBRIC "Decided at review": outer-to-nested use, self at the top level'
 # edge -> (verdict, label_drawn, file_line_drawn, label_top, file_line_top, note), prefilled
-DECIDED = {
+DECIDED_V1 = {
     **{e: ('change', 'declared', _PD, 'declared', _PD, _ANON) for e in ('E0027', 'E0091', 'E0297')},
     'E0028': ('change', 'declared', _SSL, 'declared', _SSL, _ANON),
     **{e: ('agree', '', '', '', '', _UNDECIDABLE)
@@ -56,11 +62,18 @@ def simple(fqn: str, drawn: str) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--repos', type=Path, required=True)
+    ap.add_argument('--round', default='v1')
     args = ap.parse_args()
     tasks = yaml.safe_load((BENCH / 'tasks.yaml').read_text())
-    rows = list(csv.DictReader(open(BENCH / 'labels' / 'blind_edges.csv', newline='')))
-    failed = {r['edge_id'] for r in csv.DictReader(open(BENCH / 'labels' / 'citations.csv'))
+    labels = rounds.labels(args.round)
+    sheet = labels / 'review.csv'
+    if sheet.exists() and any(r['verdict'] for r in csv.DictReader(open(sheet, newline=''))):
+        raise SystemExit(f'{sheet} already holds verdicts; not overwritten')
+    rows = [r for r in csv.DictReader(open(labels / 'blind_edges.csv', newline='')) if not r.get('carried_from')]
+    failed = {r['edge_id'] for r in csv.DictReader(open(labels / 'citations.csv'))
               if r['status'] == 'fail'}
+    flagged = FLAGGED.get(args.round, set())
+    decided = DECIDED_V1 if args.round == 'v1' else {}
 
     texts: dict[str, dict[str, str]] = {}
     for repo, spec in tasks['repos'].items():
@@ -75,7 +88,7 @@ def main() -> None:
             reasons.append('unnamed')
         if r['edge_id'] in failed:
             reasons.append('citation')
-        if r['edge_id'] in FLAGGED:
+        if r['edge_id'] in flagged:
             reasons.append('labeller flagged')
         return ', '.join(reasons)
 
@@ -97,7 +110,7 @@ def main() -> None:
                       if re.search(rf'\b{re.escape(a)}\b', t) and re.search(rf'\b{re.escape(b)}\b', t))
         focus = r['focus']
         incident = focus != '-' and top(focus) in (top(r['source_fqn']), top(r['target_fqn']))
-        verdict, drawn, line_drawn, top_, line_top, note = DECIDED.get(r['edge_id'], ('',) * 6)
+        verdict, drawn, line_drawn, top_, line_top, note = decided.get(r['edge_id'], ('',) * 6)
         out.append({**r, 'review_because': why(r) or 'sample',
                     'focus_incident': str(incident).lower(),
                     'cited_drawn': cited(r['repo'], r['file_line_drawn']),
@@ -105,7 +118,7 @@ def main() -> None:
                     'files_naming_both': ' '.join(both[:12]) + (f' (+{len(both) - 12})' if len(both) > 12 else ''),
                     'verdict': verdict, 'new_label_drawn': drawn, 'new_file_line_drawn': line_drawn,
                     'new_label_top': top_, 'new_file_line_top': line_top, 'reviewer_note': note})
-    with open(BENCH / 'labels' / 'review.csv', 'w', newline='') as fh:
+    with open(sheet, 'w', newline='') as fh:
         w = csv.DictWriter(fh, fieldnames=list(out[0]))
         w.writeheader()
         w.writerows(out)

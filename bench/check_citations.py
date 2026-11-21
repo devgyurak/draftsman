@@ -6,7 +6,7 @@ also the name of a type nested in it (`Request` for `Connection`). The using end
 source; an undirected edge may cite either end. Labels flagged unnamed are not checked
 (they always go to review), nor are ends outside the checkout.
 
-    python3 bench/check_citations.py --repos <dir with the checkouts>
+    python3 bench/check_citations.py --repos <dir with the checkouts> [--round v2]
 
 writes labels/citations.csv (edge, level, status, reason) and prints the failures.
 """
@@ -16,6 +16,8 @@ import csv
 import re
 from functools import cache
 from pathlib import Path
+
+import rounds
 
 BENCH = Path(__file__).resolve().parent
 
@@ -84,8 +86,10 @@ def check(repo: Repo, using: str, used: str, cited: str, level: str) -> str | No
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--repos', type=Path, required=True)
+    ap.add_argument('--round', default='v1')
     args = ap.parse_args()
-    rows = list(csv.DictReader(open(BENCH / 'labels' / 'blind_edges.csv', newline='')))
+    labels = rounds.labels(args.round)
+    rows = list(csv.DictReader(open(labels / 'blind_edges.csv', newline='')))
     repos: dict[str, Repo] = {}
     out = []
     for r in rows:
@@ -105,7 +109,7 @@ def main() -> None:
             if reason and r['directed'] == 'false':
                 reason = check(repo, tgt, src, cited, level) and reason
             out.append((r['edge_id'], level, 'fail' if reason else 'pass', reason or ''))
-    with open(BENCH / 'labels' / 'citations.csv', 'w', newline='') as fh:
+    with open(labels / 'citations.csv', 'w', newline='') as fh:
         w = csv.writer(fh)
         w.writerow(['edge_id', 'level', 'status', 'reason'])
         w.writerows(out)

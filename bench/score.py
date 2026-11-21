@@ -1,12 +1,12 @@
 """Score the measured runs (RUBRIC.md, "Measures").
 
-    uv run python bench/score.py --repos <dir with the checkouts>
+    uv run python bench/score.py --repos <dir with the checkouts> [--round v2]
 
-Applies the human review (labels/review.csv) to the first labels, unblinds them with
-labels/occurrences.csv and writes
-  labels/final_edges.csv        the labels scored: the first labels with the review applied
-  results/scores/runs.csv       one row per run
-  results/scores/summary.csv    per task, repository and arm; T2 also over jsoup and Netty
+Applies the human review (review.csv) to the first labels, unblinds them with
+occurrences.csv and writes, in the round's directories (rounds.py),
+  final_edges.csv   the labels scored: the first labels with the review applied
+  runs.csv          one row per run
+  summary.csv       per task, repository and arm; T2 also over jsoup and Netty
                                 together, and over all three repositories
 and prints the relations labelled as real that the recall denominators lack, which
 RUBRIC.md ("Recall denominators") says to add by hand.
@@ -28,12 +28,12 @@ from pathlib import Path
 
 import yaml
 
+import rounds
 from check_citations import Repo
 from parse_mermaid import diagram
 from select_focus import excluded
 
 BENCH = Path(__file__).resolve().parent
-LABELS = BENCH / 'labels'
 # worst first: an edge whose drawings disagree at the top level takes the worst label
 ORDER = ['unsupported', 'indirect', 'wrong_kind_or_direction', 'body_only', 'declared', 'undecidable', 'self']
 STRENGTH = {'declared': 2, 'body_only': 1}
@@ -52,9 +52,9 @@ def tops(fqn: str) -> set[str]:
     return {top(f) for f in fqn.split('|')}
 
 
-def final_labels() -> dict[str, dict]:
-    rows = {r['edge_id']: r for r in csv.DictReader(open(LABELS / 'blind_edges.csv', newline=''))}
-    for r in csv.DictReader(open(LABELS / 'review.csv', newline='')):
+def final_labels(labels: Path) -> dict[str, dict]:
+    rows = {r['edge_id']: r for r in csv.DictReader(open(labels / 'blind_edges.csv', newline=''))}
+    for r in csv.DictReader(open(labels / 'review.csv', newline='')):
         e = rows[r['edge_id']]
         e['reviewed'] = r['verdict']
         if r['verdict'] != 'change':
@@ -66,7 +66,7 @@ def final_labels() -> dict[str, dict]:
         e['note'] = (e['note'] + '; ' if e['note'] else '') + 'review: ' + r['reviewer_note']
     for e in rows.values():
         e.setdefault('reviewed', '')
-    with open(LABELS / 'final_edges.csv', 'w', newline='') as fh:
+    with open(labels / 'final_edges.csv', 'w', newline='') as fh:
         w = csv.DictWriter(fh, fieldnames=list(next(iter(rows.values()))))
         w.writeheader()
         w.writerows(rows.values())
@@ -75,7 +75,7 @@ def final_labels() -> dict[str, dict]:
 
 def denominators(repo: str, focus: str) -> list[dict]:
     name = '_T1_all' if focus == '-' else focus.rsplit('.', 1)[-1]
-    return list(csv.DictReader(open(LABELS / 'denominators' / repo / f'{name}.csv', newline='')))
+    return list(csv.DictReader(open(rounds.DENOMINATORS / repo / f'{name}.csv', newline='')))
 
 
 def recall_pairs(rows: list[dict], level: str) -> dict[tuple, dict[str, str]]:
@@ -127,15 +127,17 @@ def transcript_facts(path: Path) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--repos', type=Path, required=True)
+    ap.add_argument('--round', default='v1')
     args = ap.parse_args()
     tasks = yaml.safe_load((BENCH / 'tasks.yaml').read_text())
-    edges = final_labels()
+    labels = rounds.labels(args.round)
+    edges = final_labels(labels)
     drawn_in: dict[str, dict[str, bool]] = defaultdict(dict)   # run -> edge -> every drawing inferred
-    for o in csv.DictReader(open(LABELS / 'occurrences.csv', newline='')):
+    for o in csv.DictReader(open(labels / 'occurrences.csv', newline='')):
         seen = drawn_in[o['run']]
         seen[o['edge_id']] = seen.get(o['edge_id'], True) and o['inferred'] == 'true'
     nodes = defaultdict(list)
-    for n in csv.DictReader(open(LABELS / 'nodes.csv', newline='')):
+    for n in csv.DictReader(open(labels / 'nodes.csv', newline='')):
         nodes[n['run']].append(n['node'])
 
     repos = {name: Repo(args.repos / name) for name in tasks['repos']}
@@ -168,13 +170,13 @@ def main() -> None:
     additions = set()
     conflicts = []
     runs = []
-    for meta_file in sorted((BENCH / 'results' / 'raw' / 'measured').glob('*.meta.json')):
+    for meta_file in sorted(rounds.raw(args.round).glob('*.meta.json')):
         meta = json.loads(meta_file.read_text())
         rid, repo, focus = meta['id'], meta['repo'], meta['focus'] or '-'
         transcript = meta_file.with_name(meta_file.name.replace('.meta.json', '.jsonl'))
         facts = transcript_facts(transcript)
         d = diagram(transcript)
-        failed = d is None or not d.edges or bool(d.unparsed) or facts['is_error'] or meta['timed_out']
+        failed = d is None or bool(d.unparsed) or facts['is_error'] or meta['timed_out']
         plugin = {'A': None, 'B': 'draftsman', 'C': 'class-diagram'}[meta['arm']]
         row = {'run': rid, 'task': meta['task'], 'repo': repo, 'focus': focus, 'arm': meta['arm'],
                'failed': failed,
@@ -269,7 +271,7 @@ def main() -> None:
                 additions.add((level, repo, focus, src, tgt, e['edge_id'], e[f'label_{level}'], e[f'file_line_{level}']))
         runs.append(row)
 
-    out = BENCH / 'results' / 'scores'
+    out = rounds.scores(args.round)
     out.mkdir(parents=True, exist_ok=True)
     fields = list(dict.fromkeys(k for r in runs for k in r))
     with open(out / 'runs.csv', 'w', newline='') as fh:

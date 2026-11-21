@@ -2,6 +2,10 @@
 
     python3 bench/run.py pilot      [--dry-run]
     python3 bench/run.py measured   [--dry-run]
+    python3 bench/run.py measured --version v2 [--arms B]
+
+--version names a later round of the same set (results/raw/<set>-<version>/), run with
+the same configuration on an image whose plugin changed; --arms runs only those arms.
 
 Each run starts a fresh container from the draftsman-bench image (bench/container),
 copies the pinned repository into the container's own filesystem, and runs
@@ -109,11 +113,13 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('set', choices=['pilot', 'measured'])
     ap.add_argument('--dry-run', action='store_true', help='print the runs, start nothing')
+    ap.add_argument('--version', help='a later round: results go to <set>-<version>')
+    ap.add_argument('--arms', help='only these arms, e.g. B')
     args = ap.parse_args()
 
     tasks = yaml.safe_load((BENCH / 'tasks.yaml').read_text())
     focus = yaml.safe_load((BENCH / 'focus.yaml').read_text())
-    runs = matrix(tasks, focus, args.set)
+    runs = [r for r in matrix(tasks, focus, args.set) if not args.arms or r['arm'] in args.arms]
     if args.dry_run:
         for r in runs:
             print(r['id'])
@@ -130,7 +136,7 @@ def main() -> None:
     secret = os.environ[auth]
 
     img = image()
-    out_dir = BENCH / 'results' / 'raw' / args.set
+    out_dir = BENCH / 'results' / 'raw' / (f'{args.set}-{args.version}' if args.version else args.set)
     out_dir.mkdir(parents=True, exist_ok=True)
     for n, run in enumerate(runs, 1):
         transcript = out_dir / f'{run["id"]}.jsonl'
