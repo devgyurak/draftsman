@@ -52,14 +52,15 @@ import javax.tools.ToolProvider;
  * The names javac resolves inside bodies, one JSON object per line: the answer key the
  * extractor's body relations are compared with (bench/javac_oracle/oracle.py).
  *
- *   java TypeUses OUT.jsonl ROOT OPTIONS-FILE SOURCES-FILE [CONTEXT-FILE [STUBS-FILE]]
+ *   java TypeUses OUT.jsonl ROOT OPTIONS-FILE SOURCES-FILE [CONTEXT-FILE [STUBS-FILE [PEERS-FILE]]]
  *
  * OPTIONS-FILE holds javac options, SOURCES-FILE the source files, one per line.
  * CONTEXT-FILE lists files javac needs that are not among the sources the extractor reads
  * (generated ones): compiled, never recorded, and their types count as outside.
  * STUBS-FILE is the reverse, "NAME<tab>FILE" per line: a top-level type the extractor
  * reads from FILE that javac only has as a class file (Netty's stubs of JDK types); it and
- * its nested types count as in the sources. Records:
+ * its nested types count as in the sources. PEERS-FILE lists sources recorded by another
+ * run (a module built for another release): compiled, never recorded, still sources. Records:
  *
  *   {"use": ...}       a name in a body that javac resolved to a type, a type parameter or
  *                      a local class anywhere, or to a variable in a receiver position
@@ -89,8 +90,10 @@ public class TypeUses {
         DiagnosticCollector<JavaFileObject> diags = new DiagnosticCollector<>();
         StandardJavaFileManager fm = compiler.getStandardFileManager(diags, null,
                 StandardCharsets.UTF_8);
+        List<String> peers = args.length > 6 ? lines(Path.of(args[6])) : List.of();
         List<String> all = new ArrayList<>(files);
         all.addAll(context);
+        all.addAll(peers);
         JavacTask task = (JavacTask) compiler.getTask(null, fm, diags, options, null,
                 fm.getJavaFileObjectsFromStrings(all));
         Iterable<? extends CompilationUnitTree> units = task.parse();
@@ -110,13 +113,17 @@ public class TypeUses {
             for (String f : context) {
                 outside.add(Path.of(f).toAbsolutePath().normalize().toUri());
             }
+            Set<URI> skipped = new HashSet<>(outside);
+            for (String f : peers) {
+                skipped.add(Path.of(f).toAbsolutePath().normalize().toUri());
+            }
             Scanner scanner = new Scanner(trees, task.getTypes(), task.getElements(), root,
                     outside, stubs.keySet(), w);
             for (Map.Entry<String, String> stub : stubs.entrySet()) {
                 scanner.declared(task.getElements().getTypeElement(stub.getKey()), stub.getValue());
             }
             for (CompilationUnitTree cu : units) {
-                if (!outside.contains(cu.getSourceFile().toUri())) {
+                if (!skipped.contains(cu.getSourceFile().toUri())) {
                     scanner.unit(cu);
                 }
             }

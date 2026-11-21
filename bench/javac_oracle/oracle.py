@@ -76,6 +76,9 @@ REPOS = {
                          "--release 8 reads MethodHandle from JDK 8, not from the stub, and "
                          "its nested annotation is not public there"},
               "release": "8", "skip": ["module-info.java"],
+              # modules built for another release, compiled in a run of their own
+              "separate": [{"sources": ["transport-classes-io_uring/src/main/java"],
+                            "release": "9"}],
               "classpath": {"files": "*/target/oracle-cp.txt", "extra": ["*-stub/target/classes"]}},
 }
 
@@ -97,14 +100,16 @@ def build(home: Path) -> None:
 
 
 def oracle(root: Path, files: list[Path], options: list[str], out: Path,
-           context: list[Path] = (), stubs: dict[str, str] = {}) -> list[dict]:
+           context: list[Path] = (), stubs: dict[str, str] = {},
+           peers: list[Path] = ()) -> list[dict]:
     """Run TypeUses over ``files`` (paths reported below ``root``) and read its records;
     ``context`` is compiled along but not recorded, ``stubs`` maps class-file types to the
-    file they count as declared in."""
+    file they count as declared in, ``peers`` are sources another run records."""
     home = jdk()
     build(home)
     with tempfile.TemporaryDirectory() as tmp:
-        opts, srcs, ctx, stb = (Path(tmp, n) for n in ("options", "sources", "context", "stubs"))
+        opts, srcs, ctx, stb, prs = (Path(tmp, n) for n in
+                                     ("options", "sources", "context", "stubs", "peers"))
         # -proc:none: annotation processors would need their own path; -implicit:none
         # and -d keep javac from writing class files next to the sources
         opts.write_text("\n".join([*options, "-proc:none", "-implicit:none", "-nowarn",
@@ -112,8 +117,9 @@ def oracle(root: Path, files: list[Path], options: list[str], out: Path,
         srcs.write_text("\n".join(str(f) for f in files) + "\n")
         ctx.write_text("\n".join(str(f) for f in context) + "\n")
         stb.write_text("".join(f"{n}\t{f}\n" for n, f in sorted(stubs.items())))
+        prs.write_text("\n".join(str(f) for f in peers) + "\n")
         subprocess.run([home / "bin" / "java", "-Xmx6g", "-cp", BUILD, "TypeUses",
-                        out, root, opts, srcs, ctx, stb], check=True)
+                        out, root, opts, srcs, ctx, stb, prs], check=True)
     return [json.loads(line) for line in out.read_text().splitlines()]
 
 
@@ -232,10 +238,31 @@ def run(args) -> int:
                 name = ".".join((*f.relative_to(d).parent.parts, f.stem))
                 stubs[name] = str(f.relative_to(checkout / conf["root"]))
     cp = classpath(checkout, conf)
-    options = ["--release", conf["release"], "-encoding", "UTF-8"]
-    if cp:
-        options += ["-classpath", os.pathsep.join(cp)]
-    recs = oracle(checkout / conf["root"], files, options, args.output, context, stubs)
+    root = checkout / conf["root"]
+
+    def options(release: str) -> list[str]:
+        return ["--release", release, "-encoding", "UTF-8"] + (
+            ["-classpath", os.pathsep.join(cp)] if cp else [])
+
+    apart = [(s, sources(checkout, conf, s["sources"], exclude)) for s in conf.get("separate", ())]
+    held = {f for _, own in apart for f in own}
+    main = [f for f in files if f not in held]
+    recs = oracle(root, main, options(conf["release"]), args.output, context, stubs,
+                  peers=sorted(held))
+    held_rel = {str(f.relative_to(root)) for f in held}
+    recs = [r for r in recs if r.get("file") not in held_rel]
+    for s, own in apart:
+        # the rest compiled along at that release, recorded by the main run; of this run's
+        # records only those of its own files count
+        mine = {str(f.relative_to(root)) for f in own}
+        out = args.output.with_suffix(f".{s['release']}.jsonl")
+        more = oracle(root, own, options(s["release"]), out, context, stubs, peers=main)
+        peer_errors = sum(1 for r in more if "diagnostic" in r and r["file"] not in mine)
+        print(f"{', '.join(s['sources'])}: {len(own)} files at release {s['release']}"
+              f" ({peer_errors} compile errors in the rest at that release, not counted)")
+        recs += [r for r in more if r.get("file") in mine]
+        out.unlink()
+    args.output.write_text("".join(json.dumps(r) + "\n" for r in recs))
     errors = [r for r in recs if "diagnostic" in r]
     uses = Counter(r["kind"] for r in recs if "use" in r)
     print(f"{args.repo}: {len(files)} files ({len(context)} more compiled as context, "
