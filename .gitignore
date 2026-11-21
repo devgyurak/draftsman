@@ -8,3 +8,6 @@ node_modules/
 # logo working renders
 assets/logo/work/renders/
 assets/logo/work/*.html
+
+# javac oracle build output
+bench/javac_oracle/build/
