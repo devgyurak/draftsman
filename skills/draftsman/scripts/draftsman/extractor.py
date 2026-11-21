@@ -40,6 +40,7 @@ class RawMember:
     value: Optional[str] = None                     # initialiser text, if captured
     scope: Optional[FileScope] = None               # file it was written in (partial types)
     throws: list[str] = field(default_factory=list)  # Java `throws E`: used, not drawn as a member
+    at: int = 0   # start byte of its name: tells the declarators of `int a = x, b = y;` apart
 
 
 @dataclass
@@ -51,6 +52,34 @@ class RawAnnotation:
     line: int
     scope: FileScope
     args: list[tuple[str, bool, int]] = field(default_factory=list)
+
+
+@dataclass
+class BodyNames:
+    """Names declared inside one member (its parameters included), wherever in it: those
+    that may hide a type of the same name in it."""
+
+    variables: set[str] = field(default_factory=set)   # locals, parameters, fields of local classes
+    types: set[str] = field(default_factory=set)       # local classes, type parameters
+
+
+@dataclass
+class RawBodyRef:
+    """A name written in a body (`new Foo()`, `Foo.bar()`), recorded on the nearest named
+    type around it."""
+
+    text: str          # as written: a type (`List<Foo>`) in type position, a dotted name
+                       # (`Util.Helper`) in receiver position
+    position: str      # "type": only a type can stand there; "receiver": a variable can too
+    line: int
+    col: int           # 0-based, in UTF-16 code units (javac's columns)
+    via: str           # the member the body belongs to, or the initializer (`static {}`)
+    scope: FileScope
+    member: Optional[RawMember]   # None in an initializer block
+    names: BodyNames   # shared by every reference of the member
+    # supertypes of the anonymous and local classes around the name, innermost first:
+    # their members are in scope before the named type's
+    classes: list[list[str]] = field(default_factory=list)
 
 
 @dataclass
@@ -69,6 +98,7 @@ class RawType:
     members: list[RawMember] = field(default_factory=list)
     supers: list[RawSuper] = field(default_factory=list)
     annotation_refs: list[RawAnnotation] = field(default_factory=list)
+    body_refs: list[RawBodyRef] = field(default_factory=list)
 
 
 @dataclass
@@ -495,6 +525,7 @@ class Extractor:
         for nid in sorted(annotation_refs, key=lambda i: annotation_refs[i]["annotation.ref"][0].start_byte):
             self._annotation_ref(annotation_refs[nid], src, scope, types_by_node,
                                  set(annotation_refs))
+        self._body_refs(other, src, scope, types_by_node, members_by_node)
 
         # what the build imports into every file (implicit usings), after the file's own
         for ns, origin in build_imports:
@@ -538,6 +569,82 @@ class Extractor:
                         found.append(c)
                 stack.extend(reversed(found))
         owner.annotation_refs.append(ann)
+
+    def _body_refs(self, other, src, scope, types_by_node, members_by_node) -> None:
+        """Names written in bodies, each with what may hide it there (query-protocol.md)."""
+        regions: set[int] = set()
+        inits: dict[int, str] = {}           # initializer block -> its `via`
+        classes: dict[int, list[str]] = {}   # body of an anonymous or local class -> supertypes
+        refs, declared = [], []
+        for caps in other:
+            if (n := _first(caps, "body.region")) is not None:
+                regions.add(n.id)
+            elif (n := _first(caps, "body.init")) is not None:
+                # only a named type's own: a block in an anonymous class is in a body already
+                if self._owner(n, types_by_node)[0] is not None:
+                    regions.add(n.id)
+                    if (name := _first(caps, "body.init.name")) is not None:
+                        inits[n.id] = _text(name, src)   # a compact constructor
+                    else:
+                        head = _text(n, src).split("{", 1)[0].strip()
+                        inits[n.id] = f"{head} {{}}" if head else "{}"
+            elif (n := _first(caps, "body.class")) is not None:
+                sup = _first(caps, "body.class.super")
+                if sup is not None:
+                    classes.setdefault(n.id, []).append(_text(sup, src))
+            elif (r := _root(caps, "body.ref.")) is not None:
+                position, node = r
+                if position == "receiver" and any(c.type == "super" for c in node.parent.children):
+                    continue   # `X.super.m()`: X is in type position, captured as such
+                refs.append(r)
+            elif (n := _first(caps, "body.var")) is not None:
+                declared.append((n, "variables"))
+            elif (n := _first(caps, "body.type")) is not None:
+                declared.append((n, "types"))
+        if not refs:
+            return
+        names: dict[int, BodyNames] = {}   # by the node of the member or initializer
+
+        def anchor(cur: ts.Node, start: int):
+            """(node id, via, member) of the member or initializer ``cur`` lies in, or None."""
+            if cur.id in inits:
+                return cur.id, inits[cur.id], None
+            members = members_by_node.get(cur.id)
+            if not members:
+                return None
+            # several declarators: the one whose name comes last before the name
+            rm = max((m for m in members if m.at <= start), key=lambda m: m.at, default=members[0])
+            return cur.id, rm.member.name, rm
+
+        for node, kind in declared:
+            cur = node.parent
+            while cur is not None and cur.id not in types_by_node:
+                if (a := anchor(cur, node.start_byte)) is not None:
+                    getattr(names.setdefault(a[0], BodyNames()), kind).add(_text(node, src))
+                    break
+                cur = cur.parent
+        for position, node in sorted(refs, key=lambda r: r[1].start_byte):
+            in_body, place, around = False, None, []
+            cur = node.parent
+            while cur is not None and cur.id not in types_by_node:
+                if cur.type in self.spec.annotation_nodes:
+                    break   # an annotation's arguments are no body, even inside one
+                in_body |= cur.id in regions
+                if place is None:
+                    if cur.id in classes:
+                        around.append(classes[cur.id])
+                    place = anchor(cur, node.start_byte)
+                cur = cur.parent
+            else:
+                if cur is None or place is None or not in_body:
+                    continue
+                key, via, rm = place
+                line_start = node.start_byte - node.start_point[1]
+                col = len(src[line_start:node.start_byte].decode("utf-8", "replace")
+                          .encode("utf-16-le")) // 2
+                types_by_node[cur.id].body_refs.append(RawBodyRef(
+                    _text(node, src), position, _line(node), col, via, scope, rm,
+                    names.setdefault(key, BodyNames()), around))
 
     def _qualify(self, node, name, types_by_node, namespaces, scope) -> Optional[str]:
         """Qualified name for a declaration that is not a type (aliases)."""
@@ -616,7 +723,8 @@ class Extractor:
         )
         value = _first(caps, "value")
         rm = RawMember(member, has_body=has_body, flags=set(caps),
-                       value=_text(value, src) if value is not None else None, scope=scope)
+                       value=_text(value, src) if value is not None else None, scope=scope,
+                       at=name_node.start_byte if name_node is not None else node.start_byte)
 
         # the same field declared twice (partial classes, self.x in several places)
         if kind in ("field", "property"):

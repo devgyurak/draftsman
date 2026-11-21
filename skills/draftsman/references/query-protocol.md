@@ -39,6 +39,29 @@ interprets **matches** (not individual captures) by capture name. Captures start
 | `@param` + `@param.name`, `@param.type`, `@param.declarator`, `@param.varargs` | yes | a parameter |
 | `@throws` | yes | a type a method declares it throws (a dependency, not shown) |
 
+## Bodies
+
+Names written in bodies become relations marked `evidence: "body"`. The captures say where
+a body is, which names it writes, and what may hide them there.
+
+| capture | match root? | meaning |
+|---|---|---|
+| `@body.region` | – | a body: a method or constructor body, a field initializer, an enum constant's arguments and body. A name is read only below one, so a signature's `List<Foo>` is not |
+| `@body.init` (+ `@body.init.name`) | – | a body of no listed member, `via` `.name` when given (a record's compact constructor), else its text before `{` plus `{}` (initializer blocks: `static {}`, `{}`). Only a named type's own count |
+| `@body.ref.type` / `@body.ref.receiver` | yes | a name written in a body: `.type` where only a type can stand (`new Foo()`, `X.this`: a type as written, `List<Foo>`), `.receiver` where a variable can too (`Foo.bar()`: a dotted name). Its column counts UTF-16 code units, as javac's do |
+| `@body.var` | – | a variable declared in a member: parameters, locals, lambda, catch, for and pattern variables, resources, fields of local classes |
+| `@body.type` | – | a type name declared in a member: local classes, type parameters |
+| `@body.class` + `@body.class.super` | – | the body of an anonymous or local class and one supertype it names; the members it inherits are in scope inside it |
+
+A `@body.ref.*` belongs to the nearest enclosing named type, across opaque nodes (a name
+in a lambda or an anonymous class is the named type's), `via` the member or initializer
+around it; with several declarators (`static A X = .., Y = ..;`), the one written last
+before the name. One in an annotation's arguments is dropped, also inside a body.
+`@body.var` and `@body.type` are collected per member, wherever in it they stand: a name
+the member declares anywhere may hide a type of that name anywhere in it, which drops a
+reference at worst. `@body.class` lists the anonymous and local classes around a
+reference, innermost first.
+
 ## Ownership
 
 Captures are attached to declarations by position in the tree, not by the query:

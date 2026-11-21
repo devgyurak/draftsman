@@ -1,13 +1,19 @@
 """Relations read from names written in bodies (`evidence` "body", issue #2)."""
 
+import sys
+from pathlib import Path
+
 from conftest import extract_source
-from draftsman.extractor import Extractor
+from draftsman.extractor import Extractor, RawFile
 from draftsman.langs import spec_for_path
 from draftsman.model import IR, Location, Relation
 from draftsman.resolve import _Builder
 from draftsman.scene import FoldedRelation, build_scene, is_body
 from draftsman.view import View
 from draftsman.wrappers import Wrappers
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bench" / "javac_oracle"))
+from oracle import FIXTURE, expected  # noqa: E402   the hand-written answers' markers
 
 
 def test_evidence_round_trips_and_is_absent_for_declarations():
@@ -49,3 +55,126 @@ def test_folding_keeps_a_body_relation_one(tmp_path):
     [drawn] = [r for r in scene.relations if r.from_ == "p.A"]
     assert isinstance(drawn, FoldedRelation) and drawn.to == "p.B"
     assert is_body(drawn) and drawn.fact.evidence == "body"
+
+
+def _raw(tmp_path, text: str, name: str = "p/A.java") -> RawFile:
+    (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / name).write_text(text)
+    return Extractor(spec_for_path(name)).extract(tmp_path / name, name, tmp_path)
+
+
+def _refs(raw: RawFile) -> list[tuple]:
+    return [(t.qualified_name, r.text, r.position, r.via, r.classes)
+            for t in raw.types for r in t.body_refs]
+
+
+def test_a_body_name_belongs_to_the_named_type_and_the_member_around_it(tmp_path):
+    raw = _raw(tmp_path, """package p;
+record R(int v) { R { Rec.a(); } }
+class A {
+    static Object X = new Object() { void f() { Foo.a(); } }, Y = Bar.b();
+    { Baz.c(); }
+    void m() {
+        new Thread() { void run() { Qux.d(); class L extends Base implements I { void g() { Deep.e(); } } } };
+        Runnable r = () -> Lam.f();
+        new Arg(Hdr.g()) { };
+    }
+    @Ann(Util.make()) void n() { }
+    enum K { A(Foo.k()) { void q() { Bar.k(); } }; static { Init.s(); } }
+}
+""")
+    assert _refs(raw) == [
+        ("p.R", "Rec", "receiver", "R", []),          # a compact constructor
+        ("p.A", "Object", "type", "X", []),
+        ("p.A", "Foo", "receiver", "X", [["Object"]]),
+        ("p.A", "Bar", "receiver", "Y", []),        # the declarator it is written in
+        ("p.A", "Baz", "receiver", "{}", []),
+        ("p.A", "Thread", "type", "m", []),
+        ("p.A", "Qux", "receiver", "m", [["Thread"]]),
+        ("p.A", "Deep", "receiver", "m", [["Base", "I"], ["Thread"]]),
+        ("p.A", "Lam", "receiver", "m", []),
+        ("p.A", "Arg", "type", "m", []),
+        ("p.A", "Hdr", "receiver", "m", []),        # an argument, outside the anonymous class
+        # `@Ann(Util.make())` is an annotation: never a body
+        ("p.A.K", "Foo", "receiver", "A", []),
+        ("p.A.K", "Bar", "receiver", "A", []),
+        ("p.A.K", "Init", "receiver", "static {}", []),
+    ]
+
+
+def test_a_member_collects_every_name_that_may_hide_a_type_in_it(tmp_path):
+    raw = _raw(tmp_path, """package p;
+class A {
+    <T> void m(int p, String... q) {
+        for (Foo f : xs) { }
+        try (Res r = open()) { } catch (E1 | E2 e) { }
+        Runnable l = (a, b) -> { }; l = x -> x; l = (int z) -> z;
+        if (o instanceof Foo g && o instanceof Bar(Baz h)) { }
+        switch (o) { case Foo k -> { } default -> { } }
+        class L<U> { int w; }
+        record R(int v) { }
+        new Thread() { <V> void run() { } };
+        Util.go();
+    }
+    void other() { Util.go(); }
+}
+""")
+    names = {r.via: r.names for r in raw.types[0].body_refs}
+    assert names["m"].variables == {"p", "q", "f", "r", "e", "l", "a", "b", "x", "z", "g", "h",
+                                    "k", "w", "v"}
+    assert names["m"].types == {"T", "L", "U", "R", "V"}
+    assert not names["other"].variables and not names["other"].types
+
+
+def test_a_body_name_has_its_column_in_characters(tmp_path):
+    # javac's columns count UTF-16 code units: the emoji is two, and four bytes
+    line = 'class A { void m() { String s = "\U0001F600\u00e9"; Foo.a(); } }'
+    raw = _raw(tmp_path, f"package p;\n{line}\n")
+    [ref] = [r for r in raw.types[0].body_refs if r.text == "Foo"]
+    assert (ref.line, ref.col) == (2, line.index("Foo") + 1)
+
+
+# marked names the extractor does not record yet, (file, line, answer); each step that
+# reads a new form takes its lines off
+_NOT_YET = sorted([
+    # type positions: casts, locals, catch, class literals, type arguments
+    *[("p/Forms.java", n, "p.Owner") for n in (16, 17, 18, 23, 24, 24, 26, 31)],
+    ("p/Forms.java", 21, "p.ShopException"), ("p/Forms.java", 24, "java.util.List"),
+    ("p/Forms.java", 26, "java.util.function.Function"), ("p/Forms.java", 29, "p.Util.Helper"),
+    ("p/Forms.java", 30, "p.a.Pet"), ("p/ExternalWildcard.java", 9, "p.Entry"),
+    ("p/Inherits.java", 7, "java.util.Map.Entry"), ("p/Inherits.java", 14, "java.lang.Thread.State"),
+    ("p/Shadows.java", 13, "p.Entry"), ("p/Shadows.java", 28, "tparam"),
+    # `p.Util.make()`: recorded at `p`, javac's column is that of `Util`
+    ("p/Forms.java", 27, "p.Util"),
+    # receivers other than a call's: `Util.VALUE`, `Owner::getName`, `Helper` in `Util.Helper.run()`
+    ("p/Forms.java", 25, "p.Util"), ("p/Forms.java", 26, "p.Owner"),
+    ("p/Forms.java", 28, "p.Util.Helper"), ("p/Kind.java", 4, "p.Util"), ("p/Kind.java", 5, "p.Util"),
+    ("p/ExternalStatic.java", 7, "java.lang.Thread.State"),
+    ("p/Inherits.java", 14, "java.lang.Thread.State"),
+])
+
+
+def test_body_names_stand_where_the_hand_written_answers_say():
+    # tests/fixtures/java/body, which the oracle's selftest checks against javac: every name
+    # the extractor records is in the position its marker gives, one no marker lists is a
+    # variable or a package (lower case), and every marked name is recorded but _NOT_YET's
+    want = expected(FIXTURE)
+    problems, recorded = [], set()
+    for path in sorted(FIXTURE.rglob("*.java")):
+        rel = str(path.relative_to(FIXTURE))
+        raw = Extractor(spec_for_path(rel)).extract(path, rel, FIXTURE)
+        for r in (r for t in raw.types for r in t.body_refs):
+            recorded.add((rel, r.line, r.col))
+            where = f"{rel}:{r.line}:{r.col + 1} {r.text}"
+            answer, position = want.get((rel, r.line, r.col), (None, None))
+            if answer is None:
+                if r.text[:1].isupper():
+                    problems.append(f"{where}: no marker")
+            elif answer == "-":
+                problems.append(f"{where}: a declaration, recorded as {r.position}")
+            elif position != r.position:
+                problems.append(f"{where}: {r.position}, the marker says {position}")
+    assert problems == []
+    missed = sorted((rel, line, answer) for (rel, line, col), (answer, _) in want.items()
+                    if answer != "-" and (rel, line, col) not in recorded)
+    assert missed == _NOT_YET

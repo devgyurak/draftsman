@@ -655,6 +655,7 @@ class _Builder:
             existing.members.append(rm)
         existing.supers.extend(t.supers)
         existing.annotation_refs.extend(t.annotation_refs)
+        existing.body_refs.extend(t.body_refs)
         existing.generics += [g for g in t.generics if g not in existing.generics]
         for m in t.modifiers:
             if m not in existing.modifiers:

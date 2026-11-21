@@ -77,3 +77,49 @@
      (integral_type) (floating_point_type) (boolean_type)] @param.type
     "..." @param.varargs
     (variable_declarator name: (identifier) @param.name)) @param)
+
+; ---------------------------------------------------------------- bodies
+; where names are read: bodies of members, field initializers, enum constants
+(method_declaration body: (block) @body.region)
+(constructor_declaration body: (constructor_body) @body.region)
+(variable_declarator value: (_) @body.region)
+(enum_constant arguments: (argument_list) @body.region)
+(enum_constant body: (class_body) @body.region)
+(class_body (block) @body.init)
+(enum_body_declarations (block) @body.init)
+(static_initializer) @body.init
+(compact_constructor_declaration name: (identifier) @body.init.name body: (block) @body.init)
+
+; names written in a body
+(object_creation_expression type: (_) @body.ref.type)
+; `X.this`, `X.super.m()`: only a type can stand before them; `X.this.m()` is no receiver X,
+; and the extractor drops the receiver of `X.super.m()` (the type pattern below records it)
+(method_invocation object: [(identifier) (field_access field: (identifier))] @body.ref.receiver)
+(field_access object: (_) @body.ref.type field: (this))
+(method_invocation object: (_) @body.ref.type . (super))
+
+; what may hide one: variables, local classes and type parameters declared in the member
+(variable_declarator name: (identifier) @body.var)
+(formal_parameter name: (identifier) @body.var)
+(catch_formal_parameter name: (identifier) @body.var)
+(enhanced_for_statement name: (identifier) @body.var)
+(resource name: (identifier) @body.var)
+(lambda_expression parameters: (identifier) @body.var)
+(inferred_parameters (identifier) @body.var)
+(instanceof_expression name: (identifier) @body.var)
+(type_pattern (identifier) @body.var)
+(record_pattern_component (identifier) @body.var)
+(type_parameter (type_identifier) @body.type)
+(class_declaration name: (identifier) @body.type)
+(interface_declaration name: (identifier) @body.type)
+(enum_declaration name: (identifier) @body.type)
+(record_declaration name: (identifier) @body.type)
+(annotation_type_declaration name: (identifier) @body.type)
+
+; the members an anonymous or local class inherits are in scope inside it
+(object_creation_expression type: (_) @body.class.super (class_body) @body.class)
+(class_declaration superclass: (superclass (_) @body.class.super) body: (class_body) @body.class)
+(class_declaration (super_interfaces (type_list (_) @body.class.super)) body: (class_body) @body.class)
+(interface_declaration (extends_interfaces (type_list (_) @body.class.super)) body: (interface_body) @body.class)
+(enum_declaration (super_interfaces (type_list (_) @body.class.super)) body: (enum_body) @body.class)
+(record_declaration (super_interfaces (type_list (_) @body.class.super)) body: (class_body) @body.class)
