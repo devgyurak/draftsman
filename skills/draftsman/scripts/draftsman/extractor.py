@@ -68,11 +68,11 @@ class RawBodyRef:
     """A name written in a body (`new Foo()`, `Foo.bar()`), recorded on the nearest named
     type around it."""
 
-    text: str          # as written: a type (`List<Foo>`) in type position, a dotted name
-                       # (`Util.Helper`) in receiver position
+    text: str          # a dotted name (`Util.Helper`), type arguments and comments left out
     position: str      # "type": only a type can stand there; "receiver": a variable can too
-    line: int
-    col: int           # 0-based, in UTF-16 code units (javac's columns)
+    # (line, column) of each part of the name: 1-based lines, 0-based columns in UTF-16 code
+    # units (javac's)
+    places: list[tuple[int, int]]
     via: str           # the member the body belongs to, or the initializer (`static {}`)
     scope: FileScope
     member: Optional[RawMember]   # None in an initializer block
@@ -80,6 +80,10 @@ class RawBodyRef:
     # supertypes of the anonymous and local classes around the name, innermost first:
     # their members are in scope before the named type's
     classes: list[list[str]] = field(default_factory=list)
+
+    @property
+    def line(self) -> int:
+        return self.places[0][0]
 
 
 @dataclass
@@ -153,6 +157,11 @@ def _comment_spans(node: ts.Node) -> list[tuple[int, int]]:
 
 def _line(node: ts.Node) -> int:
     return node.start_point[0] + 1
+
+
+def _utf16_col(node: ts.Node, src: bytes) -> int:
+    line_start = node.start_byte - node.start_point[1]
+    return len(src[line_start:node.start_byte].decode("utf-8", "replace").encode("utf-16-le")) // 2
 
 
 def _first(caps: dict, name: str) -> Optional[ts.Node]:
@@ -623,7 +632,11 @@ class Extractor:
                     getattr(names.setdefault(a[0], BodyNames()), kind).add(_text(node, src))
                     break
                 cur = cur.parent
+        whole = {n.id for _, n in refs}
+        not_refs = {n.id for n, _ in declared}   # `T` in `<T extends Foo>` is declared there
         for position, node in sorted(refs, key=lambda r: r[1].start_byte):
+            if node.parent.id in whole or node.id in not_refs:
+                continue   # `Foo` in `p.Foo`: the whole name is recorded
             in_body, place, around = False, None, []
             cur = node.parent
             while cur is not None and cur.id not in types_by_node:
@@ -639,12 +652,23 @@ class Extractor:
                 if cur is None or place is None or not in_body:
                     continue
                 key, via, rm = place
-                line_start = node.start_byte - node.start_point[1]
-                col = len(src[line_start:node.start_byte].decode("utf-8", "replace")
-                          .encode("utf-16-le")) // 2
+                parts = self._parts(node)
                 types_by_node[cur.id].body_refs.append(RawBodyRef(
-                    _text(node, src), position, _line(node), col, via, scope, rm,
+                    ".".join(_text(n, src) for n in parts), position,
+                    [(_line(n), _utf16_col(n, src)) for n in parts], via, scope, rm,
                     names.setdefault(key, BodyNames()), around))
+
+    def _parts(self, node: ts.Node) -> list[ts.Node]:
+        """The identifiers of a dotted name, without the annotations, type arguments and
+        comments inside it (`Outer<T>.Inner`, `java.lang.@A String`)."""
+        if node.named_child_count == 0:
+            return [node]
+        out: list[ts.Node] = []
+        for c in node.named_children:
+            if not (c.is_extra or c.type in self.spec.annotation_nodes
+                    or c.type in self.spec.type_argument_nodes):
+                out += self._parts(c)
+        return out
 
     def _qualify(self, node, name, types_by_node, namespaces, scope) -> Optional[str]:
         """Qualified name for a declaration that is not a type (aliases)."""

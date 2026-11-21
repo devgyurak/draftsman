@@ -9,7 +9,7 @@ class Shadows extends Base implements Consts {
 
     void field() {
         Entry.length();                                     //> Entry=var/r
-        Runnable r = () -> Entry.length();                  //> Entry=var/r
+        Runnable r = () -> Entry.length();                  //> Runnable=java.lang.Runnable/t Entry=var/r
         Entry x = null;                                     //> Entry=p.Entry/t
     }
 

@@ -14,7 +14,7 @@ interface Named {
 
 class Selves implements Named {
     void m() {
-        Util.<String>make();                                //> Util=p.Util/r
+        Util.<String>make();                                //> String=java.lang.String/t Util=p.Util/r
         Util /* a comment */ .make();                       //> Util=p.Util/r
     }
 

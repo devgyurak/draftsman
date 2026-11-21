@@ -8,6 +8,7 @@ script runs it and reads its output.
     uv run bench/javac_oracle/oracle.py selftest
     uv run bench/javac_oracle/oracle.py run REPO --checkout DIR -o OUT.jsonl
     uv run bench/javac_oracle/oracle.py scope REPO OUT.jsonl ir.json
+    uv run bench/javac_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR [-v]
     uv run bench/javac_oracle/oracle.py measure OUT.jsonl [--ir ir.json]
 
 `selftest` checks the oracle against the hand-written answers in
@@ -16,7 +17,9 @@ is the extractor's and not the oracle's. `run` compiles a benchmark repository's
 production sources (bench/tasks.yaml's roots without its exclude) with its Maven compile
 classpath. `scope` fails unless the oracle saw the same Java types, declared
 in the same files, as ir.json of those sources: every comparison with ir.json rests on
-it. `measure` prints the counts the rules of the receiver position are decided by.
+it. `compare` extracts the same sources and checks every name a body relation is drawn
+from against what javac resolved at its place; it fails on any mismatch outside the files
+javac could not compile (after `scope`, on the IR it builds). `measure` prints the counts the rules of the receiver position are decided by.
 
 The JDK is $JAVA_HOME, else Homebrew's openjdk@21 (/usr/bin/javac on macOS is a stub).
 """
@@ -244,12 +247,17 @@ def run(args) -> int:
 # ------------------------------------------------------------------ scope
 
 def scope(args) -> int:
-    unseen = REPOS[args.repo].get("unseen", {})
     recs = [json.loads(line) for line in args.oracle.read_text().splitlines()]
-    seen = {r["declared"]: r["file"] for r in recs if "declared" in r}
     # Java only: Netty's ir.json also holds C structs (io_uring_cqe)
     ir = {t["id"]: t["location"]["file"] for t in json.loads(args.ir.read_text())["types"]
           if t["language"] == "java"}
+    return in_scope(args.repo, recs, ir)
+
+
+def in_scope(repo: str, recs: list[dict], ir: dict[str, str]) -> int:
+    """1 unless the oracle saw the Java types of ``ir`` (id -> file), in the same files."""
+    unseen = REPOS[repo].get("unseen", {})
+    seen = {r["declared"]: r["file"] for r in recs if "declared" in r}
     problems = [f"in ir.json only: {t} ({ir[t]})" for t in sorted(ir.keys() - seen.keys())
                 if t not in unseen]
     problems += [f"in the oracle only: {t} ({seen[t]})" for t in sorted(seen.keys() - ir.keys())]
@@ -263,6 +271,77 @@ def scope(args) -> int:
     print(f"scope: {len(ir)} Java types in ir.json, {len(seen)} in the oracle, "
           f"{len(problems)} problems")
     return 1 if problems else 0
+
+
+# ------------------------------------------------------------------ compare
+
+def compare(args) -> int:
+    sys.path.insert(0, str(ROOT / "skills" / "draftsman" / "scripts"))
+    from extract import discover
+    from draftsman.extractor import Extractor
+    from draftsman.langs import spec_for_path
+    from draftsman.resolve import _Builder
+    from draftsman.wrappers import Wrappers
+
+    conf = REPOS[args.repo]
+    checkout = args.checkout.resolve()
+    root = checkout / conf["root"]
+    exclude = yaml.safe_load(TASKS.read_text())["repos"][args.repo]["exclude"]
+    files = [(f, rel) for f, rel in discover(root, {"java"}, [])
+             if not excluded(f.relative_to(checkout).as_posix(), exclude)]
+    extractor = Extractor(spec_for_path("A.java"))
+    builder = _Builder(str(root), [extractor.extract(f, rel, root) for f, rel in files],
+                       Wrappers.load())
+    ir = builder.build()
+    recs = [json.loads(line) for line in args.oracle.read_text().splitlines()]
+    if in_scope(args.repo, recs, {t.id: t.location.file for t in ir.types}):
+        return 1
+
+    # javac has the stubs as class files: nothing in them is recorded
+    stubs = [d.relative_to(root).as_posix() + "/" for g in conf.get("stubs", ())
+             for d in checkout.glob(g)]
+    broken = {r["file"] for r in recs if "diagnostic" in r}
+    uses = {(r["file"], r["line"], r["col"]): r for r in recs if "use" in r}
+    drawn = [u for u in builder.body_uses if not any(u[0].startswith(d) for d in stubs)]
+    problems: Counter = Counter()
+    shown: list[str] = []
+    for file, line, col, src, dst in drawn:
+        r = uses.get((file, line, col))
+        if r is None:
+            why = "javac resolved no name there"
+        elif r["kind"] != "type":
+            why = f"javac: {r['kind']}"
+        elif r["target"] != dst:
+            why = f"javac: {r['target']}"
+        elif r["from"] != src:
+            why = f"javac draws it from {r['from']}"
+        else:
+            continue
+        where = "in a file with compile errors" if file in broken else "mismatch"
+        problems[where] += 1
+        shown.append(f"  {where}: {file}:{line}:{col + 1} {src} -> {dst}; {why}")
+
+    def drawable(r):   # what a body relation could be drawn from, as `measure` counts it
+        return (r["kind"] == "type" and r["project"] and r["maximal"]
+                and r["from"] != r["target"])
+
+    at = {(f, line, col) for f, line, col, _, _ in drawn}
+    missed = Counter(r["pos"] for k, r in uses.items() if drawable(r) and k not in at)
+    pairs = {(s_, d) for *_, s_, d in drawn}
+    want = {(r["from"], r["target"]) for r in uses.values() if drawable(r)}
+    print(f"compare: {len(drawn)} names drawn as body relations ({len(pairs)} pairs); "
+          + (", ".join(f"{k} {v}" for k, v in sorted(problems.items())) or "0 mismatches"))
+    print(f"  javac's project types not drawn: "
+          + ", ".join(f"{k} position {v}" for k, v in sorted(missed.items()))
+          + f"; pairs javac has that are not drawn: {len(want - pairs)}")
+    for line in shown[:None if args.verbose else 20]:
+        print(line)
+    if args.verbose:
+        for k, r in sorted(uses.items()):
+            if drawable(r) and k not in at and r["pos"] == "type":
+                print(f"  not drawn: {k[0]}:{k[1]}:{k[2] + 1} {r['use']} = {r['target']} "
+                      f"in {r['from']}")
+    return 1 if problems["mismatch"] else 0
 
 
 # ------------------------------------------------------------------ measure
@@ -345,6 +424,12 @@ def main(argv=None) -> int:
     c.add_argument("oracle", type=Path)
     c.add_argument("ir", type=Path, help="ir.json of the repository's tasks.yaml scope")
     c.set_defaults(fn=scope)
+    k = sub.add_parser("compare")
+    k.add_argument("repo", choices=sorted(REPOS))
+    k.add_argument("oracle", type=Path)
+    k.add_argument("--checkout", type=Path, required=True)
+    k.add_argument("-v", "--verbose", action="store_true", help="list every miss and mismatch")
+    k.set_defaults(fn=compare)
     m = sub.add_parser("measure")
     m.add_argument("oracle", type=Path)
     m.add_argument("--ir", type=Path, help="ir.json of the same sources: count only what it lacks")

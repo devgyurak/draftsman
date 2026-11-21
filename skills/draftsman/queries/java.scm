@@ -90,8 +90,11 @@
 (static_initializer) @body.init
 (compact_constructor_declaration name: (identifier) @body.init.name body: (block) @body.init)
 
-; names written in a body
-(object_creation_expression type: (_) @body.ref.type)
+; names written in a body: every type, as a whole and as its parts (the extractor keeps the
+; whole); `var` is no name
+((type_identifier) @body.ref.type (#not-eq? @body.ref.type "var"))
+(scoped_type_identifier) @body.ref.type
+(record_pattern [(identifier) (scoped_identifier)] @body.ref.type)
 ; `X.this`, `X.super.m()`: only a type can stand before them; `X.this.m()` is no receiver X,
 ; and the extractor drops the receiver of `X.super.m()` (the type pattern below records it)
 (method_invocation object: [(identifier) (field_access field: (identifier))] @body.ref.receiver)

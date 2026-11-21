@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from .extractor import RawFile, RawMember, RawType
+from .extractor import RawBodyRef, RawFile, RawMember, RawType
 from .langs import LANGUAGES, FileScope, Import, Unseen, spec_for_path
 from .model import IR, External, Location, Relation, Type, Unresolved
 from .typeref import Named, function_types, named_refs, parse_type, value_names
@@ -337,7 +337,9 @@ class Resolver:
 
     def resolve(self, name: str, rtype: RawType, member: Optional[RawMember] = None,
                 inherit: bool = True, scope: Optional[FileScope] = None,
-                arity: Optional[int] = None) -> Resolution:
+                arity: Optional[int] = None, strict: bool = False) -> Resolution:
+        """What ``name`` written in ``rtype`` stands for. ``strict``: a name more than one
+        wildcard import provides is unresolved, not the first one's."""
         spec = LANGUAGES[rtype.language]
         sep = spec.separator
         scope = scope or (member.scope if member and member.scope else None) or rtype.scope
@@ -372,7 +374,7 @@ class Resolver:
                     if imp.module:
                         return (Resolution(EXTERNAL, imp.path + sep + rest) if imp.external
                                 else self._not_found(imp.path + sep + rest, spec))
-            first = self.resolve(head, rtype, member, inherit, scope)
+            first = self.resolve(head, rtype, member, inherit, scope, strict=strict)
             if first.status == PROJECT:
                 found = self._nested_path(first.target, rest, sep, inherit, spec)
                 if found:
@@ -461,11 +463,15 @@ class Resolver:
 
         external_wildcards: list[Import] = []
         shared_wildcards: list[Import] = []   # declared in the project too, but not this name
+        provided: list[str] = []
         for imp in scope.imports:
             if imp.wildcard:
                 found = None if imp.external else self.lookup(imp.path + sep + name, spec)
-                if found:
+                if found and not strict:
                     return self._found(found)
+                if found:
+                    provided.append(found)
+                    continue
                 for ns in chain:  # C#/C++: `using Orders;` relative to the namespace
                     if ns and f"{ns}{sep}{imp.path}{sep}{name}" in self.index:
                         return Resolution(PROJECT, f"{ns}{sep}{imp.path}{sep}{name}")
@@ -476,6 +482,12 @@ class Resolver:
                     # eShopOnWeb declares an extension class in Microsoft.AspNetCore.Mvc;
                     # the rest of that namespace is still ASP.NET
                     shared_wildcards.append(imp)
+        if provided:
+            hits = list(dict.fromkeys(provided))
+            if len(hits) == 1:
+                return self._found(hits[0])
+            return Resolution(UNRESOLVED, candidates=hits,
+                              hint=f"{len(hits)} wildcard imports provide the name")
 
         library = spec.library_type(name, {i.path for i in scope.imports if i.wildcard}, arity,
                                     lambda: self._scope_supers(rtype, inherit))
@@ -546,6 +558,46 @@ class Resolver:
         return Resolution(UNRESOLVED, hint="; ".join(hints) or None,
                           candidates=cands, outside=outside)
 
+    def body_type(self, name: str, rtype: RawType, ref: RawBodyRef,
+                  depth: int = 0) -> Optional[str]:
+        """The project type a name in type position stands for where ``ref`` is written,
+        seen from the anonymous or local class ``depth`` levels out; None when it is none,
+        or when another declaration may be meant: a type of the name declared anywhere in
+        the member, or a nested type a class around it may inherit from outside the
+        sources."""
+        head, _, rest = name.partition(".")
+        if head in ref.names.types:
+            return None
+        for i, supers in enumerate(ref.classes[depth:], depth + 1):
+            for sup in supers:
+                written = parse_type(sup)
+                owner = self.body_type(written.name, rtype, ref, i) \
+                    if isinstance(written, Named) else None
+                if owner is None or not self._members_known(owner):
+                    return None
+                found = self._member_type(self.index[owner], head, ".", True, set())
+                if found:
+                    res = self._nested_path(found, rest, ".", True) if rest else self._found(found)
+                    return res.target if res and res.status == PROJECT else None
+        res = self.resolve(name, rtype, ref.member, scope=ref.scope, strict=True)
+        return res.target if res.status == PROJECT else None
+
+    def _members_known(self, qname: str) -> bool:
+        """Whether every supertype of the project type, also through project ones, is a
+        project type or Object: then all the nested types it inherits are in sight."""
+        seen, stack = set(), [qname]
+        while stack:
+            t = stack.pop()
+            if t in seen:
+                continue
+            seen.add(t)
+            for sup in self.supertypes(self.index[t]):
+                if sup.status == PROJECT:
+                    stack.append(sup.target)
+                elif sup.target not in ("Object", "java.lang.Object"):
+                    return False
+        return True
+
     def _candidates(self, name: str, sep: str, rtype: RawType) -> tuple[list[str], list[str]]:
         """Project types with the simple name: (those the reference could mean, nested
         types it cannot reach). A nested type is reachable by its simple name only from
@@ -612,6 +664,8 @@ class _Builder:
         self.externals: dict[str, External] = {}
         self.unresolved: dict[tuple, Unresolved] = {}
         self.relations: list[Relation] = []
+        # (file, line, column, from, to) of each name a body relation is drawn from
+        self.body_uses: list[tuple[str, int, int, str, str]] = []
         self._alias_cache: dict[str, tuple[list, list]] = {}
 
     def _add(self, t: RawType) -> None:
@@ -682,6 +736,7 @@ class _Builder:
         for rtype in self.types.values():
             self._supers(rtype)
             self._annotations(rtype)
+            self._body(rtype)
             for rm in rtype.members:
                 m = rm.member
                 if m.kind in ("field", "property") and m.static:
@@ -799,6 +854,21 @@ class _Builder:
                         self._annotation_target(rtype, res, via, loc)
                         break
                     name = name.rsplit(sep, 1)[0] if sep in name else ""
+
+    def _body(self, rtype: RawType) -> None:
+        """A dependency, `evidence` "body", on the project type each name in a body stands
+        for; a name that may mean something else draws nothing, and is never unresolved."""
+        for ref in rtype.body_refs:
+            if ref.position != "type":
+                continue
+            target = self.resolver.body_type(ref.text, rtype, ref)
+            if target is None or target == rtype.qualified_name:
+                continue
+            line, col = ref.places[-1]
+            self.body_uses.append((ref.scope.file, line, col, rtype.qualified_name, target))
+            self.relations.append(Relation(rtype.qualified_name, target, "dependency",
+                                           Location(ref.scope.file, line), via=ref.via,
+                                           evidence="body"))
 
     def _annotation_target(self, rtype: RawType, res: Resolution, via: str,
                            loc: Location) -> None:

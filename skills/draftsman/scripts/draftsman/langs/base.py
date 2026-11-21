@@ -98,6 +98,8 @@ class LanguageSpec:
     # and the field holding its name.
     annotation_nodes: frozenset[str] = frozenset()
     annotation_name_field: str = "name"
+    # Nodes of the type arguments inside a type name (`Outer<T>.Inner`): no part of the name
+    type_argument_nodes: frozenset[str] = frozenset()
 
     # Nodes in an annotation's arguments that name a type (`X.class`, `typeof(X)`,
     # `X::class`; see annotation_arg), and nodes that name a type or a value (`E.V`,

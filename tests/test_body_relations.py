@@ -91,7 +91,10 @@ class A {
         ("p.A", "Baz", "receiver", "{}", []),
         ("p.A", "Thread", "type", "m", []),
         ("p.A", "Qux", "receiver", "m", [["Thread"]]),
+        ("p.A", "Base", "type", "m", [["Thread"]]),   # a local class's header: not in its scope
+        ("p.A", "I", "type", "m", [["Thread"]]),
         ("p.A", "Deep", "receiver", "m", [["Base", "I"], ["Thread"]]),
+        ("p.A", "Runnable", "type", "m", []),
         ("p.A", "Lam", "receiver", "m", []),
         ("p.A", "Arg", "type", "m", []),
         ("p.A", "Hdr", "receiver", "m", []),        # an argument, outside the anonymous class
@@ -131,44 +134,38 @@ def test_a_body_name_has_its_column_in_characters(tmp_path):
     line = 'class A { void m() { String s = "\U0001F600\u00e9"; Foo.a(); } }'
     raw = _raw(tmp_path, f"package p;\n{line}\n")
     [ref] = [r for r in raw.types[0].body_refs if r.text == "Foo"]
-    assert (ref.line, ref.col) == (2, line.index("Foo") + 1)
+    assert ref.places == [(2, line.index("Foo") + 1)]
 
 
 # marked names the extractor does not record yet, (file, line, answer); each step that
 # reads a new form takes its lines off
 _NOT_YET = sorted([
-    # type positions: casts, locals, catch, class literals, type arguments
-    *[("p/Forms.java", n, "p.Owner") for n in (16, 17, 18, 23, 24, 24, 26, 31)],
-    ("p/Forms.java", 21, "p.ShopException"), ("p/Forms.java", 24, "java.util.List"),
-    ("p/Forms.java", 26, "java.util.function.Function"), ("p/Forms.java", 29, "p.Util.Helper"),
-    ("p/Forms.java", 30, "p.a.Pet"), ("p/ExternalWildcard.java", 9, "p.Entry"),
-    ("p/Inherits.java", 7, "java.util.Map.Entry"), ("p/Inherits.java", 14, "java.lang.Thread.State"),
-    ("p/Shadows.java", 13, "p.Entry"), ("p/Shadows.java", 28, "tparam"),
-    # `p.Util.make()`: recorded at `p`, javac's column is that of `Util`
-    ("p/Forms.java", 27, "p.Util"),
-    # receivers other than a call's: `Util.VALUE`, `Owner::getName`, `Helper` in `Util.Helper.run()`
+    # receivers other than a call's: `Util.VALUE`, `Owner::getName`
     ("p/Forms.java", 25, "p.Util"), ("p/Forms.java", 26, "p.Owner"),
-    ("p/Forms.java", 28, "p.Util.Helper"), ("p/Kind.java", 4, "p.Util"), ("p/Kind.java", 5, "p.Util"),
+    ("p/Kind.java", 4, "p.Util"), ("p/Kind.java", 5, "p.Util"),
     ("p/ExternalStatic.java", 7, "java.lang.Thread.State"),
     ("p/Inherits.java", 14, "java.lang.Thread.State"),
 ])
 
 
 def test_body_names_stand_where_the_hand_written_answers_say():
-    # tests/fixtures/java/body, which the oracle's selftest checks against javac: every name
-    # the extractor records is in the position its marker gives, one no marker lists is a
-    # variable or a package (lower case), and every marked name is recorded but _NOT_YET's
+    # tests/fixtures/java/body, which the oracle's selftest checks against javac: every part
+    # of a name the extractor records is in the position its marker gives, one no marker
+    # lists is a variable or a package (lower case), and every marked name is recorded but
+    # _NOT_YET's
     want = expected(FIXTURE)
     problems, recorded = [], set()
     for path in sorted(FIXTURE.rglob("*.java")):
         rel = str(path.relative_to(FIXTURE))
         raw = Extractor(spec_for_path(rel)).extract(path, rel, FIXTURE)
-        for r in (r for t in raw.types for r in t.body_refs):
-            recorded.add((rel, r.line, r.col))
-            where = f"{rel}:{r.line}:{r.col + 1} {r.text}"
-            answer, position = want.get((rel, r.line, r.col), (None, None))
+        parts = ((r, part, line, col) for t in raw.types for r in t.body_refs
+                 for part, (line, col) in zip(r.text.split("."), r.places))
+        for r, part, line, col in parts:
+            recorded.add((rel, line, col))
+            where = f"{rel}:{line}:{col + 1} {part} of {r.text}"
+            answer, position = want.get((rel, line, col), (None, None))
             if answer is None:
-                if r.text[:1].isupper():
+                if part[:1].isupper():
                     problems.append(f"{where}: no marker")
             elif answer == "-":
                 problems.append(f"{where}: a declaration, recorded as {r.position}")
@@ -178,3 +175,93 @@ def test_body_names_stand_where_the_hand_written_answers_say():
     missed = sorted((rel, line, answer) for (rel, line, col), (answer, _) in want.items()
                     if answer != "-" and (rel, line, col) not in recorded)
     assert missed == _NOT_YET
+
+
+def _body(ir) -> list[tuple]:
+    return sorted((r.from_, r.to, r.via, r.source_location.line)
+                  for r in ir.relations if r.evidence == "body")
+
+
+def test_a_name_in_type_position_depends_on_the_type_it_stands_for(tmp_path):
+    ir = extract_source(tmp_path, {
+        "p/Foo.java": "package p; public class Foo { public static class In { } }",
+        "p/A.java": """package p;
+class A {
+    static Object X = new Foo();
+    void m(Object o) {
+        Foo f = (Foo) o;
+        Object c = Foo.In.class;
+        new A();
+        new Missing();
+    }
+}
+"""})
+    assert _body(ir) == [("p.A", "p.Foo", "X", 3), ("p.A", "p.Foo", "m", 5),
+                         ("p.A", "p.Foo.In", "m", 6)]
+    assert ir.unresolved == []   # a name in a body that names nothing is never unresolved
+
+
+def test_a_type_declared_in_the_member_hides_the_name_everywhere_in_it(tmp_path):
+    ir = extract_source(tmp_path, {
+        "p/Foo.java": "package p; public class Foo { }",
+        "p/A.java": """package p;
+class A {
+    <Foo> void tparam(Object o) { Object x = (Foo) o; }
+    void local() { new Foo(); if (true) { class Foo { } } }
+    void other() { new Foo(); }
+}
+"""})
+    assert _body(ir) == [("p.A", "p.Foo", "other", 5)]
+
+
+def test_an_anonymous_class_sees_the_nested_types_its_project_super_inherits(tmp_path):
+    ir = extract_source(tmp_path, {
+        "p/Entry.java": "package p; public class Entry { }",
+        "p/Base.java": "package p; public class Base { public static class Entry { } }",
+        "p/Sub.java": "package p; public class Sub extends Base { }",
+        "p/A.java": """package p;
+class A {
+    void project() { new Sub() { void f() { new Entry(); } }; }
+    void outside() { new Thread() { public void run() { new Entry(); } }; }
+}
+"""})
+    # under Thread a nested type of an outside class may be meant: nothing is drawn
+    assert _body(ir) == [("p.A", "p.Base.Entry", "project", 3), ("p.A", "p.Sub", "project", 3)]
+
+
+def test_a_name_two_wildcard_imports_provide_draws_nothing(tmp_path):
+    # javac rejects it; the extractor, which may see more types than javac, must not pick
+    ir = extract_source(tmp_path, {
+        "a/Foo.java": "package a; public class Foo { }",
+        "b/Foo.java": "package b; public class Foo { }",
+        "b/Bar.java": "package b; public class Bar { }",
+        "p/A.java": "package p; import a.*; import b.*; class A { void m() { new Foo(); new Bar(); } }"})
+    assert _body(ir) == [("p.A", "b.Bar", "m", 1)]
+
+
+# names drawn where javac resolves them to something else, (file, line, javac's answer)
+_KNOWN_WRONG = [
+    # a nested type of a supertype outside the sources (HashMap's Map.Entry) wins over the
+    # package's own Entry: what the outside class declares is not known
+    ("p/Inherits.java", 7, "java.util.Map.Entry"),
+]
+
+
+def test_body_relations_go_where_the_hand_written_answers_say():
+    want = expected(FIXTURE)
+    raw = [Extractor(spec_for_path(p.name)).extract(p, str(p.relative_to(FIXTURE)), FIXTURE)
+           for p in sorted(FIXTURE.rglob("*.java"))]
+    builder = _Builder("body", raw, Wrappers.load())
+    builder.build()
+    wrong, drawn = [], set()
+    for file, line, col, _, to in builder.body_uses:
+        drawn.add((file, line, col))
+        answer, _ = want[(file, line, col)]
+        if answer != to:
+            wrong.append((file, line, answer))
+    assert wrong == _KNOWN_WRONG
+    # every project type in type position is drawn, but the part of a longer name
+    # (`Util` in `new Util.Helper()`) and a type's own name
+    missed = [(file, line, answer) for (file, line, col), (answer, position) in want.items()
+              if position == "type" and answer in builder.types and (file, line, col) not in drawn]
+    assert sorted(missed) == [("p/Forms.java", 29, "p.Util"), ("p/Owner.java", 5, "p.Owner")]
