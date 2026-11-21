@@ -62,6 +62,11 @@ def is_annotation(r: Relation) -> bool:
     return fact.kind == "dependency" and (fact.via or "").startswith("@")
 
 
+def is_body(r: Relation) -> bool:
+    """Whether a name written in a body created the relation (`evidence` "body")."""
+    return r.evidence == "body"
+
+
 def _within_hops(starts: set[str], adj: tuple[dict[str, set[str]], dict[str, set[str]]],
                  hops: int) -> set[str]:
     both, back = adj
@@ -137,14 +142,14 @@ def _fold(r: Relation, roots: dict[str, str], by_id: dict[str, Type]) -> Optiona
         label = " ".join(p for p in (
             inside(r.from_, f) if f != r.from_ else None, r.kind,
             inside(r.to, t) if r.to in by_id and t != r.to else None) if p)
-        return FoldedRelation(f, t, "dependency", r.source_location, via=r.via, fact=r,
-                              label=label)
+        return FoldedRelation(f, t, "dependency", r.source_location, via=r.via,
+                              evidence=r.evidence, fact=r, label=label)
     via = r.via
     if via is not None and f != r.from_ and not via.startswith("@"):
         # the member belongs to the nested type: `Response.cookies` on Connection's arrow
         via = f"{inside(r.from_, f)}.{via}"
     return FoldedRelation(f, t, r.kind, r.source_location, r.multiplicity, r.ownership, via,
-                          fact=r)
+                          r.evidence, fact=r)
 
 
 def _encloses(outer: str, tid: str, by_id: dict[str, Type]) -> bool:

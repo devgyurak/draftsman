@@ -175,9 +175,11 @@ class Relation:
     multiplicity: Optional[str] = None
     ownership: Optional[str] = None
     via: Optional[str] = None  # member that produced the relation (field name, method name)
+    # "body": a name written in a body (`new Foo()`, `Foo.bar()`); None: a declaration
+    evidence: Optional[str] = None
 
     def key(self) -> tuple:
-        return (self.from_, self.to, self.kind, self.via or "")
+        return (self.from_, self.to, self.kind, self.via or "", self.evidence or "")
 
     def to_dict(self) -> dict:
         d: dict[str, Any] = {"from": self.from_, "to": self.to, "kind": self.kind}
@@ -187,6 +189,8 @@ class Relation:
             d["ownership"] = self.ownership
         if self.via is not None:
             d["via"] = self.via
+        if self.evidence is not None:
+            d["evidence"] = self.evidence
         d["source_location"] = self.source_location.to_dict()
         return d
 
@@ -200,6 +204,7 @@ class Relation:
             multiplicity=d.get("multiplicity"),
             ownership=d.get("ownership"),
             via=d.get("via"),
+            evidence=d.get("evidence"),
         )
 
 

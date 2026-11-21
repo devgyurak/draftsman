@@ -60,6 +60,7 @@ header/source).
 | `multiplicity` | associations only: `"1"`, `"0..1"`, `"*"` |
 | `ownership` | C++ associations only: `owned` (value, `unique_ptr`) or `shared` (pointer, `shared_ptr`) |
 | `via` | member that produced it (field name for associations, method name for dependencies), or the annotation, as `@Name`, for a dependency an annotation produced |
+| `evidence` | `"body"` for a relation read from a name written in a body (`new Foo()`, `Foo.bar()`); absent for one read from a declaration |
 | `source_location` | `{file, line}` of the declaration that produced it |
 
 How each kind is derived:
