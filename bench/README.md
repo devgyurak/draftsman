@@ -142,3 +142,23 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
   collapsing to top-level types, and no relation labelled real is missing from the recall
   denominators (three nesting edges, declarations rather than uses, are not counted as
   missing).
+- 2026-11-20, second round (v2), after Draftsman 0.3.0 (`c68baa0`: nested types folded
+  in focus diagrams, annotations create relations, one command draws a diagram). Same
+  configuration, prompts, focus classes and rubric; all three arms run again, 63 runs, no
+  failures, $9.46. The image is the first round's with only Draftsman's files replaced
+  (`update_draftsman.sh`), so Claude Code, the Python packages, the repositories and
+  night-market are byte for byte the same. Results are in `results/raw/measured-v2/`,
+  `labels/v2/` and `results/scores/v2/`; the first round's stay where they were.
+  - Labels: 382 of the 514 distinct edges were drawn in the first round as well and keep
+    its final labels (a label depends only on the edge and the source). The other 132
+    were labelled blind by a separate session started outside this repository, so that
+    neither the commit history nor this page reached it, and allowed to open only the
+    rubric, `tasks.yaml`, the edge list and the sources (`labels/v2/BRIEF.md`).
+  - The cases that session found undecided were all settled by rules already written
+    (qualified nested names as drawn, the focus file deciding a shared name, edges to an
+    anonymous class, outer-to-nested uses); no rule changed.
+  - Human review: 52 rows (32 in full, 20 sampled), all agreed by eye. This review was not
+    blind: the reviewer knew what 0.3.0 changed. The sheet gives the cited lines and the
+    files naming both types, so each verdict rests on the source.
+  - `score.py` counted a diagram with no edges as a failed run, which the rubric does not;
+    no run of either round had none, so no figure changed.
