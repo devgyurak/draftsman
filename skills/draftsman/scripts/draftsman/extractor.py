@@ -585,6 +585,7 @@ class Extractor:
         inits: dict[int, str] = {}           # initializer block -> its `via`
         classes: dict[int, list[str]] = {}   # body of an anonymous or local class -> supertypes
         refs, declared = [], []
+        qualified: set[int] = set()   # names looked up in an expression's type
         for caps in other:
             if (n := _first(caps, "body.region")) is not None:
                 regions.add(n.id)
@@ -610,6 +611,8 @@ class Extractor:
                 declared.append((n, "variables"))
             elif (n := _first(caps, "body.type")) is not None:
                 declared.append((n, "types"))
+            elif (n := _first(caps, "body.qualified")) is not None:
+                qualified.add(n.id)
         if not refs:
             return
         names: dict[int, BodyNames] = {}   # by the node of the member or initializer
@@ -633,7 +636,8 @@ class Extractor:
                     break
                 cur = cur.parent
         whole = {n.id for _, n in refs}
-        not_refs = {n.id for n, _ in declared}   # `T` in `<T extends Foo>` is declared there
+        # `T` in `<T extends Foo>` is declared there; `Inner` in `o.new Inner()` is o's
+        not_refs = {n.id for n, _ in declared} | qualified
         for position, node in sorted(refs, key=lambda r: r[1].start_byte):
             if node.parent.id in whole or node.id in not_refs:
                 continue   # `Foo` in `p.Foo`: the whole name is recorded

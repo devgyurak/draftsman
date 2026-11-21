@@ -95,6 +95,9 @@
 ((type_identifier) @body.ref.type (#not-eq? @body.ref.type "var"))
 (scoped_type_identifier) @body.ref.type
 (record_pattern [(identifier) (scoped_identifier)] @body.ref.type)
+; `o.new Inner()`: a member of o's type, which the scope does not tell
+(object_creation_expression (_) . "." . "new"
+  type: [(type_identifier) @body.qualified (generic_type (type_identifier) @body.qualified)])
 ; `X.this`, `X.super.m()`: only a type can stand before them; `X.this.m()` is no receiver X,
 ; and the extractor drops the receiver of `X.super.m()` (the type pattern below records it)
 (method_invocation object: [(identifier) (field_access field: (identifier))] @body.ref.receiver)
@@ -120,7 +123,7 @@
 (annotation_type_declaration name: (identifier) @body.type)
 
 ; the members an anonymous or local class inherits are in scope inside it
-(object_creation_expression type: (_) @body.class.super (class_body) @body.class)
+(object_creation_expression . "new" type: (_) @body.class.super (class_body) @body.class)
 (class_declaration superclass: (superclass (_) @body.class.super) body: (class_body) @body.class)
 (class_declaration (super_interfaces (type_list (_) @body.class.super)) body: (class_body) @body.class)
 (interface_declaration (extends_interfaces (type_list (_) @body.class.super)) body: (interface_body) @body.class)

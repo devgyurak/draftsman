@@ -146,13 +146,17 @@ _NOT_YET = sorted([
     ("p/ExternalStatic.java", 7, "java.lang.Thread.State"),
     ("p/Inherits.java", 14, "java.lang.Thread.State"),
 ])
+# marked names never recorded: `Inner` in `o.new Inner()` is a member of o's type, which
+# the scope does not tell
+_UNREAD = [("p/Qualified.java", n, "p.Outer.Inner") for n in (15, 16, 23)] + \
+    [("p/Qualified.java", 17, "p.Outer.Only")]
 
 
 def test_body_names_stand_where_the_hand_written_answers_say():
     # tests/fixtures/java/body, which the oracle's selftest checks against javac: every part
     # of a name the extractor records is in the position its marker gives, one no marker
     # lists is a variable or a package (lower case), and every marked name is recorded but
-    # _NOT_YET's
+    # _NOT_YET's and _UNREAD's
     want = expected(FIXTURE)
     problems, recorded = [], set()
     for path in sorted(FIXTURE.rglob("*.java")):
@@ -174,7 +178,7 @@ def test_body_names_stand_where_the_hand_written_answers_say():
     assert problems == []
     missed = sorted((rel, line, answer) for (rel, line, col), (answer, _) in want.items()
                     if answer != "-" and (rel, line, col) not in recorded)
-    assert missed == _NOT_YET
+    assert missed == sorted(_NOT_YET + _UNREAD)
 
 
 def _body(ir) -> list[tuple]:
@@ -255,7 +259,8 @@ def test_body_relations_go_where_the_hand_written_answers_say():
             wrong.append((file, line, answer))
     assert wrong == []
     # every project type in type position is drawn, but the part of a longer name
-    # (`Util` in `new Util.Helper()`) and a type's own name
+    # (`Util` in `new Util.Helper()`), a type's own name, and the names never read
     missed = [(file, line, answer) for (file, line, col), (answer, position) in want.items()
               if position == "type" and answer in builder.types and (file, line, col) not in drawn]
-    assert sorted(missed) == [("p/Forms.java", 29, "p.Util"), ("p/Owner.java", 5, "p.Owner")]
+    assert sorted(missed) == sorted(
+        [("p/Forms.java", 29, "p.Util"), ("p/Owner.java", 5, "p.Owner")] + _UNREAD)
