@@ -40,7 +40,18 @@ is that type. Aliases of aliases are followed.
   a `Thread` subclass is Thread.Builder (new in 21) to the table, even where it is the
   project's `Builder` under Java 17.
 - Known miss: project types declared in `java.lang` (Netty's stubs of `java.lang.Module`
-  for older JDKs) are not implicitly imported; `Module` stays the JDK's.
+  and `ProcessHandle` for older JDKs) are not implicitly imported; they stay the JDK's.
+- Names in bodies (`evidence: "body"`): a receiver (`Foo.bar()`, `Foo.X`, `Foo::m`) is a
+  variable before it is a type, as in javac. It draws nothing when a variable of its
+  name may be in scope: one declared anywhere in the member (also after the name, so a
+  few are lost), a field of the type, of an enclosing type or of an anonymous or local
+  class around it (enum constants and record components too, inherited ones through
+  project supertypes and the JDK table), or one `import static` brings in (a single
+  import of the name always; `a.B.*` when B is the project's or in the JDK table). After
+  a type, a field of the next name ends it (`Util.VALUE.trim()` is `Util`), else a nested
+  type continues it (`Util.Helper.run()`). Known limit: fields of other types outside the
+  sources (a Spring supertype's, `import static org.lib.Consts.*`) are not known and hide
+  nothing, the same rule as for their nested types.
 - Type annotations right before varargs (`X509Certificate @Nullable ... certs`) are valid
   Java 8 that the tree-sitter grammar rejects; they are blanked before parsing (same
   length, so line numbers are exact). Annotations on array levels (`String @A []`) are

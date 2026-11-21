@@ -35,13 +35,8 @@ def test_body_relation_of_a_member_stays_beside_its_declared_one(tmp_path):
         (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / name).write_text(text)
     raw = [Extractor(spec_for_path(n)).extract(tmp_path / n, n, tmp_path) for n in files]
-    builder = _Builder(tmp_path.name, raw, Wrappers.load())
-    ir = builder.build()
-    assert [(r.via, r.evidence) for r in ir.relations] == [("X", None)]
-    builder.relations.append(Relation("p.A", "p.Foo", "dependency", Location("p/A.java", 1),
-                                      via="X", evidence="body"))
-    assert sorted((r.via, r.evidence or "") for r in builder._finalize_relations()) == \
-        [("X", ""), ("X", "body")]
+    ir = _Builder(tmp_path.name, raw, Wrappers.load()).build()
+    assert sorted((r.via, r.evidence or "") for r in ir.relations) == [("X", ""), ("X", "body")]
 
 
 def test_folding_keeps_a_body_relation_one(tmp_path):
@@ -103,6 +98,14 @@ class A {
         ("p.A.K", "Bar", "receiver", "A", []),
         ("p.A.K", "Init", "receiver", "static {}", []),
     ]
+
+
+def test_a_receiver_is_a_dotted_name_not_an_expression(tmp_path):
+    raw = _raw(tmp_path, """package p;
+class A { void m(A[] a) { this.Foo.m(); a[0].Bar.m(); m().Baz.m(); Qux.Y.m(); f(p.Zed::m); } }
+""")
+    assert [(r.text, r.position) for r in raw.types[0].body_refs] == \
+        [("Qux.Y", "receiver"), ("p.Zed", "receiver")]
 
 
 def test_a_member_collects_every_name_that_may_hide_a_type_in_it(tmp_path):
@@ -249,9 +252,11 @@ def test_body_relations_go_where_the_hand_written_answers_say():
         if answer != to:
             wrong.append((file, line, answer))
     assert wrong == []
-    # every project type in type position is drawn, but the part of a longer name
-    # (`Util` in `new Util.Helper()`), a type's own name, and the names never read
+    # every project type is drawn, but the part of a longer name (`Util` in
+    # `new Util.Helper()`), a type's own name, the names never read, and one the member
+    # declares a variable of further down (`Owner Owner = ...`: the member is the scope)
     missed = [(file, line, answer) for (file, line, col), (answer, position) in want.items()
-              if position == "type" and answer in builder.types and (file, line, col) not in drawn]
+              if answer in builder.types and (file, line, col) not in drawn]
     assert sorted(missed) == sorted(
-        [("p/Forms.java", 29, "p.Util"), ("p/Owner.java", 5, "p.Owner")] + _UNREAD)
+        [("p/Forms.java", 29, "p.Util"), ("p/Forms.java", 28, "p.Util"),
+         ("p/Owner.java", 5, "p.Owner"), ("p/Forms.java", 26, "p.Owner")] + _UNREAD)

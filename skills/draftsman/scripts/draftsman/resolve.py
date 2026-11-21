@@ -71,6 +71,7 @@ class Resolver:
         self._resolving_supers: set[str] = set()
         self._suffix_cache: dict[str, Optional[str]] = {}
         self._tail_cache: dict[str, Optional[str]] = {}
+        self._field_cache: dict[tuple[str, str], bool] = {}
 
     # ------------------------------------------------------------ helpers
 
@@ -602,6 +603,51 @@ class Resolver:
         res = self._in_body(name, rtype, ref, 0)
         return res.target if res.status == PROJECT else None
 
+    def body_receiver(self, ref: RawBodyRef, rtype: RawType) -> Optional[tuple[str, int]]:
+        """(project type, how many parts of the name it covers) a receiver starts with
+        (`Util.Helper` in `Util.Helper.run()`, `Util` in `Util.VALUE.trim()`), or None. A
+        variable wins over a type, and a type over a package (JLS 6.5.2): a head that may be
+        a variable draws nothing, and after a type a field of the name ends it."""
+        sep = LANGUAGES[rtype.language].separator
+        parts = ref.text.split(sep)
+        if self._is_variable(parts[0], rtype, ref):
+            return None
+        res = self._in_body(parts[0], rtype, ref, 0)
+        if res.status == PROJECT:
+            target, n = res.target, 1
+        elif res.status == UNRESOLVED and len(parts) > 1:
+            # a package: the first prefix that is a project type (`io.netty.Foo.X`)
+            n = next((k for k in range(2, len(parts) + 1)
+                      if sep.join(parts[:k]) in self.index), 0)
+            if not n:
+                return None
+            target = sep.join(parts[:n])
+        else:
+            return None
+        while n < len(parts) and not self._has_field(self.index[target], parts[n]):
+            nested = self._member_type(self.index[target], parts[n], sep, True, set())
+            if nested is None:
+                break
+            target, n = nested, n + 1
+        return target, n
+
+    def _around(self, rtype: RawType, ref: RawBodyRef, depth: int):
+        """For each anonymous or local class around ``ref`` from ``depth`` levels out,
+        innermost first: (its project supertypes, the types outside the sources it
+        inherits from, as far as they are known)."""
+        for i, supers in enumerate(ref.classes[depth:], depth + 1):
+            project, outside = [], []
+            for sup in supers:
+                written = parse_type(sup)
+                if not isinstance(written, Named):
+                    continue
+                owner = self._in_body(written.name, rtype, ref, i)
+                outside += self._outside(written.name, owner, ref.scope, rtype, True)
+                if owner.status == PROJECT:
+                    project.append(self.index[owner.target])
+                    outside += self._external_ancestors(self.index[owner.target], starred=True)
+            yield project, outside
+
     def _in_body(self, name: str, rtype: RawType, ref: RawBodyRef, depth: int) -> Resolution:
         """``name`` as seen from the anonymous or local class ``depth`` levels out from
         ``ref`` (ref.classes): the nested types each inherits come first, then the member's
@@ -611,23 +657,67 @@ class Resolver:
         head, _, rest = name.partition(sep)
         if head in ref.names.types:
             return Resolution(UNRESOLVED)
-        for i, supers in enumerate(ref.classes[depth:], depth + 1):
-            for sup in supers:
-                written = parse_type(sup)
-                if not isinstance(written, Named):
-                    continue
-                owner = self._in_body(written.name, rtype, ref, i)
-                outside = self._outside(written.name, owner, ref.scope, rtype, True)
-                if owner.status == PROJECT:
-                    found = self._member_type(self.index[owner.target], head, sep, True, set())
-                    if found:
-                        return (self._nested_path(found, rest, sep, True) or Resolution(UNRESOLVED)) \
-                            if rest else self._found(found)
-                    outside = self._external_ancestors(self.index[owner.target], starred=True)
-                found = self._inherited_external(outside, head, spec)
-                if found:   # `State` in `new Thread() { ... }`
-                    return Resolution(EXTERNAL, found + sep + rest if rest else found)
+        for project, outside in self._around(rtype, ref, depth):
+            for owner in project:
+                found = self._member_type(owner, head, sep, True, set())
+                if found:
+                    return (self._nested_path(found, rest, sep, True) or Resolution(UNRESOLVED)) \
+                        if rest else self._found(found)
+            found = self._inherited_external(outside, head, spec)
+            if found:   # `State` in `new Thread() { ... }`
+                return Resolution(EXTERNAL, found + sep + rest if rest else found)
         return self.resolve(name, rtype, ref.member, scope=ref.scope, strict=True)
+
+    def _is_variable(self, name: str, rtype: RawType, ref: RawBodyRef) -> bool:
+        """Whether a variable of the name may be in scope where ``ref`` is written: one the
+        member declares, a field of a class around it (inherited ones too, from the JDK as
+        far as its table tells), or one a static import brings in. Fields of other types
+        outside the sources are not known (lang-notes.md)."""
+        if name in ref.names.variables:
+            return True
+        spec = LANGUAGES[rtype.language]
+        for project, outside in self._around(rtype, ref, 0):
+            if any(self._has_field(t, name) for t in project) or \
+                    any(spec.inherited_field(o, name) for o in outside):
+                return True
+        cur: Optional[RawType] = rtype
+        while cur is not None:
+            if self._has_field(cur, name):
+                return True
+            cur = self.index.get(cur.outer) if cur.outer else None
+        sep = spec.separator
+        for imp in ref.scope.imports:
+            if not imp.static:
+                continue
+            if imp.wildcard:   # `import static a.B.*`: B's static fields
+                owner = self.index.get(imp.path)
+                if owner is not None and self._has_field(owner, name) or \
+                        owner is None and spec.inherited_field(imp.path, name, static=True):
+                    return True
+            elif imp.local_name == name:
+                # `import static a.B.N` brings in every static member named N: a type only
+                # when B is the project's, with no field N
+                owner = self.index.get(imp.path.rsplit(sep, 1)[0])
+                if owner is None or self._has_field(owner, name) or \
+                        self._member_type(owner, name, sep, True, set()) is None:
+                    return True
+        return False
+
+    def _has_field(self, rtype: RawType, name: str) -> bool:
+        """Whether the project type has a field ``name``, also an enum constant or a record
+        component, its own or inherited (through the JDK table for JDK supertypes)."""
+        key = (rtype.qualified_name, name)
+        if key not in self._field_cache:
+            self._field_cache[key] = False   # a cycle of supertypes has no field
+            spec = LANGUAGES[rtype.language]
+            self._field_cache[key] = any(
+                rm.member.name == name and rm.member.kind in ("field", "enum_constant", "property")
+                for rm in rtype.members) or any(
+                self._has_field(self.index[s.target], name)
+                for s in self.supertypes(rtype) if s.status == PROJECT) or any(
+                spec.inherited_field(o, name)
+                for o in self._external_ancestors(rtype, starred=True))
+        return self._field_cache[key]
 
     def _candidates(self, name: str, sep: str, rtype: RawType) -> tuple[list[str], list[str]]:
         """Project types with the simple name: (those the reference could mean, nested
@@ -890,12 +980,13 @@ class _Builder:
         """A dependency, `evidence` "body", on the project type each name in a body stands
         for; a name that may mean something else draws nothing, and is never unresolved."""
         for ref in rtype.body_refs:
-            if ref.position != "type":
-                continue
-            target = self.resolver.body_type(ref.text, rtype, ref)
+            if ref.position == "type":
+                target, n = self.resolver.body_type(ref.text, rtype, ref), len(ref.places)
+            else:
+                target, n = self.resolver.body_receiver(ref, rtype) or (None, 0)
             if target is None or target == rtype.qualified_name:
                 continue
-            line, col = ref.places[-1]
+            line, col = ref.places[n - 1]
             self.body_uses.append((ref.scope.file, line, col, rtype.qualified_name, target))
             self.relations.append(Relation(rtype.qualified_name, target, "dependency",
                                            Location(ref.scope.file, line), via=ref.via,
