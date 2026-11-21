@@ -208,8 +208,11 @@ def test_a_jdk_supertype_passes_on_its_nested_types(tmp_path):
         "p/Dataset.java": "package p; import java.util.HashMap;"
                           " class Dataset extends HashMap<String, String> { Entry first; }",
         "p/Other.java": "package p; import org.lib.Table; class Other extends Table { Entry e; }",
+        # through a wildcard import, the supertype is a guess the table settles
+        "p/Starred.java": "package p; import java.util.*;"
+                          " class Starred extends HashMap<String, String> { Entry first; }",
     })
-    assert not ir.unresolved
+    assert [u.raw_type for u in ir.unresolved] == ["HashMap"]   # still a guess itself
     assert [(r.from_, r.to) for r in ir.relations if r.kind == "association"] == \
         [("p.Other", "p.Entry")]
 

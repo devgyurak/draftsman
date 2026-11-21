@@ -26,7 +26,9 @@ is that type. Aliases of aliases are followed.
   nested types the JDK declares (`Entry` in a `HashMap` subclass is `java.util.Map.Entry`,
   also over the package's own `Entry`): `langs/java_jdk.json` lists the public and
   protected nested types and fields of the JDK 21 types a class can extend, their
-  inherited ones too (`bench/javac_oracle/oracle.py jdk` writes it). Names that can only
+  inherited ones too (`bench/javac_oracle/oracle.py jdk` writes it). A supertype named
+  through a wildcard import (`extends HashMap` under `import java.util.*`) stays
+  unresolved, but is looked up in the table as each wildcard package's. Names that can only
   come from an external wildcard import or another external supertype (`LayoutParams` in
   a `FrameLayout` subclass) stay unresolved with a hint — they could also be same-package
   generated code outside the sources, so they are not guessed.
@@ -34,6 +36,9 @@ is that type. Aliases of aliases are followed.
   known, so it does not hide a project type of the same name: a `Validator` subclass
   writing `Foo` gets the project's `Foo` even if `Validator` declared one. The parser
   cannot tell; javac can. Nor does a JDK type that a JDK after 21 gives a new nested type.
+  The other way round, code compiled for an older release loses a relation: `Builder` in
+  a `Thread` subclass is Thread.Builder (new in 21) to the table, even where it is the
+  project's `Builder` under Java 17.
 - Known miss: project types declared in `java.lang` (Netty's stubs of `java.lang.Module`
   for older JDKs) are not implicitly imported; `Module` stays the JDK's.
 - Type annotations right before varargs (`X509Certificate @Nullable ... certs`) are valid

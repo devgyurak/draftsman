@@ -246,8 +246,11 @@ class Resolver:
             cur = self.index.get(cur.outer) if cur.outer else None
         return out
 
-    def _external_ancestors(self, rtype: RawType, seen: Optional[set[str]] = None) -> list[str]:
-        """External supertypes of the type, also those reached through project ones."""
+    def _external_ancestors(self, rtype: RawType, seen: Optional[set[str]] = None,
+                            starred: bool = False) -> list[str]:
+        """External supertypes of the type, also those reached through project ones;
+        ``starred`` adds what a supertype left unresolved may be through each wildcard
+        import of its file (`HashMap` under `import java.util.*`)."""
         out: list[str] = []
         seen = set() if seen is None else seen
         stack = [rtype]
@@ -256,12 +259,28 @@ class Resolver:
             if t.qualified_name in seen:
                 continue
             seen.add(t.qualified_name)
-            for sup in self.supertypes(t):
-                if sup.status in (EXTERNAL, BUILTIN) and sup.target not in out:
-                    out.append(sup.target)
-                elif sup.status == PROJECT:
+            for written, sup in zip(t.supers, self.supertypes(t)):
+                if sup.status == PROJECT:
                     stack.append(self.index[sup.target])
+                    continue
+                ref = parse_type(written.text)
+                name = ref.name if isinstance(ref, Named) else ""
+                for target in self._outside(name, sup, written.scope or t.scope, t, starred):
+                    if target not in out:
+                        out.append(target)
         return out
+
+    def _outside(self, name: str, res: Resolution, scope: FileScope, rtype: RawType,
+                 starred: bool) -> list[str]:
+        """The external types a name resolved as ``res`` may be: its target, or with
+        ``starred`` the type of its name in each wildcard import outside the sources."""
+        if res.status in (EXTERNAL, BUILTIN):
+            return [res.target] if res.target else []
+        if not (starred and res.status == UNRESOLVED and res.outside and name):
+            return []
+        sep = LANGUAGES[rtype.language].separator
+        return [i.path + sep + name for i in scope.imports
+                if i.wildcard and (i.external or i.path not in self.namespaces)]
 
     def _inherited_external(self, supers: list[str], name: str, spec) -> Optional[str]:
         """The nested type ``name`` one of the external ``supers`` passes on, as far as the
@@ -445,7 +464,8 @@ class Resolver:
                 if base is not None:   # `CodeGenerator::Properties` in a CodeGenerator subclass
                     return base
             if inherited:   # `Entry` in a HashMap subclass is Map.Entry, not the package's
-                outside = self._inherited_external(self._external_ancestors(cur), name, spec)
+                outside = self._inherited_external(
+                    self._external_ancestors(cur, starred=True), name, spec)
                 if outside:
                     return Resolution(EXTERNAL, outside)
             cur = self.index.get(cur.outer) if cur.outer else None
@@ -597,14 +617,13 @@ class Resolver:
                 if not isinstance(written, Named):
                     continue
                 owner = self._in_body(written.name, rtype, ref, i)
-                outside = [owner.target] if owner.status in (EXTERNAL, BUILTIN) and owner.target \
-                    else []
+                outside = self._outside(written.name, owner, ref.scope, rtype, True)
                 if owner.status == PROJECT:
                     found = self._member_type(self.index[owner.target], head, sep, True, set())
                     if found:
                         return (self._nested_path(found, rest, sep, True) or Resolution(UNRESOLVED)) \
                             if rest else self._found(found)
-                    outside = self._external_ancestors(self.index[owner.target])
+                    outside = self._external_ancestors(self.index[owner.target], starred=True)
                 found = self._inherited_external(outside, head, spec)
                 if found:   # `State` in `new Thread() { ... }`
                     return Resolution(EXTERNAL, found + sep + rest if rest else found)
