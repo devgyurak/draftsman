@@ -247,7 +247,7 @@ def build_scene(ir: IR, view: View, whole: bool = False) -> Scene:
         visible = set(nodes)
     # "focus": only the body relations that touch the focus; the viewer (``whole``) is given
     # all of them, as its reader moves the focus
-    if body == "focus" and not (whole and focus):
+    if body == "focus" and not whole:
         relations = [r for r in relations
                      if not is_body(r) or r.from_ in starts or r.to in starts]
 

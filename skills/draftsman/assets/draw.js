@@ -462,7 +462,7 @@
       if (!e) continue;
       if (reversed(e)) pts = pts.slice().reverse();
       const d = pts.map((p, i) => (i ? "L" : "M") + p.x.toFixed(1) + "," + p.y.toFixed(1)).join(" ");
-      const inCycle = opts.highlightCycles && e.kind !== "extends" && e.kind !== "implements" &&
+      const inCycle = opts.highlightCycles && e.kind !== "extends" && e.kind !== "implements" && !e.body &&
         cycleOf.has(e.from) && cycleOf.get(e.from) === cycleOf.get(e.to);
       const cls = ["edge", "k-" + e.kind, e.inferred ? "inferred" : "", e.body ? "body" : "",
         inCycle ? "cycle" : "",

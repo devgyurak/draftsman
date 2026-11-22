@@ -16,7 +16,7 @@ unambiguous. A name that matches nothing in ir.json is an error.
 | `members` | `"all"` \| `"public"` \| `"none"`, or `{type glob: level}` | `"all"` | member detail (see below); enum constants always shown unless `"none"` |
 | `externals` | bool | `false` | draw external supertypes (e.g. `CrudRepository`) as `<<external>>` boxes |
 | `annotations` | bool | `true` | draw the dependencies annotations create (`via` `@Name`, see below) |
-| `body` | `"focus"` \| `"all"` \| `"none"` | `"focus"` with `focus`, else `"none"` | draw the dependencies names in bodies create (`evidence` `"body"`, see below) |
+| `body` | `"focus"` \| `"all"` \| `"none"` | `"focus"` with `focus` or `"output": "html"`, else `"none"` | draw the dependencies names in bodies create (`evidence` `"body"`, see below) |
 | `groups` | `[{name, members: [type]}]` | `[]` | clusters (Mermaid `namespace`); a type may be in one group only |
 | `highlights` | `[{target, reason}]` | `[]` | red outline; `reason` is kept as a comment |
 | `notes` | `[{target, text}]` | `[]` | note attached to a type |
@@ -89,12 +89,14 @@ types than declarations do, so they draw less by default:
   everything the helper is related to.
 - `"all"`: also the body relations between any two types the diagram draws. They still
   bring in no type beyond the focus's.
-- `"none"` (the default without `focus`): none.
+- `"none"` (the default without `focus`, but in html): none.
 
 Between two types, a signature's dependency is drawn rather than an annotation's, and
 either rather than a body's. A body relation is dotted more finely than a signature's and,
-in Mermaid, labelled `body`. The HTML viewer gets them all and shows them as its reader
-moves the focus; its Bodies button hides them.
+in Mermaid, labelled `body`. The HTML viewer gets them all unless `"none"`, with or without
+`focus`, and shows them as its reader moves the focus (none before one is picked); its
+Bodies button hides them. Reference cycles are found on declared relations only, as the
+most connected types are counted.
 
 ## members
 

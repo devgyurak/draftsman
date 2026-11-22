@@ -80,7 +80,8 @@ class View:
     # draw the dependencies annotations create (`via` "@Name")
     annotations: bool = True
     # the dependencies names in bodies create (`evidence` "body"): those touching the focus,
-    # those between every drawn type, or none; None: "focus" around a focus, else "none"
+    # those between every drawn type, or none; None: "focus" around a focus and in the
+    # viewer (whose reader picks one), else "none"
     body: Optional[str] = None
 
     @property
@@ -93,7 +94,7 @@ class View:
     def body_mode(self) -> str:
         if self.body is not None:
             return self.body
-        return "focus" if self.focus else "none"
+        return "focus" if self.focus or self.output == "html" else "none"
 
     @classmethod
     def load(cls, path: Optional[Path]) -> "View":

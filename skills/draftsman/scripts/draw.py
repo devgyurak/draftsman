@@ -314,8 +314,8 @@ class Report:
         drawn = sum(is_body(r) for r in self.scene.relations)
         if self.view.output == "html":
             # the viewer has them all and shows them as its reader moves the focus
-            where = ("those touching the class in focus" if mode == "focus" and self.scene.focus
-                     else "all" if mode == "all" else "none")
+            where = "all" if mode == "all" else "those touching the class in focus" + (
+                "" if self.scene.focus else ", once the reader picks one")
             self.line(f"bodies: {drawn} dependencies read from names in bodies in the viewer, "
                       f"which shows {where} (its Bodies button hides them)")
             return
@@ -325,7 +325,7 @@ class Report:
             only = self.shown() - {t.id for t in self.around(self.scene.hops, body="none").types}
             if only:
                 line += f"; {len(only)} types only through them: {self.names(self.by_degree(only), 8)}"
-        others = [f"--body {m}" for m in ("all", "none") if m != mode]
+        others = [f"--body {m}" for m in BODY if m != mode]
         self.line(line + f" ({', '.join(others)})")
 
     def shown(self) -> set[str]:

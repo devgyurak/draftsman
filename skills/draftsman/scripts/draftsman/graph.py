@@ -166,7 +166,9 @@ def build_graph(scene: Scene, ir: Optional[IR] = None) -> dict:
         "groups": [{"name": name, "members": ids} for name, ids in scene.groups],
         "notes": [{"target": t, "text": text} for t, text in scene.notes],
         "highlights": [{"target": t, "reason": reason} for t, reason in scene.highlights],
-        "cycles": find_cycles(project_ids, scene.relations),
+        # on declarations, as the most connected types: a viewer has every body relation,
+        # and shows only those around its focus
+        "cycles": find_cycles(project_ids, [r for r in scene.relations if not is_body(r)]),
     }
     if ir is not None:
         shown = set(project_ids) | {n for ids in scene.folded.values() for n in ids}

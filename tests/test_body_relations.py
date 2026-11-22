@@ -308,3 +308,18 @@ def test_a_pair_keeps_its_signature_or_annotation_arrow_over_a_body_one(tmp_path
     assert _drawn(ir, focus="A", hops=1)[1] == [
         ("A", "B", "dependency", ""), ("A", "C", "dependency", ""),
         ("A", "Mark", "dependency", "")]
+
+
+def test_the_viewer_carries_every_body_relation_and_finds_cycles_on_declarations(tmp_path):
+    from draftsman.graph import build_graph
+    ir = extract_source(tmp_path, {
+        "p/A.java": "package p; class A { B b; }",
+        "p/B.java": "package p; class B { void m() { new A(); } }",   # back only in a body
+        "p/C.java": "package p; class C { D d; }",
+        "p/D.java": "package p; class D { C c; }"})
+    # without a focus too: the reader picks one in the viewer
+    scene = build_scene(ir, View.from_dict({"output": "html"}), whole=True)
+    graph = build_graph(scene, ir)
+    assert graph["body"] == "focus"
+    assert [(e["from"], e["to"]) for e in graph["edges"] if e["body"]] == [("p.B", "p.A")]
+    assert graph["cycles"] == [["p.C", "p.D"]]
