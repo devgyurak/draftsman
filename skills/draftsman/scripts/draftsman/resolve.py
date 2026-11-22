@@ -616,8 +616,10 @@ class Resolver:
         res = self._in_body(parts[0], rtype, ref, 0)
         if res.status == PROJECT:
             target, n = res.target, 1
-        elif res.status == UNRESOLVED and len(parts) > 1:
-            # a package: the first prefix that is a project type (`io.netty.Foo.X`)
+        elif res.status == UNRESOLVED and len(parts) > 1 and parts[0] not in self.index:
+            # a package: the first prefix that is a project type (`io.netty.Foo.X`); a head
+            # that is a type of the default package is none, and only the default package
+            # sees that type, where it is resolved already
             n = next((k for k in range(2, len(parts) + 1)
                       if sep.join(parts[:k]) in self.index), 0)
             if not n:
