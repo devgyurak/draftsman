@@ -165,3 +165,9 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
     files naming both types, so each verdict rests on the source.
   - `score.py` counted a diagram with no edges as a failed run, which the rubric does not;
     no run of either round had none, so no figure changed.
+- 2026-11-23, during the third round's runs (v3, Draftsman 0.4.0, `7d2358a`), before any
+  of its edges was pooled: `pool_edges.py` carried over only the first round's labels, so
+  the 132 edges the second round labelled and reviewed would have gone back to the
+  labeller. A round now carries over every earlier round's final labels, an edge under the
+  id of the round that labelled it first, and stops when two rounds judge one edge
+  differently. This changes which edges are labelled again, not any label.

@@ -12,9 +12,10 @@ writes, under the round's labels directory (rounds.py),
 
 An undirected edge (`--`, `..`) keeps its two names in sorted order.
 
-A later round carries over the final labels of every edge the first round already
+A later round carries over the final labels of every edge an earlier round already
 labelled (same repository, focus, names, kind and direction: what a label depends on);
-`carried_from` names that edge, and the labeller fills only the rows left empty.
+`carried_from` names that edge as the round that labelled it first named it, and the
+labeller fills only the rows left empty.
 """
 
 import argparse
@@ -31,6 +32,8 @@ BENCH = Path(__file__).resolve().parent
 # as drawn and on top-level types (RUBRIC.md, "Two levels, and nesting edges")
 LABEL_COLUMNS = ['source_fqn', 'target_fqn', 'label_drawn', 'file_line_drawn',
                  'label_top', 'file_line_top', 'unnamed', 'note']
+# what an edge is judged to be, which rounds must agree on
+VERDICT_COLUMNS = ['source_fqn', 'target_fqn', 'label_drawn', 'label_top', 'unnamed']
 
 
 def main() -> None:
@@ -58,9 +61,15 @@ def main() -> None:
     random.Random(tasks['selection']['seed']).shuffle(keys)
     prefix = 'E' if args.round == 'v1' else args.round[0].upper() + args.round[1:] + '-'
     carried = {}
-    if args.round != 'v1':
-        for r in csv.DictReader(open(rounds.labels('v1') / 'final_edges.csv', newline='')):
-            carried[(r['repo'], r['focus'], r['source_name'], r['kind'], r['target_name'], r['directed'])] = r
+    # v1, v2, ... before this round; the earliest keeps an edge, which later ones carried
+    for earlier in (f'v{i}' for i in range(1, int(args.round[1:]))):
+        for r in csv.DictReader(open(rounds.labels(earlier) / 'final_edges.csv', newline='')):
+            key = (r['repo'], r['focus'], r['source_name'], r['kind'], r['target_name'], r['directed'])
+            first = carried.setdefault(key, r)
+            # a later round that corrected an earlier one's label would be undone silently
+            if any(first[c] != r[c] for c in VERDICT_COLUMNS):
+                raise SystemExit(f'{r["edge_id"]} ({earlier}) and {first["edge_id"]} label the same '
+                                 'edge differently; settle which holds before pooling')
     labels = rounds.labels(args.round)
     labels.mkdir(parents=True, exist_ok=True)
     if (labels / 'blind_edges.csv').exists() and any(
@@ -87,7 +96,7 @@ def main() -> None:
         w.writerows(nodes)
     n_carried = sum((repo, focus, src, kind, tgt, str(d).lower()) in carried for repo, focus, src, kind, tgt, d in keys)
     print(f'{sum(len(v) for v in pooled.values())} edges drawn, {len(keys)} distinct in context '
-          f'({n_carried} labelled in v1, {len(keys) - n_carried} to label), {len(nodes)} nodes')
+          f'({n_carried} labelled in earlier rounds, {len(keys) - n_carried} to label), {len(nodes)} nodes')
 
 
 if __name__ == '__main__':
