@@ -13,6 +13,12 @@ Notes for anyone with `view.json` files written against a development build:
   focus diagram draws those that touch the focus; results measured with 0.3.0 (the
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
+- **A grammar the language pack cannot download is exit 2, not a traceback.**
+  `tree-sitter-language-pack` fetches each grammar from GitHub on first use; in the
+  benchmark that fetch failed twice (HTTP 500), `draw.py` ended in a traceback, and one
+  run drew its diagram by hand from `grep`. `draw.py` and `extract.py` now exit 2 with
+  what failed and what to do: try again or tell the user, and not draw by hand. Added
+  after the benchmark measured 0.4.1 (`30d8f04`); it changes only that failure.
 - **`draw.py` warns when a focus diagram is drawn from part of a project.** Run on Haiku,
   the benchmark's Draftsman arm extracted one module of Netty in two of six runs
   (`handler/src/main/java`, `codec-socks`) and so missed the focus's relations to the

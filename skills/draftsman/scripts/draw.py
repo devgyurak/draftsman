@@ -23,7 +23,7 @@ warns and gives the command that draws from the repository's root; it never wide
 scope by itself.
 
 Exit codes: 0 drawn; 1 bad input, a view error or invalid Mermaid; 2 a missing
-dependency; 3 not drawn, the scope has more than --max-types types (the report says how
+dependency or a grammar the language pack could not download; 3 not drawn, the scope has more than --max-types types (the report says how
 to narrow it).
 """
 
@@ -129,12 +129,16 @@ def main(argv: list[str] | None = None) -> int:
             print(INSTALL.format(name=e.name, script=Path(__file__).relative_to(HERE.parent)),
                   file=sys.stderr)
             return 2
+        from draftsman.extractor import GrammarUnavailable
         from extract import extract
         unknown = sorted(set(args.lang or ()) - set(LANGUAGES))
         if unknown:
             return fail(f"unknown --lang {', '.join(unknown)}; one of {', '.join(LANGUAGES)}")
         langs = set(args.lang or LANGUAGES)
-        ir = extract(args.path, langs, excludes, args.wrappers)
+        try:
+            ir = extract(args.path, langs, excludes, args.wrappers)
+        except GrammarUnavailable as e:
+            return fail(f"{e}. {e.HELP}", code=2)
         if ir is None:
             return fail(f"no source files for {', '.join(sorted(langs))} under {args.path}")
         ir_path = work / "ir.json"

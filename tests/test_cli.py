@@ -310,3 +310,24 @@ def test_counting_the_sources_outside_stops_at_a_bound(tmp_path):
     assert _sources_outside(tmp_path, inside, {"java"}, []) == (4, True)
     assert _sources_outside(tmp_path, inside, {"java"}, [], files=2) == (2, False)
     assert _sources_outside(tmp_path, inside, {"kotlin"}, []) == (0, True)
+
+
+def test_a_grammar_the_language_pack_cannot_download_is_exit_2(tmp_path, monkeypatch, capsys):
+    # the benchmark saw it: the pack's server answered 500, and a model drew by hand
+    sys.path.insert(0, str(SCRIPTS))
+    import draw
+    import draftsman.extractor as extractor
+
+    def unavailable(name):
+        raise RuntimeError("Download error: Failed to fetch manifest: http status: 500")
+    monkeypatch.setattr(extractor.tslp, "get_language", unavailable)
+    extractor._load.cache_clear()   # grammars loaded by earlier tests are cached
+    _write(tmp_path, {"p/A.java": "package p; class A { }"})
+    assert draw.main([str(tmp_path), "--focus", "A", "--work", str(tmp_path / "w")]) == 2
+    err = capsys.readouterr().err
+    assert "the java grammar could not be loaded (Download error" in err
+    assert "Try again in a minute, or tell the user. Do not draw the diagram by hand" in err
+    import extract
+    assert extract.main([str(tmp_path)]) == 2
+    monkeypatch.undo()
+    extractor._load.cache_clear()

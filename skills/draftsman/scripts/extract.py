@@ -16,7 +16,7 @@ import os
 import sys
 from pathlib import Path
 
-from draftsman.extractor import Extractor
+from draftsman.extractor import Extractor, GrammarUnavailable
 from draftsman.langs import LANGUAGES, spec_for_path
 from draftsman.langs.base import SKIP_DIRS
 from draftsman.model import IR
@@ -65,7 +65,11 @@ def main(argv: list[str] | None = None) -> int:
     if not args.path.exists():
         ap.error(f"{args.path} does not exist")
     langs = set(args.lang or LANGUAGES)
-    ir = extract(args.path, langs, args.exclude, args.wrappers)
+    try:
+        ir = extract(args.path, langs, args.exclude, args.wrappers)
+    except GrammarUnavailable as e:
+        print(f"draftsman: {e}. {e.HELP}", file=sys.stderr)
+        return 2
     if ir is None:
         print(f"no source files for {', '.join(sorted(langs))} under {args.path}",
               file=sys.stderr)

@@ -113,9 +113,21 @@ class RawFile:
     diagnostics: list[Diagnostic] = field(default_factory=list)
 
 
+class GrammarUnavailable(RuntimeError):
+    """The language pack could not provide a grammar: it downloads each on first use."""
+
+    HELP = ("tree-sitter-language-pack downloads each grammar on first use and keeps it in "
+            "its cache, so without network access, or while its server fails, nothing can be "
+            "extracted. Try again in a minute, or tell the user. Do not draw the diagram by "
+            "hand from reading the code: its relations would not come from a parser.")
+
+
 @lru_cache(maxsize=None)
 def _load(spec_name: str, grammar: str) -> tuple[ts.Parser, ts.Query]:
-    language = tslp.get_language(grammar)
+    try:
+        language = tslp.get_language(grammar)
+    except Exception as e:   # the pack's DownloadError and its kin
+        raise GrammarUnavailable(f"the {grammar} grammar could not be loaded ({e})") from e
     parser = ts.Parser(language)
     source = (QUERY_DIR / f"{spec_name}.scm").read_text(encoding="utf-8")
     return parser, ts.Query(language, source)
