@@ -32,7 +32,12 @@ FLAGGED = {'v1': {'E0032', 'E0259', 'E0071', 'E0149', 'E0132', 'E0461', 'E0256',
                                           308, 340, 94, 121, 197, 436, 123, 339)},
            # the labeller's report: rows to look at first, and those whose two levels differ
            'v3': {f'V3-{n:04d}' for n in (74, 226, 411, 365, 285, 442, 425, 235,
-                                          36, 398, 111, 409, 199, 381)}}
+                                          36, 398, 111, 409, 199, 381)},
+           'v3-haiku': {f'V3S-{n:04d}' for n in (
+               272, 461, 7, 423, 541, 350, 325, 249, 233, 253, 74, 501, 458, 464, 456, 454,
+               462, 428, 528, 401, 441, 345, 143, 138, 364,           # to look at first
+               22, 44, 87, 90, 133, 172, 186, 269, 285, 385, 427, 496, 508,
+               516, 476, 344, 474, 165)}}                            # the two levels differ
 _PD = 'common/src/main/java/io/netty/util/internal/PlatformDependent.java:622'
 _SSL = 'microbench/src/main/java/io/netty/microbench/handler/ssl/AbstractSslEngineBenchmark.java:128'
 _ANON = 'RUBRIC "Decided at review": anonymous class as a node, strongest evidence of the pair'
