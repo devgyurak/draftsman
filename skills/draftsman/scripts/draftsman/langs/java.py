@@ -110,7 +110,7 @@ class JavaSpec(LanguageSpec):
     })
     annotation_nodes = frozenset({"marker_annotation", "annotation"})
     type_argument_nodes = frozenset({"type_arguments"})
-    receiver_part_nodes = frozenset({"identifier"})
+    receiver_part_nodes = frozenset({"identifier", "field_access"})
     annotation_value_args = frozenset({"field_access"})   # `Include.NON_NULL`
     builtins = frozenset(_PRIMITIVES | _JAVA_LANG | _JDK_COMMON)
     visibility_keywords = {

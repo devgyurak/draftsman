@@ -123,13 +123,14 @@ class GrammarUnavailable(RuntimeError):
 
 
 @lru_cache(maxsize=None)
-def _load(spec_name: str, grammar: str) -> tuple[ts.Parser, ts.Query]:
+def _load(spec_name: str, grammar: str, extra: tuple[str, ...] = ()) -> tuple[ts.Parser, ts.Query]:
     try:
         language = tslp.get_language(grammar)
     except Exception as e:   # the pack's DownloadError and its kin
         raise GrammarUnavailable(f"the {grammar} grammar could not be loaded ({e})") from e
     parser = ts.Parser(language)
-    source = (QUERY_DIR / f"{spec_name}.scm").read_text(encoding="utf-8")
+    source = "\n".join((QUERY_DIR / f"{name}.scm").read_text(encoding="utf-8")
+                       for name in (spec_name, *extra))
     return parser, ts.Query(language, source)
 
 
@@ -191,7 +192,8 @@ def _root(caps: dict, prefix: str) -> Optional[tuple[str, ts.Node]]:
 class Extractor:
     def __init__(self, spec: LanguageSpec):
         self.spec = spec
-        self.parser, self.query = _load(spec.query or spec.name, spec.grammar)
+        self.parser, self.query = _load(spec.query or spec.name, spec.grammar,
+                                        spec.extra_queries)
         self._package_roots: dict[Path, str] = {}
         self._workspaces: dict[Path, dict[str, list[tuple[str, str]]]] = {}
         self._packages: dict[str, list[tuple[str, str]]] = {}   # of the current root
@@ -704,14 +706,15 @@ class Extractor:
         not_refs = {n.id for n, _ in declared} | unread
         # a receiver is a dotted name, not an expression (`this.x.m()`, `a[0].B.m()`)
         refs = [(p, n) for p, n in refs if n.id not in not_refs and (
-            p != "receiver" or all(c.type in self.spec.receiver_part_nodes for c in self._parts(n)))]
+            p != "receiver" or self._dotted(n))]
         whole = {n.id for _, n in refs}
         for position, node in sorted(refs, key=lambda r: r[1].start_byte):
             if node.parent.id in whole:
                 continue   # `Foo` in `p.Foo`: the whole name is recorded
             owner, in_body, around = up(node.parent)
             a = anchor_of(node.parent)
-            if owner is None or a is None or not in_body:
+            # the name may be the whole body: `X = Foo.BAR` (TypeScript's field initializer)
+            if owner is None or a is None or not (in_body or node.id in regions):
                 continue
             key, via, rm = place(a, node.start_byte)
             parts = self._parts(node)
@@ -719,6 +722,12 @@ class Extractor:
                 ".".join(_text(n, src) for n in parts), position,
                 [(_line(n), _utf16_col(n, src)) for n in parts], via, scope, rm,
                 names.setdefault(key, BodyNames()), list(around)))
+
+    def _dotted(self, node: ts.Node) -> bool:
+        """Whether a receiver is a dotted name: every node of it one of
+        LanguageSpec.receiver_part_nodes (no call in `new Foo(x).m`)."""
+        return node.type in self.spec.receiver_part_nodes and all(
+            self._dotted(c) for c in node.named_children if not c.is_extra)
 
     def _parts(self, node: ts.Node) -> list[ts.Node]:
         """The identifiers of a dotted name, without the annotations, type arguments and

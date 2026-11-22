@@ -101,9 +101,19 @@ class LanguageSpec:
     annotation_name_field: str = "name"
     # Nodes of the type arguments inside a type name (`Outer<T>.Inner`): no part of the name
     type_argument_nodes: frozenset[str] = frozenset()
-    # Nodes a receiver in a body (`@body.ref.receiver`) may be made of: a dotted name, not an
-    # expression (`this.x`, `a[0].B`)
+    # Nodes a receiver in a body (`@body.ref.receiver`) may be made of, the dotted ones
+    # among them too: a dotted name, not an expression (`this.x`, `a[0].B`, `new Foo(x).m`)
     receiver_part_nodes: frozenset[str] = frozenset()
+    # Kinds of type that are no value: in a receiver position the name is whatever value
+    # shares it, and draws nothing (a TypeScript interface beside `const Token = ...`)
+    type_only_kinds: frozenset[str] = frozenset()
+    # Whether a body sees the fields of the types around it by their simple names (Java's
+    # `X.m()` may be a field X); in TypeScript a field is always `this.X`
+    fields_in_scope: bool = True
+    # How a dotted receiver whose head is no type and no variable is read: as a package
+    # (Java's `io.netty.Foo.m()`), or, when False, through what the scope binds the head to
+    # (TypeScript's `ns.Foo.m()` after `import * as ns`)
+    receiver_package_heads: bool = True
 
     # Nodes in an annotation's arguments that name a type (`X.class`, `typeof(X)`,
     # `X::class`; see annotation_arg), and nodes that name a type or a value (`E.V`,
@@ -122,12 +132,18 @@ class LanguageSpec:
 
     visibility_keywords: dict[str, str] = {}
 
+    # Query files added to `query` (queries/<name>.scm): what only this grammar has (TSX)
+    extra_queries: tuple[str, ...] = ()
+
     # Name resolution behaviour
     parent_namespace_lookup: bool = False  # C#, C++: types of enclosing namespaces are visible
     import_suffix_match: bool = False      # Python, TS: match import paths by unique suffix
     # Java, C#, Kotlin, C++: member types of supertypes are in scope by simple name.
     # Not in Python (class bodies are not scopes) or TS (merged namespaces are not inherited)
     inherited_member_types: bool = True
+    # Whether a type's own nested types are in scope inside it by simple name. Not in TS:
+    # the types of a namespace merged with a class are `Foo.Inner` in the class's methods
+    nested_types_in_scope: bool = True
 
     # ------------------------------------------------------------- files
 

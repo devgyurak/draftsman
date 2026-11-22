@@ -460,7 +460,8 @@ class Resolver:
         cur: Optional[RawType] = rtype
         while cur is not None:
             inherited = spec.inherited_member_types and (inherit or cur is not rtype)
-            found = self._member_type(cur, name, sep, inherited, set())
+            found = spec.nested_types_in_scope and self._member_type(cur, name, sep, inherited,
+                                                                     set())
             if found:
                 return self._found(found)
             if spec.base_names_in_scope and cur.name == name and cur.kind != "alias":
@@ -613,7 +614,8 @@ class Resolver:
         (`Util.Helper` in `Util.Helper.run()`, `Util` in `Util.VALUE.trim()`), or None. A
         variable wins over a type, and a type over a package (JLS 6.5.2): a head that may be
         a variable draws nothing, and after a type a field of the name ends it."""
-        sep = LANGUAGES[rtype.language].separator
+        spec = LANGUAGES[rtype.language]
+        sep = spec.separator
         parts = ref.text.split(sep)
         # a type the member declares (a local class) is no package either
         if parts[0] in ref.names.types or self._is_variable(parts[0], rtype, ref):
@@ -621,23 +623,49 @@ class Resolver:
         res = self._in_body(parts[0], rtype, ref, 0)
         if res.status == PROJECT:
             target, n = res.target, 1
-        elif res.status == UNRESOLVED and len(parts) > 1 and parts[0] not in self.index:
-            # a package: the first prefix that is a project type (`io.netty.Foo.X`); a head
-            # that is a type of the default package is none, and only the default package
-            # sees that type, where it is resolved already
+        elif res.status != UNRESOLVED or len(parts) == 1:
+            return None
+        elif spec.receiver_package_heads:
+            if parts[0] in self.index:
+                # a type of the default package is no package head, and only the default
+                # package sees that type, where it is resolved already
+                return None
+            # a package: the first prefix that is a project type (`io.netty.Foo.X`)
             n = next((k for k in range(2, len(parts) + 1)
                       if sep.join(parts[:k]) in self.index), 0)
             if not n:
                 return None
             target = sep.join(parts[:n])
         else:
-            return None
+            # a module or namespace the scope binds the head to (`ns.Foo.m()`): the first
+            # prefix it resolves to a project type
+            if not self._binds(parts[0], rtype, ref):
+                return None
+            found = next(((k, r.target) for k in range(2, len(parts) + 1)
+                          if (r := self._in_body(sep.join(parts[:k]), rtype, ref, 0)).status
+                          == PROJECT), None)
+            if found is None:
+                return None
+            n, target = found
+        if self.index[target].kind in spec.type_only_kinds:
+            return None   # the value of the name is another declaration's
         while n < len(parts) and not self._has_field(self.index[target], parts[n]):
-            nested = self._member_type(self.index[target], parts[n], sep, True, set())
-            if nested is None:
+            nested = self._member_type(self.index[target], parts[n], sep,
+                                       spec.inherited_member_types, set())
+            if nested is None or self.index[nested].kind in spec.type_only_kinds:
                 break
             target, n = nested, n + 1
         return target, n
+
+    def _binds(self, head: str, rtype: RawType, ref: RawBodyRef) -> bool:
+        """Whether ``head`` is a name the file imports or a namespace around ``rtype``."""
+        spec = LANGUAGES[rtype.language]
+        if any(imp.local_name == head for imp in ref.scope.imports if not imp.wildcard):
+            return True
+        chain = self._namespace_chain(rtype.namespace, spec.separator,
+                                      spec.parent_namespace_lookup, ref.scope.namespace)
+        return any((ns + spec.separator + head if ns else head) in self.namespaces
+                   for ns in chain)
 
     def _around(self, rtype: RawType, ref: RawBodyRef, depth: int):
         """For each anonymous or local class around ``ref`` from ``depth`` levels out,
@@ -684,6 +712,8 @@ class Resolver:
         if name in ref.names.variables:
             return True
         spec = LANGUAGES[rtype.language]
+        if not spec.fields_in_scope:
+            return False
         for project, outside in self._around(rtype, ref, 0):
             if any(self._has_field(t, name) for t in project) or \
                     any(spec.inherited_field(o, name) for o in outside):
