@@ -223,3 +223,22 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
     at the maintainer's request (it stays in the history); two of its runs met a failed
     grammar download (HTTP 500), one then drawing by hand, which is why `draw.py` now
     exits 2 there and the image fetches the grammar.
+  - Results (v3-haiku-0.4.1): 63 runs, all exit 0, no timeouts, no grammar download, every
+    answer a Mermaid block, $0.39; the skill fired in all 21 of B's runs and 20 of C's
+    (`T2-netty-ChunkedStream-C-2` did not invoke it). All four Netty runs of B that began
+    by extracting one module got the warning and drew again from the root.
+  - Labels: 430 of the 510 distinct edges carried over; the other 80 were labelled blind
+    by a separate session with the series' brief, nothing in its folder naming the model
+    (RUBRIC.md now names the series a decision came from without it). It read joined
+    names inner name first (`AttributeRange_Range`) as the nested type, renamed, and an
+    edge between two Spring types as undecidable; the reviewer kept both, and RUBRIC.md's
+    "Decided at review" says so.
+  - Human review: 37 rows (26 in full, 11 sampled), all agreed by eye. Not blind: the
+    reviewer knew the model and the version.
+  - On Haiku with 0.4.1, arm B drew no edge without a basis or of the wrong kind, and its
+    recall over T2 is 1.00 out of the focus and into it, as on Opus (v3-haiku: 0.90 and
+    0.94); arms A and C on Haiku recall 0.91 to 0.93 out and 0.87 to 0.93 in. Against arm
+    A on Opus (v3), B on Haiku has the same shares and T2 recall, and at T1 more of
+    spring-petclinic (declared 1.00 against 0.80), for a median cost of $0.006 against
+    $0.108 per T2 run. Two runs per arm and class; B's time leaves out the grammar
+    download that v3's included.
