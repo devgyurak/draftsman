@@ -192,11 +192,12 @@ SCOPE_RULES = {
         # `Receipt.Companion.Parser`: the types of a plain companion are Receipt's
         "kotlin": ("StripeGateway", "dependency", "Parser"),
     },
-    # a name written in a body (`evidence` "body", issue #2); the other languages read no
-    # bodies yet, each a follow-up issue of its own
+    # a name written in a body (issue #2); the other languages read no bodies yet (#5). The
+    # witness's fourth item is the `evidence` it must carry: a signature added later would
+    # make the same pair without the body rule
     "name in a body": {
         **_ALL,
-        "java": ("StripeGateway", "dependency", "Money"),   # `new Receipt.Money(...)` in charge
+        "java": ("StripeGateway", "dependency", "Money", "body"),   # `new Receipt.Money(...)`
     },
     "package re-export by wildcard": {
         **_ALL,
@@ -214,9 +215,11 @@ def test_scope_rules(irs, rule):
     for lang, witness in SCOPE_RULES[rule].items():
         if witness is None:
             continue
-        a, kind, b = witness
+        a, kind, b, *evidence = witness
         expected = (n(lang, a), kind, n(lang, b))
-        if expected not in rels(irs[lang]):
+        found = {(short(r.from_), r.kind, short(r.to)) for r in irs[lang].relations
+                 if r.evidence == evidence[0]} if evidence else rels(irs[lang])
+        if expected not in found:
             missing.append(f"{lang}: {expected}")
     assert not missing, f"{rule}: " + "; ".join(missing)
 
