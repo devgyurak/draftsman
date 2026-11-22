@@ -17,6 +17,11 @@ Flags override the same keys of --view; --hide adds to its `hidden`. Test direct
 nor the view set `hops`, a focus diagram is drawn at the widest hops (the view default
 2, down to 1) that fits --max-types, and the report says what the wider one would draw.
 
+A focus diagram extracted from part of a repository (`handler/src/main/java` of a
+multi-module build) misses the focus's relations to the types elsewhere in it: the report
+warns and gives the command that draws from the repository's root; it never widens the
+scope by itself.
+
 Exit codes: 0 drawn; 1 bad input, a view error or invalid Mermaid; 2 a missing
 dependency; 3 not drawn, the scope has more than --max-types types (the report says how
 to narrow it).
@@ -26,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -33,6 +39,7 @@ from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 
+from draftsman.langs import LANGUAGES
 from draftsman.model import IR, RELATION_KINDS
 from draftsman.render_web import RenderError
 from draftsman.scene import Scene, build_scene, is_body
@@ -53,6 +60,7 @@ In a sandbox without network access, ask for permission to install, or ask the u
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("path", type=Path, help="source directory or file, or an ir.json")
     ap.add_argument("--focus", metavar="TYPE", help="draw this type and its neighbourhood")
@@ -121,7 +129,6 @@ def main(argv: list[str] | None = None) -> int:
             print(INSTALL.format(name=e.name, script=Path(__file__).relative_to(HERE.parent)),
                   file=sys.stderr)
             return 2
-        from draftsman.langs import LANGUAGES
         from extract import extract
         unknown = sorted(set(args.lang or ()) - set(LANGUAGES))
         if unknown:
@@ -152,6 +159,8 @@ def main(argv: list[str] | None = None) -> int:
                 break
 
     report = Report(ir, view, scene, excludes, args.max_types, passed)
+    if scene.focus and not from_ir:
+        report.part_of_repository(args.path, set(args.lang or LANGUAGES), excludes, argv)
     if fmt != "html" and size(scene) > args.max_types:
         report.too_many()
         report.footer(ir_path)
@@ -177,6 +186,30 @@ def main(argv: list[str] | None = None) -> int:
     report.footer(ir_path)
     report.flush()
     return code
+
+
+# what a project's root holds: a repository, a build that may have modules below it
+ROOT_MARKERS = (".git", "pom.xml", "settings.gradle", "settings.gradle.kts", "build.gradle",
+                "build.gradle.kts", "package.json", "pyproject.toml", "setup.py",
+                "CMakeLists.txt", "Directory.Build.props")
+
+
+def repository_root(path: Path) -> Path | None:
+    """The root of the project ``path`` lies in: going up, the last directory of the
+    unbroken run of directories that carry a build or repository file (a module's
+    `pom.xml`, then the parent build's), or the first one with `.git`."""
+    cur = path.resolve()
+    cur = cur if cur.is_dir() else cur.parent
+    found = None
+    for d in (cur, *cur.parents):
+        marked = any((d / m).exists() for m in ROOT_MARKERS) or any(d.glob("*.sln"))
+        if marked:
+            found = d
+            if (d / ".git").exists():
+                break
+        elif found is not None:
+            break
+    return found
 
 
 def size(scene: Scene) -> int:
@@ -208,6 +241,29 @@ class Report:
 
     def line(self, text: str) -> None:
         self.lines.append(text)
+
+    def part_of_repository(self, path: Path, langs: set[str], excludes: list[str],
+                           argv: list[str]) -> None:
+        """Warn when ``path`` is part of a larger project whose other sources were not read:
+        the focus may be related to their types. The scope stays as asked."""
+        from extract import discover
+        root = repository_root(path)
+        inside = path.resolve()
+        if root is None or root == inside:
+            return
+        # the test directories the extraction left out stay out
+        tests = [p for p in excludes if p in TEST_EXCLUDES]
+        others = [f for f, _ in discover(root, langs, tests)
+                  if not f.resolve().is_relative_to(inside)]
+        if not others:
+            return
+        at = next(i for i, a in enumerate(argv) if not a.startswith("-")
+                  and Path(a).resolve() == inside)   # <path> as it was written
+        again = [*argv[:at], str(root), *argv[at + 1:]]
+        self.line(f"warning: extracted {path} only; {len(others)} more source files of "
+                  f"{root} were not read, and the focus's relations to their types are "
+                  "missing. To draw from the whole project:")
+        self.lines.append("  " + shlex.join(["python3", sys.argv[0] or "draw.py", *again]))
 
     def flush(self) -> None:
         print("\n".join(f"draftsman: {l}" if not l.startswith(" ") else l

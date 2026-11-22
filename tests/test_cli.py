@@ -243,3 +243,30 @@ def test_draw_reports_and_narrows_body_relations(tmp_path):
     assert res.returncode == 3
     assert "  --body none: 2 types, without the classes only a body relation brings in" \
         in res.stderr
+
+
+def test_draw_warns_when_a_focus_is_drawn_from_part_of_a_project(tmp_path):
+    # a two-module build: the focus in `a` uses a type of `b`
+    files = {"pom.xml": "<project/>", "a/pom.xml": "<project/>", "b/pom.xml": "<project/>",
+             "a/src/main/java/p/A.java": "package p; import q.B; class A { B b; }",
+             "b/src/main/java/q/B.java": "package q; public class B { }",
+             "a/src/test/java/p/ATest.java": "package p; class ATest { }"}
+    for name, text in files.items():
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text(text)
+    module = tmp_path / "a" / "src" / "main" / "java"
+    res = run("draw.py", module, "--focus", "A", "--work", tmp_path / "w1")
+    assert res.returncode == 0, res.stderr
+    assert (f"warning: extracted {module} only; 1 more source files of {tmp_path} were not "
+            "read") in res.stderr
+    # the command to draw again: the same flags, the project's root as the path
+    again = next(l for l in res.stderr.splitlines() if l.startswith("  python3 "))
+    assert again.endswith(f"draw.py {tmp_path} --focus A --work {tmp_path / 'w1'}")
+    assert "class B" in run(*again.split()[1:]).stdout
+    # the root itself, no focus (a part may be what the user wants), or an ir.json: no warning
+    for args in ([tmp_path, "--focus", "A"], [module], [tmp_path / "w1" / "ir.json", "--focus", "A"]):
+        assert "warning: extracted" not in run("draw.py", *args, "--work", tmp_path / "w2").stderr
+    # the test directories the extraction leaves out are no reason either
+    (tmp_path / "b" / "src" / "main" / "java" / "q" / "B.java").unlink()
+    assert "warning: extracted" not in run("draw.py", module, "--focus", "A",
+                                           "--work", tmp_path / "w3").stderr

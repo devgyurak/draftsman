@@ -11,6 +11,15 @@ Notes for anyone with `view.json` files written against a development build:
   focus diagram draws those that touch the focus; results measured with 0.3.0 (the
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
+- **`draw.py` warns when a focus diagram is drawn from part of a project.** Run on Haiku,
+  the benchmark's Draftsman arm extracted one module of Netty in two of six runs
+  (`handler/src/main/java`, `codec-socks`) and so missed the focus's relations to the
+  other modules' types (recall out of the focus 0.66, 1.00 on Opus). With a focus, when
+  the path lies in a larger project (the run of directories with a `pom.xml`, a
+  `build.gradle`, a `package.json`, ... above it, or `.git`) whose other sources were
+  not read, the report says how many and gives the command that draws from the
+  project's root. It never widens the scope itself: one module may be what the user
+  wants, and without a focus it is more likely to be.
 - **Names in Java method bodies are relations** (#2). A project type a body names, in
   type position (`new Foo()`, a cast, `instanceof`, a local variable's type, `X.class`,
   type arguments, the header and members of a local or anonymous class) or as a receiver
