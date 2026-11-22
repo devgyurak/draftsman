@@ -196,7 +196,8 @@ checked), an SVG and an HTML viewer — on real projects, tests and generated co
 
 Java's relations are the declared ones, then those read from names in method bodies
 (`new Foo()`, `Foo.bar()`), which match what javac resolves at every place on these three
-projects (`bench/javac_oracle`).
+projects (`bench/javac_oracle`; jsoup without its 22 in `org.jsoup.examples`, which the
+benchmark leaves out).
 
 Unresolved references are split by reason: *ambiguous* (a project type shares the name; it is
 listed, not picked), *outside* (only something outside the sources could provide it: a

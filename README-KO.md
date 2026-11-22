@@ -183,7 +183,8 @@ scripts/validate.sh diagram.mmd
 | C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2066 | 9983 | 309 (1 ambiguous, 4 outside, 304 unexplained; 시스템·라이브러리 헤더, POCO의 `#define` 타입) | 121개 파일에 333구간 (`#if` 분기, 멤버 포인터, 명시적 인스턴스화, `typeid`) |
 
 Java의 관계 수는 선언에서 나온 관계와, 그 뒤에 메서드 본문에 적힌 이름(`new Foo()`, `Foo.bar()`)에서 나온
-관계입니다. 본문 관계는 이 세 프로젝트에서 모든 자리가 javac의 해석과 일치합니다(`bench/javac_oracle`).
+관계입니다. 본문 관계는 이 세 프로젝트에서 모든 자리가 javac의 해석과 일치합니다(`bench/javac_oracle`. jsoup은
+벤치마크가 빼는 `org.jsoup.examples`의 22개를 제외).
 
 미해결 참조는 이유별로 나눴습니다. *ambiguous*는 같은 이름의 프로젝트 타입이 있어 후보로만 적고 고르지 않은 것,
 *outside*는 소스 밖에 있는 것(와일드카드·기본 import, 외부 상위 타입의 중첩 타입)으로만 설명되는 것,
