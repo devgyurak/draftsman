@@ -37,7 +37,10 @@ FLAGGED = {'v1': {'E0032', 'E0259', 'E0071', 'E0149', 'E0132', 'E0461', 'E0256',
                272, 461, 7, 423, 541, 350, 325, 249, 233, 253, 74, 501, 458, 464, 456, 454,
                462, 428, 528, 401, 441, 345, 143, 138, 364,           # to look at first
                22, 44, 87, 90, 133, 172, 186, 269, 285, 385, 427, 496, 508,
-               516, 476, 344, 474, 165)}}                            # the two levels differ
+               516, 476, 344, 474, 165)},                            # the two levels differ
+           'v3-haiku-0.4.1': {f'V3S2-{n:04d}' for n in (
+               146, 296, 403, 200, 367, 32, 223, 24, 86, 94, 140, 295, 308, 399, 400, 418, 440,
+               73, 174, 216, 328, 289)}}
 _PD = 'common/src/main/java/io/netty/util/internal/PlatformDependent.java:622'
 _SSL = 'microbench/src/main/java/io/netty/microbench/handler/ssl/AbstractSslEngineBenchmark.java:128'
 _ANON = 'RUBRIC "Decided at review": anonymous class as a node, strongest evidence of the pair'
