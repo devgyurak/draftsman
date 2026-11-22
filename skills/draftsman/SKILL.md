@@ -42,8 +42,8 @@ when you draw again.
 - `--members all|public|none`, `--hide GLOB` (types `'*Dto'`, members `'*#get*'`,
   `'*#toString'`), `--relations extends,implements,association`, `-o FILE` for a file the
   user asked for.
-- Java: focus diagrams also draw classes the focus's bodies name, or whose bodies name
-  it; `--body none` drops them.
+- Java, TypeScript: focus diagrams also draw classes the focus's bodies name, or whose
+  bodies name it; `--body none` drops them.
 - Exit 2: a missing dependency; the message gives the install command
   (`references/setup.md` covers uv, sandboxes and Node). Never fall back to drawing by hand.
 - Exit 3: more than `--max-types` (30) types; the report lists the options, with counts.
@@ -103,7 +103,7 @@ passed with `--view` (flags override its keys):
   `"annotations": false` drops arrows to marker annotations (`@UnstableApi`).
 
 Other keys (`nested`, `direction`, member globs) are in `references/view-schema.md`; read
-it only when you need one of them.
+it only when you need one.
 
 ## Answer
 
@@ -116,4 +116,4 @@ hidden), your notes, and the unresolved references from the report.
   relations) or `--type Type`: detail the diagram does not show.
 - `references/ir-schema.md` (ir.json fields and how each relation is derived),
   `references/lang-notes.md` (per-language behaviour; read only the section for the
-  language at hand), `references/query-protocol.md` (only when adding or fixing a language).
+  language), `references/query-protocol.md` (only when adding or fixing a language).

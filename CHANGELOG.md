@@ -7,6 +7,9 @@ Notes for anyone with `view.json` files written against a development build:
 - **0.3.0**: the entries below on nested types and annotations change the default
   focus diagram and the relations in `ir.json`; results measured with 0.2.0 (the
   benchmark's runs among them) are not comparable with 0.3.0 ones.
+- **After 0.4.1** (not yet versioned): TypeScript's `ir.json` gains the relations read
+  from names in bodies (below); results measured with 0.4.x are not comparable with later
+  ones on what TypeScript bodies relate. Nothing changes for the other languages.
 - **0.4.1**: `draw.py` warns when a focus diagram is drawn from part of a project (below);
   the benchmark's v3 and v3-haiku measured 0.4.0 (`7d2358a`), without the warning.
 - **0.4.0**: Java's `ir.json` gains the relations read from names in method bodies, and a
@@ -58,6 +61,28 @@ Notes for anyone with `view.json` files written against a development build:
   connected types and the viewer's cycles stay on declarations. Netty extracts in about
   4.0 s instead of 2.4 s. The other languages read no bodies yet (#5); Django's and
   TypeORM's `ir.json` are byte for byte the same, the other e2e projects were not run again.
+- **Names in TypeScript method bodies are relations** (#5). As in Java, a project type a
+  body names is a dependency marked `evidence: "body"`: in type position (`: Foo`, `as
+  Foo`, `satisfies Foo`, type arguments) or as a value, where a variable may stand too
+  (`new Foo()`, `Foo.m()`, `Kind.A`, `typeof Foo`, `<Foo />` in TSX, `Foo` as an argument
+  or in `{ Foo }`). The answer key is the TypeScript compiler: `bench/tsc_oracle` records
+  what its TypeChecker resolves at every place, and every name drawn on nest and TypeORM
+  matches it (1432 and 3406 names, 0 mismatches, and no project type it resolved is left
+  undrawn), with a fixture of 54 names checked against it too. TypeScript scopes names
+  unlike Java, and the rules say so (`LanguageSpec` settings, `lang-notes.md`): a variable,
+  function or class the member declares hides a value of the name, never a type; fields
+  hide nothing (a body reaches them through `this`); an interface is no value (`Token`
+  beside `const Token`); a class does not see its merged namespace's types by their simple
+  names; a dotted value goes through an import or a namespace, never a variable. Turned
+  off one at a time, the rules cost no relation on the two repositories; variable hiding
+  keeps out 5 wrong ones in TypeORM (`create(dataSource: dataSource)` under `import type
+  { DataSource as dataSource }`). A value whose name starts lower-case is not read, which
+  saves about a third of the time it adds to extraction. nest gains 1117 body dependencies and
+  TypeORM 2076; their declared relations, types and unresolved names are unchanged, and
+  the e2e focus diagrams grow from 41 to 51 types (`NestContainer`) and from 23 to 32
+  (`EntityManager`). nest extracts in about 1.06 s instead of 0.69 s, TypeORM in 1.07 s
+  instead of 0.55 s. Java's and Python's `ir.json` (petclinic, jsoup, Netty, Django) are
+  byte for byte the same; the C#, Kotlin, C++ and httpx e2e projects were not run again.
 - **One command draws a diagram, and the skill loads in one call** (#1). A run took about
   twice the turns of the same request answered without the plugin (8.1 against 4.0 in the
   benchmark), most of them steps the agent ran one by one. `scripts/draw.py` extracts,

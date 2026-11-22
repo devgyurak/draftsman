@@ -1,7 +1,8 @@
 # Query capture protocol
 
 A language is `queries/<lang>.scm` plus a small `LanguageSpec` in
-`scripts/draftsman/langs/<lang>.py`. The extractor runs the query over each file and
+`scripts/draftsman/langs/<lang>.py` (`LanguageSpec.extra_queries` adds files for what only
+one grammar has: TSX's JSX in `queries/tsx.scm`). The extractor runs the query over each file and
 interprets **matches** (not individual captures) by capture name. Captures starting with
 `_` are free for predicates (`(#eq? @_ctor "constructor")`).
 
@@ -47,12 +48,12 @@ a body is, which names it writes, and what may hide them there.
 
 | capture | match root? | meaning |
 |---|---|---|
-| `@body.region` | – | a body: a method or constructor body, a field initializer, an enum constant's arguments and body. A name is read only below one, so a signature's `List<Foo>` is not |
+| `@body.region` | – | a body: a method or constructor body, a field initializer, an enum constant's arguments and body. A name is read only at or below one (a TypeScript field initializer may be the name itself: `X = Kind.A`), so a signature's `List<Foo>` is not |
 | `@body.init` (+ `@body.init.name`) | – | a body of no listed member, `via` `.name` when given (a record's compact constructor), else its text before `{` plus `{}` (initializer blocks: `static {}`, `{}`). Only a named type's own count |
-| `@body.ref.type` / `@body.ref.receiver` | yes | a name written in a body: `.type` where only a type can stand (every type name: `new Foo()`, a cast, `X.class`, `X.this`), `.receiver` where a variable can too (`Foo.bar()`). A capture whose parent is captured too is part of that name and dropped (`Foo` in `p.Foo`), and so is one captured as `@body.type` (`T` in `<T extends Foo>`). The name is its identifiers joined by `.`, leaving out annotations, comments and `LanguageSpec.type_argument_nodes` (`Outer<T>.Inner` is `Outer.Inner`, and `T` a name of its own); each part keeps its line and column, in UTF-16 code units as javac counts them |
+| `@body.ref.type` / `@body.ref.receiver` | yes | a name written in a body: `.type` where only a type can stand (every type name: `new Foo()`, a cast, `X.class`, `X.this`), `.receiver` where a variable can too (`Foo.bar()`; in TypeScript every value: `new Foo()`, `typeof Foo`, `<Foo />`). A receiver is a dotted name: every node of it one of `LanguageSpec.receiver_part_nodes` (not `this.x`, `new Foo(x).m`). A capture whose parent is captured too is part of that name and dropped (`Foo` in `p.Foo`), and so is one captured as `@body.type` (`T` in `<T extends Foo>`). The name is its identifiers joined by `.`, leaving out annotations, comments and `LanguageSpec.type_argument_nodes` (`Outer<T>.Inner` is `Outer.Inner`, and `T` a name of its own); each part keeps its line and column, in UTF-16 code units as javac counts them |
 | `@body.unread` | – | a type node that is no name of the scope, never recorded: looked up in the type of an expression (Java `o.new Inner()`), or no name at all (`X.super` in `X.super::m`, where `X` is) |
-| `@body.blind` | – | a class body whose inherited members are not known (the anonymous class of Java `o.new Inner() { }`): no name in it is recorded |
-| `@body.var` | – | a variable declared in a member: parameters, locals, lambda, catch, for and pattern variables, resources, fields of local classes |
+| `@body.blind` | – | a class body whose inherited members are not known (the anonymous class of Java `o.new Inner() { }`), or a node whose names are read elsewhere or not at all (TypeScript decorators, TSX closing tags): no name in it is recorded |
+| `@body.var` | – | a variable declared in a member: parameters, locals, lambda, catch, for and pattern variables, resources, fields of local classes, local functions and destructured names (TypeScript) |
 | `@body.type` | – | a type name declared in a member: local classes, type parameters |
 | `@body.class` + `@body.class.super` | – | the body of an anonymous or local class and one supertype it names; the members it inherits are in scope inside it. Not for `o.new Inner() { }`, whose supertype is a member of o's type |
 
@@ -64,6 +65,14 @@ before the name. One in an annotation's arguments is dropped, also inside a body
 the member declares anywhere may hide a type of that name anywhere in it, which drops a
 reference at worst. `@body.class` lists the anonymous and local classes around a
 reference, innermost first.
+
+How a recorded name resolves follows the language's scoping, set in its `LanguageSpec`:
+`fields_in_scope` (whether a field hides a receiver; not in TypeScript, where a field is
+`this.x`), `nested_types_in_scope` (whether a type sees its own nested types by simple
+name), `type_only_kinds` (kinds that are no value, so a receiver of their name draws
+nothing: TypeScript interfaces) and `receiver_package_heads` (whether a dotted receiver
+whose head is no type is a package, as in Java, or goes through what the file imports, as
+TypeScript's `ns.Foo.m()`).
 
 ## Ownership
 

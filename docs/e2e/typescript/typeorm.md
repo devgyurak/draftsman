@@ -8,7 +8,7 @@ An ORM for many databases: entity metadata, query builders, drivers, migrations 
 | Commit | `d5b143dd7e` (2026-11-16) |
 | Extracted | `packages/typeorm/src` (tests are under `packages/typeorm/test`) |
 
-Measured on 2026-11-20 with Draftsman 0.3.0.
+Measured on 2026-11-23 with Draftsman at `ef0eb0d` (0.4.1 and the TypeScript body relations of #5, not yet released).
 
 ## Run
 
@@ -39,16 +39,16 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 496 files, 694 types, relations: association 701, dependency 2863, extends 353, implements 51, 1 unresolved (1 unexplained), 0 diagnostics
+draftsman: 496 files, 694 types, relations: association 701, dependency 2863, extends 353, implements 51, body dependency 2076, 1 unresolved (1 unexplained), 0 diagnostics
 ```
 
-| Files | Types | association | dependency | extends | implements | Unresolved | Diagnostics |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 496 | 694 | 701 | 2863 | 353 | 51 | 1 (1 unexplained) | 0 |
+| Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 496 | 694 | 701 | 2863 | 353 | 51 | 2076 | 1 (1 unexplained) | 0 |
 
 Types by kind: 357 classes, 11 abstract classes, 325 interfaces, 1 enum.
 
-The Mermaid and SVG renders of the view draw 23 types and 68 relations (`EntityManager` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 694 types and 1857 relations and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 32 types and 87 relations (`EntityManager` and its neighbours one hop away, 9 of the types only through the 11 body relations of `EntityManager`), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 694 types and 2543 relations (686 from bodies, shown around the class in focus) and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
@@ -62,3 +62,4 @@ Unexplained: nothing outside the sources could provide it either.
 - Ids are module paths (`entity-manager/EntityManager.EntityManager`), as the sources import each other by relative path.
 - A dense core: `EntityManager`, `DataSource`, `QueryRunner` and `EntityMetadata` reach dozens of types one hop away (`QueryRunner` 71, `EntityMetadata` 69), so the view focuses on `EntityManager`.
 - Node and CLI supertypes outside the sources are external ids (`events.EventEmitter`, `stream.Readable`, yargs' `CommandModule`).
+- Bodies: 2076 dependencies from names in method bodies, between 935 pairs of types; no declaration relates 700 of those pairs in that direction. They match what the TypeScript compiler resolves at every place (`bench/tsc_oracle`); a parameter that hides a type-only import of another name (`create(dataSource: dataSource)` under `import type { DataSource as dataSource }`) draws nothing.

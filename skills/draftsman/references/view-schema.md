@@ -80,8 +80,8 @@ create altogether.
 ## body
 
 A name written in a body (`new Foo()`, `Foo.bar()`, a cast, a local variable's type) is a
-dependency marked `evidence: "body"` (Java only, see `ir-schema.md`). Bodies name far more
-types than declarations do, so they draw less by default:
+dependency marked `evidence: "body"` (Java and TypeScript, see `ir-schema.md`). Bodies name
+far more types than declarations do, so they draw less by default:
 
 - `"focus"` (the default with `focus`): only the body relations that touch the focus (or
   a nested type folded into it), both ways. The class at the other end is drawn, but the

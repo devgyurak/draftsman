@@ -231,8 +231,8 @@ is that type. Aliases of aliases are followed.
   ones: `protected q?: Q`) are fields;
   `#private` names are private. Properties of inline object types are not members, and
   the types inside them produce no relations (`options: { socketClass?: Type<X> }`).
-  Fields without a written type (`reg = new Registry()`) have no type and no relation:
-  initialisers are not evaluated.
+  Fields without a written type (`reg = new Registry()`) have no type and no association:
+  initialisers are not evaluated, though the names they write are body dependencies.
 - Default imports are resolved by the local name. Not handled: `declare module`, global
   scripts without imports/exports, mixins built with functions.
 - Decorators on a class, its members and parameters: the names their arguments pass are
@@ -240,6 +240,21 @@ is that type. Aliases of aliases are followed.
   `@Module({imports: [UsersModule]})`, `@Type(() => Foo)`, `@InjectRepository(User)`,
   `pay.Receipt`; constants (`@Inject(TOKEN)`) draw nothing. A decorator is a function, so
   its own name draws nothing unless it is a project class.
+- Names in bodies (`evidence: "body"`; methods, accessors, field initializers, static
+  blocks, enum members' values): a type name (`: Foo`, `as Foo`, `satisfies Foo`, type
+  arguments, a local class's `implements`) looks the name up among types; any other name
+  is a value (`new Foo()`, `Foo.m()`, `Kind.A`, `x instanceof Foo`, `typeof Foo`, `<Foo />`,
+  `register(Foo)`, `{ Foo }`, a local class's `extends Foo`), which draws nothing when the
+  member declares a variable, function or class of the name anywhere (also after the
+  name, so a few are lost), and nothing when the name is an interface (the value of
+  `Token` is the `const Token` beside `interface Token`). Fields hide nothing, as a body
+  reaches them through `this`; a class does not see the types of a namespace merged with
+  it by their simple names. A dotted value goes through what the file imports or a
+  namespace around it (`ns.Foo.m()`, `Shop.Item`), never through a variable. Checked
+  against the TypeScript compiler (`bench/tsc_oracle`): 0 mismatches on nest and TypeORM.
+  Known limits: a value whose name starts lower-case is not read (a class named so is
+  missed); variables of a namespace block around the class (`namespace N { const Foo =
+  1; ... }`) are not known and hide nothing; a type alias draws nothing in a body.
 
 ## Python
 

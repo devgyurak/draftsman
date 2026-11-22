@@ -92,11 +92,13 @@ How each kind is derived:
     project type and never unresolved. A nested annotation (`@A(@B(X.class))`) is an
     entry of its own.
   Annotations inside bodies (locals, lambdas) are not part of the declaration.
-- **dependency from a body** (Java; `evidence` `"body"`) — a project type named in a
-  method or constructor body, an initializer, a field's initial value or an enum
-  constant's arguments and body: in type position (`new Foo()`, a cast, `instanceof`, a
-  local variable's type, `X.class`, type arguments, a local or anonymous class's header and
-  members) or as a receiver (`Foo.bar()`, `Foo.X`, `Foo::bar`). `via` the member or
+- **dependency from a body** (Java, TypeScript; `evidence` `"body"`) — a project type
+  named in a method or constructor body, an initializer, a field's initial value or an
+  enum constant's arguments and body: in type position (`new Foo()` in Java, a cast,
+  `instanceof`, a local variable's type, `X.class`, type arguments, a local or anonymous
+  class's header and members) or as a receiver, where a variable may stand too
+  (`Foo.bar()`, `Foo.X`, `Foo::bar`; in TypeScript every value: `new Foo()`, `typeof Foo`,
+  `<Foo />`, `Foo` as an argument). `via` the member or
   initializer (`static {}`, `{}`) the body belongs to, `source_location` the line of the
   first such name; one relation per member, never to the type itself. A name that may mean
   something else draws nothing and is never unresolved: a variable of the name in scope
