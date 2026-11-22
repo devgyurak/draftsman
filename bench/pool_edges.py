@@ -21,6 +21,7 @@ labeller fills only the rows left empty.
 import argparse
 import csv
 import random
+import re
 from pathlib import Path
 
 import yaml
@@ -61,8 +62,11 @@ def main() -> None:
     random.Random(tasks['selection']['seed']).shuffle(keys)
     prefix = 'E' if args.round == 'v1' else args.round[0].upper() + args.round[1:] + '-'
     carried = {}
-    # v1, v2, ... before this round; the earliest keeps an edge, which later ones carried
-    for earlier in (f'v{i}' for i in range(1, int(args.round[1:]))):
+    # v1, v2, ... before this round; the earliest keeps an edge, which later ones carried. A
+    # series of its own on round N's configuration with something changed (v3-haiku: another
+    # model) carries over rounds 1 to N: a label depends on the edge and the source only
+    n, series = re.fullmatch(r'v(\d+)(-.+)?', args.round).groups()
+    for earlier in (f'v{i}' for i in range(1, int(n) + (1 if series else 0))):
         for r in csv.DictReader(open(rounds.labels(earlier) / 'final_edges.csv', newline='')):
             key = (r['repo'], r['focus'], r['source_name'], r['kind'], r['target_name'], r['directed'])
             first = carried.setdefault(key, r)

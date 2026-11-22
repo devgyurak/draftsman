@@ -3,9 +3,11 @@
     python3 bench/run.py pilot      [--dry-run]
     python3 bench/run.py measured   [--dry-run]
     python3 bench/run.py measured --version v2 [--arms B]
+    python3 bench/run.py measured --version v3-haiku --model claude-haiku-5-5
 
 --version names a later round of the same set (results/raw/<set>-<version>/), run with
 the same configuration on an image whose plugin changed; --arms runs only those arms.
+--model and --effort replace tasks.yaml's for a series of its own (each run records them).
 
 Each run starts a fresh container from the draftsman-bench image (bench/container),
 copies the pinned repository into the container's own filesystem, and runs
@@ -115,9 +117,13 @@ def main() -> None:
     ap.add_argument('--dry-run', action='store_true', help='print the runs, start nothing')
     ap.add_argument('--version', help='a later round: results go to <set>-<version>')
     ap.add_argument('--arms', help='only these arms, e.g. B')
+    ap.add_argument('--model', help="instead of tasks.yaml's model, for a series of its own")
+    ap.add_argument('--effort', help="instead of tasks.yaml's effort")
     args = ap.parse_args()
 
     tasks = yaml.safe_load((BENCH / 'tasks.yaml').read_text())
+    tasks['model'] = args.model or tasks['model']
+    tasks['effort'] = args.effort or tasks['effort']
     focus = yaml.safe_load((BENCH / 'focus.yaml').read_text())
     runs = [r for r in matrix(tasks, focus, args.set) if not args.arms or r['arm'] in args.arms]
     if args.dry_run:

@@ -186,3 +186,12 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
     review" now says so.
   - Human review: 29 rows (14 in full, 15 sampled), all agreed by eye. Not blind: the
     reviewer knew what 0.4.0 changed.
+- 2026-11-23, a series of its own on the third round's configuration (v3-haiku): the same
+  image (Draftsman 0.4.0, `7d2358a`), 63 runs, prompts, focus classes and rubric, with
+  the model `claude-haiku-5-5` at effort `medium` instead of `claude-opus-5-5` at `high`
+  (`run.py --model --effort`, recorded per run). It asks whether a weaker model draws
+  more edges without a basis or misses more relations, arm by arm, and whether Haiku with
+  Draftsman matches Opus without a plugin for less. It is not a fourth round: compare it
+  with v3, not in line with v1 to v3. Arm C is not Haiku alone: its skill explores through
+  a subagent that night-market pins to Sonnet. `pool_edges.py` carries over the labels of
+  rounds 1 to 3 into it, a label depending only on the edge and the source.
