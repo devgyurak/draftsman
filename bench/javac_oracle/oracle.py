@@ -3,7 +3,8 @@
 A body relation is drawn from a name written in a body, so citing its line proves
 nothing: the line always names the target. Whether `Foo` is the Foo it was resolved to
 is what javac answers. TypeUses.java records every name javac resolves in a body; this
-script runs it and reads its output.
+script runs it and reads its output, in the format bench/answer_key.py gives, which also
+holds what the answer keys of the other languages share.
 
     uv run bench/javac_oracle/oracle.py selftest
     uv run bench/javac_oracle/oracle.py run REPO --checkout DIR -o OUT.jsonl
@@ -32,7 +33,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -45,6 +45,7 @@ import yaml
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE.parent))
+import answer_key  # noqa: E402
 from select_focus import excluded  # noqa: E402
 
 TASKS = HERE.parent / "tasks.yaml"
@@ -125,69 +126,16 @@ def oracle(root: Path, files: list[Path], options: list[str], out: Path,
 
 # ------------------------------------------------------------------ selftest
 
-_MARKER = re.compile(r"//>(.*)$")
-
-
 def expected(root: Path) -> dict[tuple[str, int, int], tuple[str, str]]:
     """(file, line, col) -> (answer, position) for every token a marker lists."""
-    out = {}
-    for path in sorted(root.rglob("*.java")):
-        rel = str(path.relative_to(root))
-        for no, text in enumerate(path.read_text().splitlines(), 1):
-            m = _MARKER.search(text)
-            if not m:
-                continue
-            code = text[:m.start()]
-            seen: Counter = Counter()
-            for item in m.group(1).split():
-                name, _, rest = item.partition("=")
-                answer, _, position = rest.partition("/")
-                hits = [h.start() for h in re.finditer(rf"\b{re.escape(name)}\b", code)]
-                if seen[name] >= len(hits):
-                    raise SystemExit(f"{rel}:{no}: the marker lists more {name} than the line has")
-                col = hits[seen[name]]
-                seen[name] += 1
-                out[(rel, no, col)] = (answer, {"t": "type", "r": "receiver"}.get(position, ""))
-            for name, n in seen.items():
-                if n != len(re.findall(rf"\b{re.escape(name)}\b", code)):
-                    raise SystemExit(f"{rel}:{no}: the marker lists {n} of the {name} on the line")
-    return out
-
-
-def answer(rec: dict) -> str:
-    return rec["target"] if rec["kind"] == "type" else rec["kind"]
+    return answer_key.expected(root, [".java"])
 
 
 def selftest(_args) -> int:
     with tempfile.TemporaryDirectory() as tmp:
         recs = oracle(FIXTURE, sorted(FIXTURE.rglob("*.java")), ["--release", "21"],
                       Path(tmp, "fixture.jsonl"))
-    want = expected(FIXTURE)
-    uses = {(r["file"], r["line"], r["col"]): r for r in recs if "use" in r}
-    problems = [f"compile error: {r['file']}:{r['line']}: {r['diagnostic']}"
-                for r in recs if "diagnostic" in r]
-    for key, (ans, position) in sorted(want.items()):
-        where = f"{key[0]}:{key[1]}:{key[2] + 1}"
-        got = uses.get(key)
-        if ans == "-":
-            if got is not None:
-                problems.append(f"{where}: expected nothing, got {answer(got)}/{got['pos']}")
-        elif got is None:
-            problems.append(f"{where}: expected {ans}/{position}, got nothing")
-        elif (answer(got), got["pos"]) != (ans, position):
-            problems.append(f"{where}: expected {ans}/{position}, got {answer(got)}/{got['pos']}")
-    # what the oracle reports that no marker expects: only names outside the sources
-    # (String, Runnable) may go unlisted
-    for key, rec in sorted(uses.items()):
-        if key not in want and (rec["kind"] != "type" or rec["project"]):
-            problems.append(f"{key[0]}:{key[1]}:{key[2] + 1}: unexpected "
-                            f"{rec['use']}={answer(rec)}/{rec['pos']}")
-    for p in problems:
-        print(p)
-    listed = sum(1 for a, _ in want.values() if a != "-")
-    print(f"selftest: {listed} names, {len(want) - listed} non-names, "
-          f"{len(problems)} problems")
-    return 1 if problems else 0
+    return answer_key.selftest(recs, expected(FIXTURE))
 
 
 # ------------------------------------------------------------------ run
@@ -277,7 +225,7 @@ def run(args) -> int:
 # ------------------------------------------------------------------ scope
 
 def scope(args) -> int:
-    recs = [json.loads(line) for line in args.oracle.read_text().splitlines()]
+    recs = answer_key.read(args.oracle)
     # Java only: Netty's ir.json also holds C structs (io_uring_cqe)
     ir = {t["id"]: t["location"]["file"] for t in json.loads(args.ir.read_text())["types"]
           if t["language"] == "java"}
@@ -286,21 +234,7 @@ def scope(args) -> int:
 
 def in_scope(repo: str, recs: list[dict], ir: dict[str, str]) -> int:
     """1 unless the oracle saw the Java types of ``ir`` (id -> file), in the same files."""
-    unseen = REPOS[repo].get("unseen", {})
-    seen = {r["declared"]: r["file"] for r in recs if "declared" in r}
-    problems = [f"in ir.json only: {t} ({ir[t]})" for t in sorted(ir.keys() - seen.keys())
-                if t not in unseen]
-    problems += [f"in the oracle only: {t} ({seen[t]})" for t in sorted(seen.keys() - ir.keys())]
-    problems += [f"{t}: ir.json declares it in {ir[t]}, the oracle in {seen[t]}"
-                 for t in sorted(ir.keys() & seen.keys()) if ir[t] != seen[t]]
-    problems += [f"listed as unseen but seen: {t}" for t in sorted(unseen) if t in seen]
-    for p in problems:
-        print(p)
-    for t, why in sorted(unseen.items()):
-        print(f"known: {t}: {why}")
-    print(f"scope: {len(ir)} Java types in ir.json, {len(seen)} in the oracle, "
-          f"{len(problems)} problems")
-    return 1 if problems else 0
+    return answer_key.in_scope(recs, ir, REPOS[repo].get("unseen", {}))
 
 
 # ------------------------------------------------------------------ compare
@@ -323,55 +257,15 @@ def compare(args) -> int:
     builder = _Builder(str(root), [extractor.extract(f, rel, root) for f, rel in files],
                        Wrappers.load())
     ir = builder.build()
-    recs = [json.loads(line) for line in args.oracle.read_text().splitlines()]
+    recs = answer_key.read(args.oracle)
     if in_scope(args.repo, recs, {t.id: t.location.file for t in ir.types}):
         return 1
 
     # javac has the stubs as class files: nothing in them is recorded
     stubs = [d.relative_to(root).as_posix() + "/" for g in conf.get("stubs", ())
              for d in checkout.glob(g)]
-    broken = {r["file"] for r in recs if "diagnostic" in r}
-    uses = {(r["file"], r["line"], r["col"]): r for r in recs if "use" in r}
     drawn = [u for u in builder.body_uses if not any(u[0].startswith(d) for d in stubs)]
-    problems: Counter = Counter()
-    shown: list[str] = []
-    for file, line, col, src, dst in drawn:
-        r = uses.get((file, line, col))
-        if r is None:
-            why = "javac resolved no name there"
-        elif r["kind"] != "type":
-            why = f"javac: {r['kind']}"
-        elif r["target"] != dst:
-            why = f"javac: {r['target']}"
-        elif r["from"] != src:
-            why = f"javac draws it from {r['from']}"
-        else:
-            continue
-        where = "in a file with compile errors" if file in broken else "mismatch"
-        problems[where] += 1
-        shown.append(f"  {where}: {file}:{line}:{col + 1} {src} -> {dst}; {why}")
-
-    def drawable(r):   # what a body relation could be drawn from, as `measure` counts it
-        return (r["kind"] == "type" and r["project"] and r["maximal"]
-                and r["from"] != r["target"])
-
-    at = {(f, line, col) for f, line, col, _, _ in drawn}
-    missed = Counter(r["pos"] for k, r in uses.items() if drawable(r) and k not in at)
-    pairs = {(s_, d) for *_, s_, d in drawn}
-    want = {(r["from"], r["target"]) for r in uses.values() if drawable(r)}
-    print(f"compare: {len(drawn)} names drawn as body relations ({len(pairs)} pairs); "
-          + (", ".join(f"{k} {v}" for k, v in sorted(problems.items())) or "0 mismatches"))
-    print(f"  javac's project types not drawn: "
-          + ", ".join(f"{k} position {v}" for k, v in sorted(missed.items()))
-          + f"; pairs javac has that are not drawn: {len(want - pairs)}")
-    for line in shown[:None if args.verbose else 20]:
-        print(line)
-    if args.verbose:
-        for k, r in sorted(uses.items()):
-            if drawable(r) and k not in at and r["pos"] == "type":
-                print(f"  not drawn: {k[0]}:{k[1]}:{k[2] + 1} {r['use']} = {r['target']} "
-                      f"in {r['from']}")
-    return 1 if problems["mismatch"] else 0
+    return answer_key.compare(drawn, recs, args.verbose, key="javac")
 
 
 # ------------------------------------------------------------------ jdk
@@ -388,7 +282,7 @@ def jdk_table(_args) -> int:
 # ------------------------------------------------------------------ measure
 
 def measure(args) -> int:
-    recs = [json.loads(line) for line in args.oracle.read_text().splitlines()]
+    recs = answer_key.read(args.oracle)
     uses = [r for r in recs if "use" in r]
     project_names = {d["declared"].rsplit(".", 1)[-1] for d in recs if "declared" in d}
     declared: set = set()   # pairs ir.json already relates, either way round
@@ -398,8 +292,7 @@ def measure(args) -> int:
     print(f"compile errors: {sum(1 for r in recs if 'diagnostic' in r)}; names javac could "
           f"not resolve: {sum(1 for r in uses if r['kind'] == 'error')}")
 
-    def project_type(r):   # a name a body relation could be drawn from
-        return r["kind"] == "type" and r["project"] and r["maximal"] and r["from"] != r["target"]
+    project_type = answer_key.drawable
 
     def shadow(r):         # a variable that bears a project type's name
         return r["kind"] == "var" and r["use"] in project_names
