@@ -8,7 +8,7 @@ An HTML parser: a deep node and evaluator hierarchy with many nested types.
 | Commit | `d90d57521d` (2026-11-04) |
 | Extracted | `src/main` (language detected) |
 
-Measured on 2026-11-20 with Draftsman 0.3.0.
+Measured on 2026-11-23 with Draftsman 0.4.0.
 
 ## Run
 
@@ -39,25 +39,24 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 105 files, 230 types, relations: association 147, dependency 1014, extends 118, implements 31, 2 unresolved (2 outside the sources), 0 diagnostics
+draftsman: 105 files, 230 types, relations: association 147, dependency 1014, extends 118, implements 31, body dependency 1724, 0 unresolved, 0 diagnostics
 ```
 
-| Files | Types | association | dependency | extends | implements | Unresolved | Diagnostics |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 105 | 230 | 147 | 1014 | 118 | 31 | 2 (2 outside) | 0 |
+| Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 105 | 230 | 147 | 1014 | 118 | 31 | 1724 | 0 | 0 |
 
 Types by kind: 187 classes, 17 abstract classes, 13 interfaces, 13 enums.
 
-The Mermaid and SVG renders of the view draw 39 boxes and 182 relations (`Element` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 230 types, as 96 boxes with 134 nested types folded into their outer types, and 349 relations and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 52 boxes and 233 relations (`Element` and its neighbours one hop away, 13 of the boxes only through the 21 body relations of `Element`), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 230 types, as 96 boxes with 134 nested types folded into their outer types, and 667 relations (318 from bodies, shown around the class in focus) and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
-Both are outside the sources.
-
-- `Entry` in `org.jsoup.nodes.Attributes.Dataset` and in its `DatasetIterator`: `Map.Entry`, written by its simple name and inherited from `java.util.AbstractMap`, which is not in the sources. The hint says so (*may be a nested type inherited from java.util.AbstractMap, ...*). Draftsman does not guess members of external types.
+None. The two `Entry` of 0.3.0 (in `Attributes.Dataset` and its `DatasetIterator`) are `java.util.Map.Entry`, inherited from `AbstractMap`: the JDK table (`langs/java_jdk.json`) says so.
 
 ## What it covers
 
 - 134 nested types (`Outer.Inner` ids), the largest share of the measured projects.
 - The most connected type is `Evaluator` (37 non-dependency relations): many small nested subclasses, which is the case focus and hops are for.
 - Supertypes from `java.lang` and `java.io` (`Cloneable`, `Iterable`, `Reader`, ...) are qualified external ids.
+- Bodies: 1724 dependencies from names in method bodies, between 795 pairs of types; no declaration relates 523 of those pairs in that direction. Outside `org.jsoup.examples` they match what javac resolves at every place (`bench/javac_oracle`).

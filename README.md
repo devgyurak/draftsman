@@ -27,8 +27,8 @@ number. Draftsman is a skill that splits the work the same way: a parser measure
 the agent only decides what to show, and a renderer draws it.
 
 - **Facts from a parser** — classes, members, inheritance, field associations with
-  multiplicity, and dependencies from signatures and annotations, each with a source
-  location.
+  multiplicity, and dependencies from signatures, annotations and (Java) the type names
+  method bodies write, each with a source location.
 - **Edited, not invented** — the agent can hide, group and annotate. A relation the parser
   did not find can only be added as an *inferred* edge with a rationale, drawn dotted.
 - **Readable at any size** — focus on one class and its neighbours *N* hops away; hide
@@ -179,9 +179,9 @@ checked), an SVG and an HTML viewer — on real projects, tests and generated co
 
 | Language | Project | Files | Types | Relations | Unresolved | Parse diagnostics |
 |---|---|---:|---:|---:|---:|---:|
-| Java | [spring-petclinic](docs/e2e/java/spring-petclinic.md) | 30 | 25 | 74 | 0 | 0 |
-| Java | [jsoup](docs/e2e/java/jsoup.md) | 105 | 230 | 1310 | 2 (2 outside) | 0 |
-| Java | [Netty](docs/e2e/java/netty.md) | 2076 | 2752 | 17812 | 6 (5 outside, 1 unexplained) | 0 |
+| Java | [spring-petclinic](docs/e2e/java/spring-petclinic.md) | 30 | 25 | 74 + 27 body | 0 | 0 |
+| Java | [jsoup](docs/e2e/java/jsoup.md) | 105 | 230 | 1310 + 1724 body | 0 | 0 |
+| Java | [Netty](docs/e2e/java/netty.md) | 2076 | 2752 | 17812 + 13818 body | 3 (2 outside, 1 unexplained) | 0 |
 | C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 366 | 199 (1 ambiguous, 198 outside) | 0 |
 | C# | [eShop](docs/e2e/csharp/eshop.md) `src/` | 497 | 506 | 959 | 526 (7 ambiguous, 515 outside, 4 unexplained) | 0 |
 | C# | [Serilog](docs/e2e/csharp/serilog.md) `src/Serilog` | 113 | 119 | 566 | 23 (23 outside) | 0 |
@@ -194,6 +194,10 @@ checked), an SVG and an HTML viewer — on real projects, tests and generated co
 | C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 | 2 (2 unexplained) | 9 spans in 8 files (5 in function bodies; `extern "C"`, `__has_include`, a gMock macro, a pointer-to-member field) |
 | C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2066 | 9983 | 309 (1 ambiguous, 4 outside, 304 unexplained; system and library headers, POCO's `#define` types) | 333 spans in 121 files (`#if` branches, pointers to members, explicit instantiations, `typeid`) |
 
+Java's relations are the declared ones, then those read from names in method bodies
+(`new Foo()`, `Foo.bar()`), which match what javac resolves at every place on these three
+projects (`bench/javac_oracle`).
+
 Unresolved references are split by reason: *ambiguous* (a project type shares the name; it is
 listed, not picked), *outside* (only something outside the sources could provide it: a
 wildcard or default import, a nested type of an external supertype), *unexplained* (neither).
@@ -204,8 +208,11 @@ the exact commands, and what every unresolved name and diagnostic is.
 
 - **It doesn't guess relations.** Anything not in `ir.json` is rejected unless it is an
   inferred edge between known or unresolved names — and those are drawn dotted.
-- **It doesn't read method bodies.** Relations come from supertype clauses, field types,
-  signatures and annotations. It is not a call graph or a sequence diagram tool.
+- **It reads only the type names in method bodies, and only in Java.** `new Foo()`,
+  `Foo.bar()`, casts and local variable types become dependencies marked as read from a
+  body; what a call on a value reaches (`order.total()`) does not, and the other languages'
+  bodies are not read yet ([#5](https://github.com/devgyurak/draftsman/issues/5)). It is
+  not a call graph or a sequence diagram tool.
 - **It doesn't tell composition from aggregation** — syntax cannot — except C++ ownership
   (values and `unique_ptr` versus pointers, references and `shared_ptr`).
 - **It doesn't run or upload your code.** Everything runs locally; the only network use is

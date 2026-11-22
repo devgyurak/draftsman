@@ -25,7 +25,7 @@
 **제도사(draftsman)**는 측량된 수치를 받아, 숫자 하나 바꾸지 않고 도면으로 옮깁니다. Draftsman은 일을 그렇게
 나누는 스킬입니다. 파서가 코드를 재고, 에이전트는 무엇을 보여줄지만 정하며, 렌더러가 그립니다.
 
-- **파서가 잰 사실** — 클래스, 멤버, 상속, 다중성이 붙은 필드 연관, 시그니처와 어노테이션에서 나온 의존. 모두 소스 위치가 붙습니다.
+- **파서가 잰 사실** — 클래스, 멤버, 상속, 다중성이 붙은 필드 연관, 시그니처와 어노테이션, (Java는) 메서드 본문에 적힌 타입 이름에서 나온 의존. 모두 소스 위치가 붙습니다.
 - **편집할 뿐 지어내지 않음** — 에이전트는 숨기고, 묶고, 해설을 달 수 있습니다. 파서가 찾지 못한 관계는 근거를 단
   *추정* 엣지로만 넣을 수 있고, 점선으로 그려집니다.
 - **어떤 크기에서도 읽히는 도면** — 한 클래스와 그 주변 *N*홉에 초점을 맞추고, getter·DTO·프레임워크 잡음은 패턴으로
@@ -167,9 +167,9 @@ scripts/validate.sh diagram.mmd
 
 | 언어 | 프로젝트 | 파일 | 타입 | 관계 | 미해결 | 파싱 진단 |
 |---|---|---:|---:|---:|---:|---:|
-| Java | [spring-petclinic](docs/e2e/java/spring-petclinic.md) | 30 | 25 | 74 | 0 | 0 |
-| Java | [jsoup](docs/e2e/java/jsoup.md) | 105 | 230 | 1310 | 2 (2 outside) | 0 |
-| Java | [Netty](docs/e2e/java/netty.md) | 2076 | 2752 | 17812 | 6 (5 outside, 1 unexplained) | 0 |
+| Java | [spring-petclinic](docs/e2e/java/spring-petclinic.md) | 30 | 25 | 74 + 27 body | 0 | 0 |
+| Java | [jsoup](docs/e2e/java/jsoup.md) | 105 | 230 | 1310 + 1724 body | 0 | 0 |
+| Java | [Netty](docs/e2e/java/netty.md) | 2076 | 2752 | 17812 + 13818 body | 3 (2 outside, 1 unexplained) | 0 |
 | C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 366 | 199 (1 ambiguous, 198 outside) | 0 |
 | C# | [eShop](docs/e2e/csharp/eshop.md) `src/` | 497 | 506 | 959 | 526 (7 ambiguous, 515 outside, 4 unexplained) | 0 |
 | C# | [Serilog](docs/e2e/csharp/serilog.md) `src/Serilog` | 113 | 119 | 566 | 23 (23 outside) | 0 |
@@ -182,6 +182,9 @@ scripts/validate.sh diagram.mmd
 | C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 | 2 (2 unexplained) | 8개 파일에 9구간 (5구간은 함수 본문; `extern "C"`, `__has_include`, gMock 매크로, 멤버 함수 포인터 필드 하나) |
 | C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2066 | 9983 | 309 (1 ambiguous, 4 outside, 304 unexplained; 시스템·라이브러리 헤더, POCO의 `#define` 타입) | 121개 파일에 333구간 (`#if` 분기, 멤버 포인터, 명시적 인스턴스화, `typeid`) |
 
+Java의 관계 수는 선언에서 나온 관계와, 그 뒤에 메서드 본문에 적힌 이름(`new Foo()`, `Foo.bar()`)에서 나온
+관계입니다. 본문 관계는 이 세 프로젝트에서 모든 자리가 javac의 해석과 일치합니다(`bench/javac_oracle`).
+
 미해결 참조는 이유별로 나눴습니다. *ambiguous*는 같은 이름의 프로젝트 타입이 있어 후보로만 적고 고르지 않은 것,
 *outside*는 소스 밖에 있는 것(와일드카드·기본 import, 외부 상위 타입의 중첩 타입)으로만 설명되는 것,
 *unexplained*는 둘 다 아닌 것입니다. 프로젝트마다 [`docs/e2e/`](docs/e2e/README.md) 아래에 고정한 커밋, 실행
@@ -191,8 +194,9 @@ scripts/validate.sh diagram.mmd
 
 - **관계를 추측하지 않습니다.** `ir.json`에 없는 것은 거부합니다. 예외는 알려진 이름이나 미해결 이름 사이의 추정
   엣지뿐이고, 그것도 점선으로 그립니다.
-- **메서드 본문을 읽지 않습니다.** 관계는 상위 타입 선언, 필드 타입, 시그니처, 어노테이션에서만 나옵니다. 호출 그래프나 시퀀스
-  다이어그램 도구가 아닙니다.
+- **메서드 본문은 타입 이름만, Java에서만 읽습니다.** `new Foo()`, `Foo.bar()`, 캐스트, 지역 변수 타입은 본문에서
+  읽은 의존으로 표시됩니다. 값에 대한 호출이 닿는 곳(`order.total()`)은 읽지 않고, 다른 언어의 본문은 아직 읽지
+  않습니다([#5](https://github.com/devgyurak/draftsman/issues/5)). 호출 그래프나 시퀀스 다이어그램 도구가 아닙니다.
 - **컴포지션과 집합을 구분하지 않습니다** — 문법으로는 알 수 없습니다. 예외는 C++ 소유권입니다(값과
   `unique_ptr` 대 포인터·참조·`shared_ptr`).
 - **코드를 실행하거나 밖으로 보내지 않습니다.** 모든 작업은 로컬에서 돌고, 네트워크는 위 의존성을 설치할 때(그리고

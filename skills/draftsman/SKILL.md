@@ -42,6 +42,8 @@ when you draw again.
 - `--members all|public|none`, `--hide GLOB` (types `'*Dto'`, members `'*#get*'`,
   `'*#toString'`), `--relations extends,implements,association`, `-o FILE` for a file the
   user asked for.
+- Java: focus diagrams also draw classes the focus's bodies name, or whose bodies name
+  it; `--body none` drops them.
 - Exit 2: a missing dependency; the message gives the install command
   (`references/setup.md` covers uv, sandboxes and Node). Never fall back to drawing by hand.
 - Exit 3: more than `--max-types` (30) types; the report lists the options, with counts.
@@ -63,8 +65,8 @@ check it.
 - "Directly related" / "its neighbours" means `--hops 1`. When the user asked for that
   scope and exit 3 says it is larger than 30, raise `--max-types` to the count it gives
   (within any limit the user set, e.g. "at most 80 classes") rather than narrowing:
-  `--relations` without `dependency` drops the classes related only by use, which the
-  user asked for. Narrow only when the user did not ask for a specific scope.
+  `--relations` without `dependency` or `--body none` drops classes related only by use,
+  which the user asked for. Narrow only if the user did not ask for a specific scope.
 - The report's *one more hop adds* line shows what lies just outside; if the user's
   question needs some of it, draw again with other flags.
 - A focus diagram draws nested types inside their outer type (`Connection.Request` is part
@@ -112,7 +114,6 @@ hidden), your notes, and the unresolved references from the report.
 
 - `scripts/summary.py <ir.json> --focus Type` (overview, then the type's members and
   relations) or `--type Type`: detail the diagram does not show.
-- `scripts/extract.py`, `render.py`, `validate.sh`: the steps `draw.py` runs.
 - `references/ir-schema.md` (ir.json fields and how each relation is derived),
   `references/lang-notes.md` (per-language behaviour; read only the section for the
   language at hand), `references/query-protocol.md` (only when adding or fixing a language).

@@ -7,6 +7,38 @@ Notes for anyone with `view.json` files written against a development build:
 - **0.3.0**: the entries below on nested types and annotations change the default
   focus diagram and the relations in `ir.json`; results measured with 0.2.0 (the
   benchmark's runs among them) are not comparable with 0.3.0 ones.
+- **0.4.0**: Java's `ir.json` gains the relations read from names in method bodies, and a
+  focus diagram draws those that touch the focus; results measured with 0.3.0 (the
+  benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
+  relate.
+- **Names in Java method bodies are relations** (#2). A project type a body names, in
+  type position (`new Foo()`, a cast, `instanceof`, a local variable's type, `X.class`,
+  type arguments, the header and members of a local or anonymous class) or as a receiver
+  (`Foo.bar()`, `Foo.X`, `Foo::bar`), is a dependency marked `evidence: "body"`, `via` the
+  member. Citing the line proves nothing for such a relation, since the line always names
+  the target, so javac is the answer key: `bench/javac_oracle` records what javac resolves
+  at every place, and every name drawn on spring-petclinic, jsoup and Netty matches it (37,
+  2524 and 21324 names, 0 mismatches; Netty's io_uring classes compile at their own
+  release for that). A hand-written fixture of 126 names, checked against javac too, pins
+  the forms these projects lack (records, `o.new Inner()`, `java.*` wildcard imports,
+  shadowing fields). A name that may mean something else draws nothing and is never
+  unresolved: a variable of the name for a receiver (a local, a field of any class around
+  it, inherited ones too, a static import), a type the member declares, a nested type an
+  outside supertype passes on, a name two wildcard imports provide. What JDK supertypes
+  pass on comes from a table of the JDK 21 types (`langs/java_jdk.json`, written by
+  `oracle.py jdk`); supertypes outside the JDK are not known and hide nothing, the
+  assumption declarations already made. The table resolves declarations too: `Entry` in a
+  `HashMap` subclass is `java.util.Map.Entry` (jsoup 2 → 0 unresolved, Netty 6 → 3);
+  declared relations are otherwise unchanged. Drawing: the view's `body` (`draw.py --body`)
+  is `"focus"` with a focus and in the viewer, `"none"` otherwise; the class at the other
+  end of a focus's body relation is drawn but leads nowhere, a signature's or annotation's
+  arrow wins over a body's, and body arrows are dotted more finely (`body` in Mermaid). The
+  e2e focus diagrams: petclinic's `Owner` unchanged, jsoup's `Element` 39 → 52 types,
+  Netty's `DefaultChannelPipeline` 22 → 37, which can take a diagram over `--max-types`
+  (`draw.py` then offers `--body none`). `summary.py` counts them apart, and the most
+  connected types and the viewer's cycles stay on declarations. Netty extracts in about
+  4.0 s instead of 2.4 s. The other languages read no bodies yet (#5); Django's and
+  TypeORM's `ir.json` are byte for byte the same, the other e2e projects were not run again.
 - **One command draws a diagram, and the skill loads in one call** (#1). A run took about
   twice the turns of the same request answered without the plugin (8.1 against 4.0 in the
   benchmark), most of them steps the agent ran one by one. `scripts/draw.py` extracts,

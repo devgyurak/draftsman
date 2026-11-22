@@ -8,9 +8,9 @@ project.
 
 | Language | Project | Commit | Files | Types | Relations | Unresolved | Diagnostics |
 |---|---|---|---:|---:|---:|---:|---:|
-| Java | [spring-petclinic](java/spring-petclinic.md) | `500158f732` (2026-09-29) | 30 | 25 | 74 | 0 | 0 |
-| Java | [jsoup](java/jsoup.md) | `d90d57521d` (2026-11-04) | 105 | 230 | 1310 | 2 (2 outside) | 0 |
-| Java | [Netty](java/netty.md) | `e3cab70052` (2026-11-16) | 2076 | 2752 | 17812 | 6 (5 outside, 1 unexplained) | 0 |
+| Java | [spring-petclinic](java/spring-petclinic.md) | `500158f732` (2026-09-29) | 30 | 25 | 74 + 27 body | 0 | 0 |
+| Java | [jsoup](java/jsoup.md) | `d90d57521d` (2026-11-04) | 105 | 230 | 1310 + 1724 body | 0 | 0 |
+| Java | [Netty](java/netty.md) | `e3cab70052` (2026-11-16) | 2076 | 2752 | 17812 + 13818 body | 3 (2 outside, 1 unexplained) | 0 |
 | C# | [eShopOnWeb](csharp/eshoponweb.md) | `4da8212117` (2025-01-13) | 209 | 208 | 366 | 199 (1 ambiguous, 198 outside) | 0 |
 | C# | [eShop](csharp/eshop.md) | `5e526931f7` (2026-11-16) | 497 | 506 | 959 | 526 (7 ambiguous, 515 outside, 4 unexplained) | 0 |
 | C# | [Serilog](csharp/serilog.md) | `43105b3509` (2026-10-24) | 113 | 119 | 566 | 23 (23 outside) | 0 |
@@ -25,7 +25,9 @@ project.
 
 Unresolved references are split by reason as `extract.py` prints them: ambiguous, outside
 (the sources), unexplained; see [`ir-schema.md`](../../skills/draftsman/references/ir-schema.md#unresolved).
-Measured on 2026-11-20 (the pages say with which Draftsman). The README's status table summarises this one; changes to the numbers are
+Measured on 2026-11-20, the Java rows again on 2026-11-23 (the pages say with which
+Draftsman); a Java row's relations are the declared ones, then those read from names in
+method bodies. The README's status table summarises this one; changes to the numbers are
 recorded in [`CHANGELOG.md`](../../CHANGELOG.md).
 
 ## Re-running

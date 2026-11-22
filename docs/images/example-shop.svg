@@ -31,6 +31,7 @@
 .dm .edge{fill:none;stroke:var(--line);stroke-width:1.1}
 .dm .edge.k-implements,.dm .edge.k-dependency{stroke-dasharray:5 3.5}
 .dm .edge.k-dependency{stroke:var(--ink3)}
+.dm .edge.body{stroke-dasharray:1.5 3}
 .dm .edge.inferred{stroke:var(--blue);stroke-dasharray:1.5 3.5;stroke-width:1.6;stroke-linecap:round}
 .dm .edge.cycle{stroke:var(--red);stroke-width:1.5}
 .dm .edge.hot{stroke:var(--amber);stroke-width:1.7;opacity:1}
