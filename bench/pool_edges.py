@@ -60,14 +60,22 @@ def main() -> None:
 
     keys = sorted(pooled)
     random.Random(tasks['selection']['seed']).shuffle(keys)
-    # a series keeps what changed out of its ids, which the labeller reads (V3S-0001)
-    prefix = 'E' if args.round == 'v1' else re.sub(r'-.*', 'S', args.round).upper() + '-'
+    n, series = re.fullmatch(r'v(\d+)(-.+)?', args.round).groups()
+    # the series of rounds up to N labelled before this one (v3-haiku before v3-haiku-0.4.1)
+    series_before = sorted(
+        d.name for d in rounds.labels('v1').iterdir()
+        if series and d.name != args.round and (d / 'final_edges.csv').exists()
+        and (m := re.fullmatch(r'v(\d+)-.+', d.name)) and int(m.group(1)) <= int(n))
+    # a series keeps what changed out of its ids, which the labeller reads (V3S-0001, the
+    # next series of round 3 V3S2-0001)
+    k = 1 + sum(name.startswith(f'v{n}-') for name in series_before)
+    prefix = 'E' if args.round == 'v1' else f'V{n}' + (f'S{k if k > 1 else ""}' if series else '') + '-'
     carried = {}
     # v1, v2, ... before this round; the earliest keeps an edge, which later ones carried. A
     # series of its own on round N's configuration with something changed (v3-haiku: another
-    # model) carries over rounds 1 to N: a label depends on the edge and the source only
-    n, series = re.fullmatch(r'v(\d+)(-.+)?', args.round).groups()
-    for earlier in (f'v{i}' for i in range(1, int(n) + (1 if series else 0))):
+    # model) carries over rounds 1 to N and the series labelled before it: a label depends
+    # on the edge and the source only
+    for earlier in [*(f'v{i}' for i in range(1, int(n) + (1 if series else 0))), *series_before]:
         for r in csv.DictReader(open(rounds.labels(earlier) / 'final_edges.csv', newline='')):
             key = (r['repo'], r['focus'], r['source_name'], r['kind'], r['target_name'], r['directed'])
             first = carried.setdefault(key, r)

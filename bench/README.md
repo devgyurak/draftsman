@@ -210,3 +210,10 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
     runs it extracted one module (`handler/src/main/java`, `codec-socks`) instead of the
     repository, so the types of the other modules were not there to relate, and one run
     left dependencies out (`--relations`).
+- 2026-11-23, a second series on the third round's configuration (v3-haiku-0.4.1): arm B
+  only, 21 runs, on Draftsman 0.4.1 (`30d8f04`, whose `draw.py` warns when a focus
+  diagram is extracted from part of a project and gives the command for its root), the
+  image otherwise the third round's, `claude-haiku-5-5` at effort `medium` as in
+  v3-haiku. It asks whether that warning changes what Haiku extracts; arms A and C are
+  unchanged from v3-haiku, so they are not run again. `pool_edges.py` carries over the
+  labels of rounds 1 to 3 and of v3-haiku, and names this series' edges `V3S2-`.
