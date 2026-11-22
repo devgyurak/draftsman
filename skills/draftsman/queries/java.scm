@@ -99,6 +99,8 @@
 ; `o.new Inner()`: a member of o's type, which the scope does not tell
 (object_creation_expression (_) . "." . "new"
   type: [(type_identifier) @body.unread (generic_type (type_identifier) @body.unread)])
+; and its anonymous class inherits from that type: no name in it is known
+(object_creation_expression (_) . "." . "new" (class_body) @body.blind)
 ; `X.super::m`: X is the name, in type position; `super` is none
 ((type_identifier) @body.unread (#eq? @body.unread "super"))
 (method_reference . (scoped_type_identifier (type_identifier) @_s .) @body.unread

@@ -610,7 +610,8 @@ class Resolver:
         a variable draws nothing, and after a type a field of the name ends it."""
         sep = LANGUAGES[rtype.language].separator
         parts = ref.text.split(sep)
-        if self._is_variable(parts[0], rtype, ref):
+        # a type the member declares (a local class) is no package either
+        if parts[0] in ref.names.types or self._is_variable(parts[0], rtype, ref):
             return None
         res = self._in_body(parts[0], rtype, ref, 0)
         if res.status == PROJECT:

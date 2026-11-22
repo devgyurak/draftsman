@@ -51,7 +51,11 @@ is that type. Aliases of aliases are followed.
   a type, a field of the next name ends it (`Util.VALUE.trim()` is `Util`), else a nested
   type continues it (`Util.Helper.run()`). Known limit: fields of other types outside the
   sources (a Spring supertype's, `import static org.lib.Consts.*`) are not known and hide
-  nothing, the same rule as for their nested types.
+  nothing, the same rule as for their nested types. Known losses: `Owner::new` is read as
+  a receiver, so a field `Owner` hides it although a constructor reference takes only a
+  type; `import static p.Sub.Nest` (or `p.Sub.*`) of a nested type Sub inherits draws
+  nothing for `Nest.run()`. Nothing is read inside the anonymous class of `o.new Inner()
+  { }`, which inherits from a member of o's type.
 - Type annotations right before varargs (`X509Certificate @Nullable ... certs`) are valid
   Java 8 that the tree-sitter grammar rejects; they are blanked before parsing (same
   length, so line numbers are exact). Annotations on array levels (`String @A []`) are

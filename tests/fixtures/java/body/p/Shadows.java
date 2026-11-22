@@ -33,4 +33,14 @@ class Shadows extends Base implements Consts {
         }
         return new Util();                                  //> Util=local/t
     }
+
+    void localNested() {
+        class Foo {                                         //> Foo=-/t
+            static class Bar {                              //> Bar=-/t
+                static void m() {
+                }
+            }
+        }
+        Foo.Bar.m();                                        //> Foo=local/r Bar=local/r
+    }
 }

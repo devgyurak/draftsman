@@ -2,6 +2,10 @@ package p;
 
 class Outer {
     class Inner {
+        Object Owner = "";
+
+        class Util {
+        }
     }
 
     class Only {
@@ -15,6 +19,16 @@ class Qualified {
         Object a = o.new Inner();                           //> Object=java.lang.Object/t Inner=p.Outer.Inner/t
         Object b = new Outer().new Inner();                 //> Object=java.lang.Object/t Outer=p.Outer/t Inner=p.Outer.Inner/t
         return o.new Only();                                //> Only=p.Outer.Only/t
+    }
+
+    // nor is anything in its anonymous class: what it inherits from Inner is not known
+    Object anonymous(Outer o) {
+        return o.new Inner() {                              //> Inner=p.Outer.Inner/t
+            void f() {
+                new Util();                                 //> Util=p.Outer.Inner.Util/t
+                Owner.toString();                           //> Owner=var/r
+            }
+        };
     }
 }
 

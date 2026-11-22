@@ -587,6 +587,7 @@ class Extractor:
         classes: dict[int, list[str]] = {}   # body of an anonymous or local class -> supertypes
         refs, declared = [], []
         unread: set[int] = set()   # type nodes that are no name of the scope
+        blind: set[int] = set()    # class bodies whose inherited members are not known
         for caps in other:
             if (n := _first(caps, "body.region")) is not None:
                 regions.add(n.id)
@@ -614,6 +615,8 @@ class Extractor:
                 declared.append((n, "types"))
             elif (n := _first(caps, "body.unread")) is not None:
                 unread.add(n.id)
+            elif (n := _first(caps, "body.blind")) is not None:
+                blind.add(n.id)
         if not refs:
             return
         names: dict[int, BodyNames] = {}   # by the node of the member or initializer
@@ -648,7 +651,7 @@ class Extractor:
             in_body, place, around = False, None, []
             cur = node.parent
             while cur is not None and cur.id not in types_by_node:
-                if cur.type in self.spec.annotation_nodes:
+                if cur.type in self.spec.annotation_nodes or cur.id in blind:
                     break   # an annotation's arguments are no body, even inside one
                 in_body |= cur.id in regions
                 if place is None:

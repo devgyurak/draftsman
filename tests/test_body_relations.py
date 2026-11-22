@@ -141,9 +141,10 @@ def test_a_body_name_has_its_column_in_characters(tmp_path):
 
 
 # marked names never recorded: `Inner` in `o.new Inner()` is a member of o's type, which
-# the scope does not tell
-_UNREAD = [("p/Qualified.java", n, "p.Outer.Inner") for n in (15, 16, 23)] + \
-    [("p/Qualified.java", 17, "p.Outer.Only")]
+# the scope does not tell, and its anonymous class inherits what is not known
+_UNREAD = [("p/Qualified.java", n, "p.Outer.Inner") for n in (19, 20, 26, 37)] + \
+    [("p/Qualified.java", 21, "p.Outer.Only"), ("p/Qualified.java", 28, "p.Outer.Inner.Util"),
+     ("p/Qualified.java", 29, "var")]
 
 
 def test_body_names_stand_where_the_hand_written_answers_say():
@@ -259,4 +260,5 @@ def test_body_relations_go_where_the_hand_written_answers_say():
               if answer in builder.types and (file, line, col) not in drawn]
     assert sorted(missed) == sorted(
         [("p/Forms.java", 29, "p.Util"), ("p/Forms.java", 28, "p.Util"),
-         ("p/Owner.java", 5, "p.Owner"), ("p/Forms.java", 26, "p.Owner")] + _UNREAD)
+         ("p/Owner.java", 5, "p.Owner"), ("p/Forms.java", 26, "p.Owner")]
+        + [u for u in _UNREAD if u[2] in builder.types])

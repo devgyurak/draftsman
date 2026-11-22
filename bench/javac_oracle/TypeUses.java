@@ -346,8 +346,7 @@ public class TypeUses {
             if (e == null || (tm != null && tm.getKind() == TypeKind.ERROR)) {
                 kind = "error";
             } else if (e instanceof TypeElement te) {
-                NestingKind nk = te.getNestingKind();
-                if (nk == NestingKind.LOCAL || nk == NestingKind.ANONYMOUS) {
+                if (local(te)) {
                     kind = "local";
                 } else {
                     kind = "type";
@@ -375,8 +374,7 @@ public class TypeUses {
             for (TreePath p = path; p != null; p = p.getParentPath()) {
                 if (p.getLeaf() instanceof ClassTree && trees.getElement(p) instanceof TypeElement te) {
                     around.add(te);
-                    NestingKind nk = te.getNestingKind();
-                    if (nk == NestingKind.LOCAL || nk == NestingKind.ANONYMOUS) {
+                    if (local(te)) {
                         if (from == null) {
                             nested = true;
                         }
@@ -407,6 +405,18 @@ public class TypeUses {
                     + ", \"in_nested\": " + nested
                     + ", \"outside_super\": " + outside
                     + ", \"outside_super_not_lang\": " + outsideNotLang + "}");
+        }
+
+        /** A local or anonymous class, or a member of one (`Bar` in a local `Foo`): no
+         *  type the extractor names. */
+        static boolean local(TypeElement te) {
+            for (Element e = te; e instanceof TypeElement t; e = t.getEnclosingElement()) {
+                NestingKind nk = t.getNestingKind();
+                if (nk == NestingKind.LOCAL || nk == NestingKind.ANONYMOUS) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /** "receiver" where a variable of the name would win over a type (`X.m()`, `X.F`,
