@@ -197,3 +197,16 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
   own model only. `pool_edges.py` carries over the labels of rounds 1 to 3 into it, a
   label depending only on the edge and the source, and names its edges `V3S-` so that
   the labeller does not read the model.
+  - Labels (v3-haiku): 372 of the 572 distinct edges were labelled in an earlier round
+    and keep their final labels; the other 200 were labelled blind by a separate session
+    with the third round's brief, the model named nowhere it could read. It read
+    `UnixBuffer` as `io.netty.channel.unix.Buffer` and `HttpRequest`, drawn inheriting
+    `HttpBase`, as `HttpConnection.Request`, both renamed; the reviewer kept both, and
+    RUBRIC.md's "Decided at review" now says so.
+  - Human review (v3-haiku): 82 rows (52 in full, 30 sampled), all agreed by eye. Not
+    blind: the reviewer knew the model.
+  - Arm B on Haiku drew no edge without a basis, as on Opus, but missed more of Netty's
+    relations out of the focus (recall 0.66 against 1.00 on Opus): in two of its six Netty
+    runs it extracted one module (`handler/src/main/java`, `codec-socks`) instead of the
+    repository, so the types of the other modules were not there to relate, and one run
+    left dependencies out (`--relations`).
