@@ -132,6 +132,7 @@ reported as undecided by the rules above:
 | An anonymous class drawn as a named node (`PDNoopBuf --\|> CleanableDirectBuffer` for `new CleanableDirectBuffer() {…}` inside `PlatformDependent`) | the node is that anonymous class, renamed; it belongs to its enclosing named type, so inheritance drawn from it is right when the anonymous class inherits, and the label takes the pair's strongest evidence at each level |
 | Same simple name that the focus file's imports do not decide, though the other end would | stays *undecidable*, as *Names* says; counted and reported |
 | An outer type drawn as using its nested type, with no use | *wrong kind or direction* as drawn, *self* at the top level; it stays out of the main scoring |
+| A nested type drawn under its outer and inner names run together (`ConnectionResponse` for `Connection.Response`, `RangeSpans` for `Range.Spans`), a name the checkout does not have | the nested type, renamed, as `Outer_Inner`; not a class that does not exist (third round, as the first round's labels already did) |
 
 ## Labelling procedure
 

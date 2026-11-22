@@ -171,3 +171,18 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
   labeller. A round now carries over every earlier round's final labels, an edge under the
   id of the round that labelled it first, and stops when two rounds judge one edge
   differently. This changes which edges are labelled again, not any label.
+- 2026-11-23, third round (v3), after Draftsman 0.4.0 (`7d2358a`: Java bodies read, body
+  relations drawn around the focus). Same configuration, prompts, focus classes and
+  rubric; all three arms run again on the first round's image with only Draftsman's files
+  replaced, 63 runs, no failures, $9.56. Results are in `results/raw/measured-v3/`,
+  `labels/v3/` and `results/scores/v3/`.
+  - Labels: 443 of the 531 distinct edges were labelled in an earlier round and keep
+    their final labels (371 from the first, 72 from the second); the other 88 were
+    labelled blind by a separate session started outside this repository, with the
+    second round's brief (`labels/v3/BRIEF.md`).
+  - That session found nested types drawn under their two names run together
+    (`ConnectionResponse`) in 44 of its rows. It read them as the nested type, renamed,
+    as the first round's labels had; the reviewer kept that, and RUBRIC.md's "Decided at
+    review" now says so.
+  - Human review: 29 rows (14 in full, 15 sampled), all agreed by eye. Not blind: the
+    reviewer knew what 0.4.0 changed.
