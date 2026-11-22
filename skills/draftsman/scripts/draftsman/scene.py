@@ -39,6 +39,7 @@ class Scene:
     warnings: list[str] = field(default_factory=list)
     nested: str = "boxes"                   # "fold": nested types drawn inside their outer type
     folded: dict[str, list[str]] = field(default_factory=dict)  # shown type -> nested ids in it
+    body: str = "none"                      # View.body_mode
 
 
 def _neighbours(relations: list[Relation],
@@ -90,13 +91,15 @@ def _label(r: Relation) -> Optional[str]:
 
 def _collapse_dependencies(relations: list[Relation]) -> list[Relation]:
     """One dependency arrow per pair, and none where a stronger relation exists. A
-    labelled one (a nested type's inheritance) is kept per label instead of a plain one."""
+    labelled one (a nested type's inheritance) is kept per label instead of a plain one.
+    Of the rest a signature's comes first, then an annotation's, then a body's."""
     structural = {(r.from_, r.to) for r in relations if r.kind != "dependency"}
     labelled = {(r.from_, r.to) for r in relations if r.kind == "dependency" and _label(r)}
     # a pair a signature connects keeps that arrow, which the neighbourhood follows both
-    # ways, rather than an annotation's
-    plain = {(r.from_, r.to) for r in relations
-             if r.kind == "dependency" and not _label(r) and not is_annotation(r)}
+    # ways, rather than an annotation's; a body's only stands where neither does
+    plain = {(r.from_, r.to) for r in relations if r.kind == "dependency" and not _label(r)
+             and not is_annotation(r) and not is_body(r)}
+    declared = {(r.from_, r.to) for r in relations if r.kind == "dependency" and not is_body(r)}
     seen: set[tuple] = set()
     out = []
     for r in relations:
@@ -104,7 +107,7 @@ def _collapse_dependencies(relations: list[Relation]) -> list[Relation]:
             pair = (r.from_, r.to)
             key = (*pair, _label(r))
             if pair in structural or key in seen or (pair in labelled and not _label(r)) \
-                    or (pair in plain and is_annotation(r)):
+                    or (pair in plain and is_annotation(r)) or (pair in declared and is_body(r)):
                 continue
             seen.add(key)
         out.append(r)
@@ -207,6 +210,7 @@ def build_scene(ir: IR, view: View, whole: bool = False) -> Scene:
     # a type folded into a hidden type goes with it
     candidates = {t.id for t in ir.types if t.id not in hidden and roots[t.id] not in hidden}
     kinds = set(view.relations)
+    body = view.body_mode
 
     def via_hidden(r: Relation) -> bool:
         return r.via is not None and any(
@@ -217,6 +221,7 @@ def build_scene(ir: IR, view: View, whole: bool = False) -> Scene:
         r for r in ir.relations
         if r.kind in kinds and r.from_ in candidates and not via_hidden(r)
         and (view.annotations or not is_annotation(r))
+        and (body != "none" or not is_body(r))
         and (r.to in candidates or (view.externals and r.to in externals
                                     and r.to not in hidden))]
     if fold:
@@ -224,12 +229,27 @@ def build_scene(ir: IR, view: View, whole: bool = False) -> Scene:
     relations = _collapse_dependencies(drawn)
     nodes = {roots[c] for c in candidates}
 
+    # drawn as boxes, the focus's nested types are where its neighbourhood starts
+    starts = ({focus} | {c for c in candidates if _encloses(focus, c, by_id)}) & nodes \
+        if focus else set()
     if focus and not whole:
-        # drawn as boxes, the focus's nested types are where its neighbourhood starts
-        starts = {focus} | {c for c in candidates if _encloses(focus, c, by_id)}
-        visible = _within_hops(starts & nodes, _neighbours(relations, nodes), view.hops)
+        declared = [r for r in relations if not is_body(r)]
+        visible = _within_hops(starts, _neighbours(declared, nodes), view.hops)
+        if view.hops:
+            # a type a body of the focus names, or whose body names the focus, is drawn but
+            # leads nowhere: bodies name far more types than declarations do
+            for r in relations:
+                if is_body(r) and r.from_ in starts:
+                    visible.add(r.to)
+                elif is_body(r) and r.to in starts:
+                    visible.add(r.from_)
     else:
         visible = set(nodes)
+    # "focus": only the body relations that touch the focus; the viewer (``whole``) is given
+    # all of them, as its reader moves the focus
+    if body == "focus" and not (whole and focus):
+        relations = [r for r in relations
+                     if not is_body(r) or r.from_ in starts or r.to in starts]
 
     # inferred edges may pull in their endpoints
     ghosts: set[str] = set()
@@ -349,4 +369,5 @@ def build_scene(ir: IR, view: View, whole: bool = False) -> Scene:
         warnings=warnings,
         nested=view.nested_mode,
         folded=folded,
+        body=body,
     )

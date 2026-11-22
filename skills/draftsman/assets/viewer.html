@@ -325,6 +325,7 @@ ul.members li.abstract { font-style: italic; }
     </div>
     <span class="vsep"></span>
     <button class="tog" id="deps" aria-pressed="true" title="Signature dependencies"><svg viewBox="0 0 22 8"><path d="M1 4h20" stroke="var(--ink3)" stroke-width="1.6" stroke-dasharray="4 3"/></svg><span>Deps</span></button>
+    <button class="tog" id="bodies" aria-pressed="true" title="Dependencies read from names in bodies (new Foo(), Foo.bar())"><svg viewBox="0 0 22 8"><path d="M1 4h20" stroke="var(--ink3)" stroke-width="1.6" stroke-dasharray="1.5 3"/></svg><span>Bodies</span></button>
     <button class="tog" id="inferred" aria-pressed="true" title="Edges the agent inferred (construction lines)"><svg viewBox="0 0 22 8"><path d="M1.5 4h19" stroke="var(--blue)" stroke-width="2" stroke-dasharray="1 3.5" stroke-linecap="round"/></svg><span>Inferred</span></button>
     <button class="tog" id="cycles" aria-pressed="true" title="Mark short reference cycles; pick a long one in the title block"><svg viewBox="0 0 22 8"><path d="M1 4h20" stroke="var(--red)" stroke-width="2"/></svg><span>Cycles</span></button>
     <button class="tog" id="members" aria-pressed="false" title="Members in every class"><svg viewBox="0 0 22 8"><path d="M1 1.5h20M1 4h14M1 6.5h17" stroke="var(--ink2)" stroke-width="1.2"/></svg><span>Members</span></button>
@@ -399,16 +400,18 @@ const LINE = {
   association: `<svg viewBox="0 0 50 12"><path d="M2 6h45M41 2l6 4-6 4" fill="none" stroke="var(--ink2)" stroke-width="1.2"/></svg>`,
   composition: `<svg viewBox="0 0 50 12"><path d="M2 6l6-4 6 4-6 4z" fill="var(--ink2)"/><path d="M14 6h33M41 2l6 4-6 4" fill="none" stroke="var(--ink2)" stroke-width="1.2"/></svg>`,
   dependency: `<svg viewBox="0 0 50 12"><path d="M2 6h45" stroke="var(--ink3)" stroke-width="1.2" stroke-dasharray="5 3.5"/><path d="M41 2l6 4-6 4" fill="none" stroke="var(--ink3)" stroke-width="1.2"/></svg>`,
+  body: `<svg viewBox="0 0 50 12"><path d="M2 6h45" stroke="var(--ink3)" stroke-width="1.2" stroke-dasharray="1.5 3"/><path d="M41 2l6 4-6 4" fill="none" stroke="var(--ink3)" stroke-width="1.2"/></svg>`,
   inferred: `<svg viewBox="0 0 50 12"><path d="M3 6h43" stroke="var(--blue)" stroke-width="1.8" stroke-dasharray="1 4" stroke-linecap="round"/><path d="M41 2l6 4-6 4" fill="none" stroke="var(--blue)" stroke-width="1.2"/></svg>`,
   cycle: `<svg viewBox="0 0 50 12"><path d="M2 6h45M41 2l6 4-6 4" fill="none" stroke="var(--red)" stroke-width="1.6"/></svg>`,
 };
-const lineFor = (e) => e.inferred ? LINE.inferred
+const lineFor = (e) => e.inferred ? LINE.inferred : e.body ? LINE.body
   : e.kind === "association" && e.ownership === "owned" ? LINE.composition : LINE[e.kind] || LINE.association;
 
 const state = {
   focus: GRAPH.focus,
   hops: Math.max(1, GRAPH.hops || 2),
   deps: true, inferred: true, cycles: true,
+  body: GRAPH.body !== "none",   // "focus": those touching the focus, "all": every one
   allMembers: GRAPH.nodes.length <= 40,
   expanded: new Set(),
   selected: null,
@@ -425,24 +428,35 @@ function esc(s) {
 }
 const label = (id) => byId.get(id)?.label || FOLDED.get(id) || id;
 
+// the focus and its nested types drawn as boxes of their own: where its neighbourhood starts
+function startsOf(focus) {
+  if (!focus || !byId.has(focus)) return new Set();
+  const inside = (n) => { for (let o = n.outer; o; o = byId.get(o)?.outer) if (o === focus) return true; return false; };
+  return new Set([focus, ...GRAPH.nodes.filter(inside).map((n) => n.id)]);
+}
+
+// a body relation is shown when it touches the focus ("focus") or always ("all")
 function shownEdges() {
+  const starts = startsOf(state.focus);
   return GRAPH.edges.filter((e) =>
-    (state.deps || e.kind !== "dependency" || e.inferred) && (state.inferred || !e.inferred));
+    (state.deps || e.kind !== "dependency" || e.inferred) && (state.inferred || !e.inferred) &&
+    (!e.body || state.body && (GRAPH.body === "all" || starts.has(e.from) || starts.has(e.to))));
 }
 
 // an annotation leads from the annotated class to what it names, not back to the other
-// classes that carry it; only the focus looks back along annotations (its users)
+// classes that carry it; only the focus looks back along annotations (its users). A body
+// relation of the focus draws the class at its other end, which leads nowhere
 function visibleSet() {
   if (!state.focus || !byId.has(state.focus)) return null;
   const adj = new Map(), back = new Map();
   const add = (m, a, b) => { if (!m.has(a)) m.set(a, []); m.get(a).push(b); };
-  for (const e of shownEdges()) {
+  const edges = shownEdges();
+  for (const e of edges) {
+    if (e.body) continue;
     add(adj, e.from, e.to);
     add(e.annotation ? back : adj, e.to, e.from);
   }
-  // nested types drawn as boxes of their own are where the focus's neighbourhood starts
-  const inside = (n) => { for (let o = n.outer; o; o = byId.get(o)?.outer) if (o === state.focus) return true; return false; };
-  const starts = new Set([state.focus, ...GRAPH.nodes.filter(inside).map((n) => n.id)]);
+  const starts = startsOf(state.focus);
   const seen = new Set(starts);
   let frontier = [...starts];
   for (let d = 0; d < state.hops; d++) {
@@ -452,6 +466,10 @@ function visibleSet() {
       for (const m of near) if (!seen.has(m)) { seen.add(m); next.push(m); }
     }
     frontier = next;
+  }
+  for (const e of edges) {
+    if (e.body && starts.has(e.from)) seen.add(e.to);
+    else if (e.body && starts.has(e.to)) seen.add(e.from);
   }
   return seen;
 }
@@ -470,9 +488,10 @@ async function relayout(fit) {
   const visible = visibleSet();
   const count = visible ? visible.size : GRAPH.nodes.length;
   status(`Drafting ${count} classes`);
+  const shown = new Set(shownEdges().map((e) => e.id));
   const input = D.toElk(GRAPH, {
     visible, expanded: isExpanded, showInferred: state.inferred,
-    showDependencies: state.deps, notes: false,
+    showDependencies: state.deps, notes: false, edge: (e) => shown.has(e.id),
   });
   let laid;
   try {
@@ -820,11 +839,11 @@ function renderOverview() {
   p.push(sec("Kinds", undefined, `<table class="kinds">${KINDS.filter((k) => counts.has(k[0])).map((k) =>
     `<tr data-kind="${k[0]}" aria-pressed="${state.kind === k[0]}" title="Emphasise this kind"><td>${badge(k[2][0])}</td><td>${esc(k[1])}</td><td class="n">${counts.get(k[0])}</td></tr>`).join("")}</table>`));
 
-  const used = new Set(GRAPH.edges.map((e) => e.inferred ? "inferred"
+  const used = new Set(GRAPH.edges.map((e) => e.inferred ? "inferred" : e.body ? "body"
     : e.kind === "association" && e.ownership === "owned" ? "composition" : e.kind));
   const legend = [["extends", "extends"], ["implements", "implements"], ["association", "association (field)"],
     ["composition", "composition (owned value)"], ["dependency", "dependency (signature)"],
-    ["inferred", "inferred by the agent"]].filter(([k]) => used.has(k));
+    ["body", "dependency (a name in a body)"], ["inferred", "inferred by the agent"]].filter(([k]) => used.has(k));
   if (cycles.length) legend.push(["cycle", "reference cycle"]);
   p.push(sec("Legend", undefined, `<table class="legend">${legend.map(([k, t]) => `<tr><td>${LINE[k]}</td><td>${esc(t)}</td></tr>`).join("")}</table>`));
 
@@ -868,7 +887,7 @@ function syncControls() {
   $("hopsv").textContent = state.hops;
   $("hopsDown").disabled = state.hops <= 1;
   $("hopsUp").disabled = state.hops >= 6;
-  for (const [id, on] of [["deps", state.deps], ["inferred", state.inferred], ["cycles", state.cycles], ["members", state.allMembers]])
+  for (const [id, on] of [["deps", state.deps], ["bodies", state.body], ["inferred", state.inferred], ["cycles", state.cycles], ["members", state.allMembers]])
     $(id).setAttribute("aria-pressed", String(on));
 }
 
@@ -965,9 +984,11 @@ const flip = (key, relay) => () => {
   if (key === "allMembers") state.expanded.clear();
   syncControls();
   if (relay) relayout(false); else draw();
-  if (key === "allMembers" || key === "deps" || key === "inferred") renderSide();
+  if (key === "allMembers" || key === "deps" || key === "body" || key === "inferred") renderSide();
 };
 $("deps").addEventListener("click", flip("deps", true));
+$("bodies").addEventListener("click", flip("body", true));
+$("bodies").hidden = !GRAPH.edges.some((e) => e.body);
 $("inferred").addEventListener("click", flip("inferred", true));
 $("cycles").addEventListener("click", flip("cycles", false));
 $("members").addEventListener("click", flip("allMembers", true));

@@ -74,3 +74,18 @@ def test_viewer_neighbourhood(tmp_path):
         env={"PATH": __import__("os").environ["PATH"], "DRAFTSMAN_SCRIPTS": str(SCRIPTS),
              "DRAFTSMAN_VIEWER": str(tmp_path / "viewer.html")})
     assert res.returncode == 0, res.stdout[-6000:] + res.stderr[-3000:]
+
+
+def test_viewer_body_relations(tmp_path):
+    """Body relations in the viewer follow scene.py's rules (tests/js/body.test.mjs)."""
+    from conftest import extract_source
+    from test_body_relations import _AROUND
+    ir = extract_source(tmp_path / "src", _AROUND)
+    scene = build_scene(ir, View.from_dict({"focus": "F", "hops": 2}), whole=True)
+    (tmp_path / "viewer.html").write_text(render_html(scene, ir), encoding="utf-8")
+    res = subprocess.run(
+        ["node", "--test", "--test-reporter=spec", str(JS / "body.test.mjs")],
+        capture_output=True, text=True, timeout=180,
+        env={"PATH": __import__("os").environ["PATH"], "DRAFTSMAN_SCRIPTS": str(SCRIPTS),
+             "DRAFTSMAN_VIEWER": str(tmp_path / "viewer.html")})
+    assert res.returncode == 0, res.stdout[-6000:] + res.stderr[-3000:]

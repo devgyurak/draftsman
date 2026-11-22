@@ -262,3 +262,49 @@ def test_body_relations_go_where_the_hand_written_answers_say():
         [("p/Forms.java", 29, "p.Util"), ("p/Forms.java", 28, "p.Util"),
          ("p/Owner.java", 5, "p.Owner"), ("p/Forms.java", 26, "p.Owner")]
         + [u for u in _UNREAD if u[2] in builder.types])
+
+
+_AROUND = {
+    "p/F.java": "package p; class F { void m() { new G(); } }",
+    "p/G.java": "package p; class G { H h; }",
+    "p/H.java": "package p; class H { }",
+    "p/U.java": "package p; class U { void m() { new F(); } }",
+    "p/K.java": "package p; class K { F f; void m() { new G(); } }",
+}
+
+
+def _drawn(ir, **view) -> tuple[list[str], list[tuple]]:
+    scene = build_scene(ir, View.from_dict(view))
+    return (sorted(t.name for t in scene.types),
+            sorted((r.from_[2:], r.to[2:], r.kind, r.evidence or "") for r in scene.relations))
+
+
+def test_a_body_relation_of_the_focus_draws_its_other_end_and_no_further(tmp_path):
+    ir = extract_source(tmp_path, _AROUND)
+    # G is named only in F's body: drawn, but its field H is not followed; U names F in its
+    # body; K holds an F, and its body's G does not touch the focus
+    assert _drawn(ir, focus="F", hops=2) == (
+        ["F", "G", "K", "U"],
+        [("F", "G", "dependency", "body"), ("K", "F", "association", ""),
+         ("U", "F", "dependency", "body")])
+    assert _drawn(ir, focus="F", hops=2, body="all")[1] == [
+        ("F", "G", "dependency", "body"), ("K", "F", "association", ""),
+        ("K", "G", "dependency", "body"), ("U", "F", "dependency", "body")]
+    assert _drawn(ir, focus="F", hops=2, body="none") == (
+        ["F", "K"], [("K", "F", "association", "")])
+    # without a focus, none unless asked for
+    assert all(e == "" for *_, e in _drawn(ir)[1])
+    assert ("F", "G", "dependency", "body") in _drawn(ir, body="all")[1]
+
+
+def test_a_pair_keeps_its_signature_or_annotation_arrow_over_a_body_one(tmp_path):
+    ir = extract_source(tmp_path, {
+        "p/Mark.java": "package p; @interface Mark { Class<?> value(); }",
+        "p/B.java": "package p; class B { }",
+        "p/C.java": "package p; class C { }",
+        # the body's relation via `a` comes first in ir.json, before the signature's via `b`
+        "p/A.java": "package p; @Mark(C.class) class A { Object a() { return new B(); }"
+                    " B b() { return null; } Object c() { return new C(); } }"})
+    assert _drawn(ir, focus="A", hops=1)[1] == [
+        ("A", "B", "dependency", ""), ("A", "C", "dependency", ""),
+        ("A", "Mark", "dependency", "")]

@@ -91,12 +91,13 @@
    *   visible: Set<id> | null      nodes to include (null = all)
    *   expanded: (id) => boolean    show members
    *   showInferred, showDependencies: booleans
+   *   edge: (edge) => boolean       further edges to leave out (null = none)
    *   notes: boolean               draw notes as note boxes (static SVG)
    * }
    */
   function toElk(graph, opts) {
     opts = Object.assign({ visible: null, expanded: () => true, showInferred: true,
-      showDependencies: true, notes: true }, opts || {});
+      showDependencies: true, notes: true, edge: null }, opts || {});
     const visible = (id) => !opts.visible || opts.visible.has(id);
     const byId = new Map(graph.nodes.map((n) => [n.id, n]));
     const groupOf = new Map();
@@ -127,6 +128,7 @@
       if (!visible(e.from) || !visible(e.to)) continue;
       if (e.inferred && !opts.showInferred) continue;
       if (e.kind === "dependency" && !e.inferred && !opts.showDependencies) continue;
+      if (opts.edge && !opts.edge(e)) continue;
       const elkEdge = {
         id: e.id,
         sources: [reversed(e) ? e.to : e.from],
@@ -225,6 +227,7 @@
 .dm .edge{fill:none;stroke:var(--line);stroke-width:1.1}
 .dm .edge.k-implements,.dm .edge.k-dependency{stroke-dasharray:5 3.5}
 .dm .edge.k-dependency{stroke:var(--ink3)}
+.dm .edge.body{stroke-dasharray:1.5 3}
 .dm .edge.inferred{stroke:var(--blue);stroke-dasharray:1.5 3.5;stroke-width:1.6;stroke-linecap:round}
 .dm .edge.cycle{stroke:var(--red);stroke-width:1.5}
 .dm .edge.hot{stroke:var(--amber);stroke-width:1.7;opacity:1}
@@ -461,7 +464,8 @@
       const d = pts.map((p, i) => (i ? "L" : "M") + p.x.toFixed(1) + "," + p.y.toFixed(1)).join(" ");
       const inCycle = opts.highlightCycles && e.kind !== "extends" && e.kind !== "implements" &&
         cycleOf.has(e.from) && cycleOf.get(e.from) === cycleOf.get(e.to);
-      const cls = ["edge", "k-" + e.kind, e.inferred ? "inferred" : "", inCycle ? "cycle" : "",
+      const cls = ["edge", "k-" + e.kind, e.inferred ? "inferred" : "", e.body ? "body" : "",
+        inCycle ? "cycle" : "",
         opts.dimmed && (opts.dimmed.has(e.from) || opts.dimmed.has(e.to)) ? "dim" : ""]
         .filter(Boolean).join(" ");
       let markers;
@@ -471,7 +475,7 @@
         markers = ` marker-start="url(#dm-diamond)" marker-end="url(#dm-arrow)"`;
       else markers = ` marker-end="url(#dm-arrow)"`;
       const title = e.inferred ? `inferred: ${e.rationale || ""}` :
-        `${e.kind}${e.via ? " (" + e.via + ")" : ""} — ${e.location || ""}`;
+        `${e.kind}${e.body ? " from a body" : ""}${e.via ? " (" + e.via + ")" : ""} — ${e.location || ""}`;
       const ends = ` data-from="${esc(e.from)}" data-to="${esc(e.to)}"`;
       parts.push(`<path class="${cls}" d="${d}"${markers} data-edge="${esc(e.id)}"${ends}><title>${esc(title)}</title></path>`);
       const dim = opts.dimmed && (opts.dimmed.has(e.from) || opts.dimmed.has(e.to)) ? " dim" : "";

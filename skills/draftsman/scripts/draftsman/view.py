@@ -19,11 +19,12 @@ OUTPUTS = ("mermaid", "svg", "html")
 MEMBER_DETAIL = ("all", "public", "none")
 DIRECTIONS = ("TB", "BT", "LR", "RL")
 NESTED = ("fold", "boxes")
+BODY = ("focus", "all", "none")
 
 _KEYS = {
     "focus", "hops", "hidden", "groups", "highlights", "notes", "inferred_edges",
     "members", "relations", "externals", "direction", "output", "title", "nested",
-    "annotations",
+    "annotations", "body",
 }
 
 
@@ -78,12 +79,21 @@ class View:
     nested: Optional[str] = None
     # draw the dependencies annotations create (`via` "@Name")
     annotations: bool = True
+    # the dependencies names in bodies create (`evidence` "body"): those touching the focus,
+    # those between every drawn type, or none; None: "focus" around a focus, else "none"
+    body: Optional[str] = None
 
     @property
     def nested_mode(self) -> str:
         if self.nested is not None:
             return self.nested
         return "fold" if self.focus else "boxes"
+
+    @property
+    def body_mode(self) -> str:
+        if self.body is not None:
+            return self.body
+        return "focus" if self.focus else "none"
 
     @classmethod
     def load(cls, path: Optional[Path]) -> "View":
@@ -132,6 +142,7 @@ class View:
             title=d.get("title"),
             nested=d.get("nested"),
             annotations=d.get("annotations", True),
+            body=d.get("body"),
         )
         if not isinstance(v.hops, int) or v.hops < 0:
             raise ViewError("hops must be a non-negative integer")
@@ -148,6 +159,8 @@ class View:
             raise ViewError(f"output must be one of {OUTPUTS}")
         if not isinstance(v.annotations, bool):
             raise ViewError("annotations must be true or false")
+        if v.body is not None and v.body not in BODY:
+            raise ViewError(f"body must be one of {BODY}")
         if v.nested is not None and v.nested not in NESTED:
             raise ViewError(f"nested must be one of {NESTED}")
         if v.direction is not None and v.direction not in DIRECTIONS:

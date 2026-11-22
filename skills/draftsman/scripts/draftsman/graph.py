@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Optional
 
 from .model import IR, STEREOTYPES, VISIBILITY_SYMBOLS, Member, Relation, Type
-from .scene import FoldedRelation, Scene, is_annotation
+from .scene import FoldedRelation, Scene, is_annotation, is_body
 
 
 def member_text(m: Member) -> str:
@@ -138,6 +138,7 @@ def build_graph(scene: Scene, ir: Optional[IR] = None) -> dict:
             "via": r.via if r.kind == "association" else None,
             "inferred": False,
             "annotation": is_annotation(r),
+            "body": is_body(r),
             "location": f"{r.source_location.file}:{r.source_location.line}",
         })
         if isinstance(r, FoldedRelation) and r.label:
@@ -158,6 +159,7 @@ def build_graph(scene: Scene, ir: Optional[IR] = None) -> dict:
         "focus": scene.focus,
         "hops": scene.hops,
         "nested": scene.nested,
+        "body": scene.body,
         "direction": scene.direction or "TB",
         "nodes": nodes,
         "edges": edges,

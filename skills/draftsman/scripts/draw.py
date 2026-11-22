@@ -4,8 +4,8 @@
     python scripts/draw.py <path | ir.json> [--focus TYPE] [--hops N]
         [--members all|public|none] [--hide GLOB]... [--relations KIND,...]
         [--exclude GLOB]... [--tests] [--lang L]... [--wrappers YAML]...
-        [--format mermaid|svg|html] [--view view.json] [-o FILE] [--work DIR]
-        [--max-types N]
+        [--body focus|all|none] [--format mermaid|svg|html] [--view view.json]
+        [-o FILE] [--work DIR] [--max-types N]
 
 stdout: the Mermaid text (svg and html: nothing, the report names the file).
 stderr: a report for judging the scope: the repository's size, what was drawn, what one
@@ -35,8 +35,9 @@ from pathlib import Path
 
 from draftsman.model import IR, RELATION_KINDS
 from draftsman.render_web import RenderError
-from draftsman.scene import Scene, build_scene
-from draftsman.view import MEMBER_DETAIL, OUTPUTS, View, ViewError, split_hidden, type_matches
+from draftsman.scene import Scene, build_scene, is_body
+from draftsman.view import (BODY, MEMBER_DETAIL, OUTPUTS, View, ViewError, split_hidden,
+                            type_matches)
 
 HERE = Path(__file__).resolve().parent
 TEST_EXCLUDES = ["**/test/**", "**/tests/**"]
@@ -61,6 +62,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="hide types (`*Dto`) or members (`*#get*`); repeatable")
     ap.add_argument("--relations", metavar="KIND,...",
                     help=f"relation kinds to draw and follow: {','.join(RELATION_KINDS)}")
+    ap.add_argument("--body", choices=BODY,
+                    help="dependencies read from names in bodies: those touching the focus "
+                         "(default with --focus), between every drawn type, or none "
+                         "(default without)")
     ap.add_argument("--format", choices=OUTPUTS,
                     help="output (default: the view's, else from -o's extension, else mermaid)")
     ap.add_argument("--view", type=Path, help="view.json for groups, notes, highlights, ...")
@@ -88,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     if not isinstance(data, dict):
         return fail("view error: view must be a JSON object")
     overrides = {"focus": args.focus, "hops": args.hops, "members": args.members,
-                 "output": args.format}
+                 "output": args.format, "body": args.body}
     if args.relations is not None:
         overrides["relations"] = [k.strip() for k in args.relations.split(",") if k.strip()]
     data.update({k: v for k, v in overrides.items() if v is not None})
@@ -244,6 +249,7 @@ class Report:
             self.line(f"relations: {', '.join(v.relations)} only (left out: {', '.join(left)})")
         if not v.annotations:
             self.line("annotations: dependencies only annotations create are left out")
+        self.bodies()
         type_globs, member_globs = split_hidden(v.hidden)
         if type_globs:
             hits = {p: sum(type_matches(p, t) for t in self.ir.types) for p in type_globs}
@@ -285,12 +291,42 @@ class Report:
             top = [f"{self.name(t)} ({k})" for t, k in degree(self.ir).most_common(12)]
             self.line("  --focus one type, the class the user named or one of the most "
                       "connected: " + ", ".join(top))
+        if self.view.body_mode != "none" and "dependency" in self.view.relations:
+            k = size(self.around(s.hops, body="none"))
+            if k < n:
+                self.line(f"  --body none: {k} types, without the classes only a body "
+                          "relation brings in (`new Foo()`, `Foo.bar()`)")
         structural = [k for k in self.view.relations if k != "dependency"]
         k = size(self.around(s.hops, relations=structural)) if structural else n
         if "dependency" in self.view.relations and k < n:
             self.line(f"  --relations {','.join(structural)}: {k} types, but classes related "
-                      "only by use (parameters, locals, return types) drop out")
+                      "only by use (a signature, an annotation, a body) drop out")
         self.line(f"  --format html: all {n} types in the explorable viewer")
+
+    def bodies(self) -> None:
+        """The dependencies names in bodies create, and the types only they bring in."""
+        mode = self.view.body_mode
+        if mode == "none":
+            if any(is_body(r) for r in self.ir.relations):
+                self.line("bodies: dependencies read from names in bodies are left out "
+                          "(--body focus or all draws them)")
+            return
+        drawn = sum(is_body(r) for r in self.scene.relations)
+        if self.view.output == "html":
+            # the viewer has them all and shows them as its reader moves the focus
+            where = ("those touching the class in focus" if mode == "focus" and self.scene.focus
+                     else "all" if mode == "all" else "none")
+            self.line(f"bodies: {drawn} dependencies read from names in bodies in the viewer, "
+                      f"which shows {where} (its Bodies button hides them)")
+            return
+        where = "touching the focus" if mode == "focus" else "between the drawn types"
+        line = f"bodies: {drawn} dependencies read from names in bodies, {where}"
+        if self.scene.focus:
+            only = self.shown() - {t.id for t in self.around(self.scene.hops, body="none").types}
+            if only:
+                line += f"; {len(only)} types only through them: {self.names(self.by_degree(only), 8)}"
+        others = [f"--body {m}" for m in ("all", "none") if m != mode]
+        self.line(line + f" ({', '.join(others)})")
 
     def shown(self) -> set[str]:
         return {t.id for t in self.scene.types}

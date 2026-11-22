@@ -219,3 +219,24 @@ def test_draw_keeps_tests_on_request(tmp_path):
     assert "1 types" in without.stderr and "class B" not in without.stdout
     keep = run("draw.py", src, "--tests", "--work", tmp_path / "w2")
     assert "2 types" in keep.stderr and "A --> B : b" in keep.stdout
+
+
+def test_draw_reports_and_narrows_body_relations(tmp_path):
+    from test_body_relations import _AROUND
+    src = tmp_path / "src"
+    for name, text in _AROUND.items():
+        (src / name).parent.mkdir(parents=True, exist_ok=True)
+        (src / name).write_text(text)
+    res = run("draw.py", src, "--focus", "F", "--hops", "2", "--work", tmp_path)
+    assert res.returncode == 0, res.stderr
+    assert "F ..> G : body" in res.stdout and "U ..> F : body" in res.stdout
+    assert ("bodies: 2 dependencies read from names in bodies, touching the focus; 2 types "
+            "only through them: G, U (--body all, --body none)") in res.stderr
+    assert "body dependency 3" in res.stderr   # the repository line counts them apart
+    res = run("draw.py", tmp_path / "ir.json", "--focus", "F", "--hops", "2", "--body", "none")
+    assert ": body" not in res.stdout
+    assert "bodies: dependencies read from names in bodies are left out" in res.stderr
+    res = run("draw.py", tmp_path / "ir.json", "--focus", "F", "--hops", "2", "--max-types", "3")
+    assert res.returncode == 3
+    assert "  --body none: 2 types, without the classes only a body relation brings in" \
+        in res.stderr

@@ -6,7 +6,8 @@
 Prints type/relation counts, namespaces, the most connected types, common
 annotations, unresolved references and parse diagnostics; with --focus, then
 the members and relations of that type. With --type, prints only the members
-and relations of the given types.
+and relations of the given types. Relations read from names in bodies (`evidence`
+"body") are counted apart, and listed only with --type and --focus, marked [body].
 """
 
 from __future__ import annotations
@@ -50,7 +51,8 @@ def describe(ir: IR, tid: str) -> None:
         for r in rels:
             extra = " ".join(x for x in (r.multiplicity, f"via {r.via}" if r.via else None,
                                          f"[{names[getattr(r, end)]}]"
-                                         if getattr(r, end) in names else None) if x)
+                                         if getattr(r, end) in names else None,
+                                         "[body]" if r.evidence == "body" else None) if x)
             print(f"  {label:3s} {r.kind:11s} {getattr(r, other)}  {extra}".rstrip())
 
 
@@ -64,9 +66,13 @@ def _inside(t, outer: str, types: dict) -> bool:
 
 
 def counts(ir: IR) -> str:
-    """One line: files, types, relations by kind, unresolved by reason, diagnostics."""
-    kinds = Counter(r.kind for r in ir.relations)
+    """One line: files, types, relations by kind (those from bodies apart), unresolved by
+    reason, diagnostics."""
+    kinds = Counter(r.kind for r in ir.relations if r.evidence != "body")
     rel_summary = ", ".join(f"{k} {v}" for k, v in sorted(kinds.items())) or "none"
+    body = sum(r.evidence == "body" for r in ir.relations)
+    if body:
+        rel_summary += f", body dependency {body}"
     reasons = Counter(u.reason for u in ir.unresolved)
     split = ", ".join(f"{reasons[r]} {label}" for r, label in (
         ("ambiguous", "ambiguous"), ("outside", "outside the sources"),
@@ -78,10 +84,11 @@ def counts(ir: IR) -> str:
 
 
 def degree(ir: IR) -> Counter:
-    """Type id -> how many distinct project types it is related to, either way."""
+    """Type id -> how many distinct project types its declarations relate it to, either way
+    (names in bodies relate a type to many more)."""
     types = ir.type_index()
     pairs = {frozenset((r.from_, r.to)) for r in ir.relations
-             if r.from_ in types and r.to in types and r.from_ != r.to}
+             if r.from_ in types and r.to in types and r.from_ != r.to and r.evidence != "body"}
     return Counter(t for pair in pairs for t in pair)
 
 
@@ -142,11 +149,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     kinds = Counter(t.kind for t in ir.types)
-    rels = Counter(r.kind for r in ir.relations)
+    declared = [r for r in ir.relations if r.evidence != "body"]
+    rels = Counter(r.kind for r in declared)
+    body = len(ir.relations) - len(declared)
     print(f"root: {ir.root}  languages: {', '.join(ir.languages) or '-'}  files: {ir.files}")
     print(f"types: {len(ir.types)} ({', '.join(f'{k} {v}' for k, v in kinds.most_common())})")
-    print(f"relations: {len(ir.relations)} "
-          f"({', '.join(f'{k} {v}' for k, v in rels.most_common()) or 'none'})")
+    print(f"relations: {len(declared)} "
+          f"({', '.join(f'{k} {v}' for k, v in rels.most_common()) or 'none'})"
+          + (f"; and {body} dependencies read from names in bodies (--type lists them)"
+             if body else ""))
 
     namespaces = Counter(t.namespace or "(none)" for t in ir.types)
     print("\nnamespaces:")

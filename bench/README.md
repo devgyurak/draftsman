@@ -68,9 +68,12 @@ edges at the focus class that have no basis in the source.
 - **Uses that never name a type are not in the recall denominators** (a call on a field of
   that type, a nested class using its outer class's field). Counting them would take type
   inference. This lowers the body-only recall every arm is measured against, the measure
-  Draftsman is expected to lose, so it slightly favours Draftsman.
-- Draftsman reads declarations, not method bodies; relations found only in bodies are
-  reported as recall it is expected to lose.
+  Draftsman up to 0.3.0 is expected to lose, so it slightly favours Draftsman.
+- Both rounds so far measured Draftsman up to 0.3.0, which reads declarations, not
+  method bodies; relations found only in bodies are reported as recall it is expected to
+  lose. Later versions read Java bodies too (issue #2: `evidence: "body"`, drawn around
+  the focus by default), so a round on one of them measures a different tool on that
+  measure: say which version a figure is for before comparing it with these two rounds.
 
 ## Change log
 

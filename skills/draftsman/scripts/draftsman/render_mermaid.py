@@ -6,7 +6,7 @@ import json
 import re
 
 from .model import STEREOTYPES, VISIBILITY_SYMBOLS, Member, Type
-from .scene import Scene
+from .scene import Scene, is_body
 
 
 def _sanitize(text: str) -> str:
@@ -141,6 +141,8 @@ def render(scene: Scene) -> str:
             out.append(f"  {a} {arrow}{mult} {b}{label}")
         elif getattr(r, "label", None):
             out.append(f"  {a} ..> {b} : {_mm_type(r.label)}")
+        elif is_body(r):   # read from a name in a body, not from a declaration
+            out.append(f"  {a} ..> {b} : body")
         else:
             out.append(f"  {a} ..> {b}")
     for e in scene.inferred:

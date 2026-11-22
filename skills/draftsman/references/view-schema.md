@@ -16,6 +16,7 @@ unambiguous. A name that matches nothing in ir.json is an error.
 | `members` | `"all"` \| `"public"` \| `"none"`, or `{type glob: level}` | `"all"` | member detail (see below); enum constants always shown unless `"none"` |
 | `externals` | bool | `false` | draw external supertypes (e.g. `CrudRepository`) as `<<external>>` boxes |
 | `annotations` | bool | `true` | draw the dependencies annotations create (`via` `@Name`, see below) |
+| `body` | `"focus"` \| `"all"` \| `"none"` | `"focus"` with `focus`, else `"none"` | draw the dependencies names in bodies create (`evidence` `"body"`, see below) |
 | `groups` | `[{name, members: [type]}]` | `[]` | clusters (Mermaid `namespace`); a type may be in one group only |
 | `highlights` | `[{target, reason}]` | `[]` | red outline; `reason` is kept as a comment |
 | `notes` | `[{target, text}]` | `[]` | note attached to a type |
@@ -76,6 +77,25 @@ focus on the annotation type itself does show the types that carry it, one hop a
 ways, as usual. `"annotations": false` leaves out the dependencies that only annotations
 create altogether.
 
+## body
+
+A name written in a body (`new Foo()`, `Foo.bar()`, a cast, a local variable's type) is a
+dependency marked `evidence: "body"` (Java only, see `ir-schema.md`). Bodies name far more
+types than declarations do, so they draw less by default:
+
+- `"focus"` (the default with `focus`): only the body relations that touch the focus (or
+  a nested type folded into it), both ways. The class at the other end is drawn, but the
+  neighbourhood does not go on from it: a helper the focus calls brings in itself, not
+  everything the helper is related to.
+- `"all"`: also the body relations between any two types the diagram draws. They still
+  bring in no type beyond the focus's.
+- `"none"` (the default without `focus`): none.
+
+Between two types, a signature's dependency is drawn rather than an annotation's, and
+either rather than a body's. A body relation is dotted more finely than a signature's and,
+in Mermaid, labelled `body`. The HTML viewer gets them all and shows them as its reader
+moves the focus; its Bodies button hides them.
+
 ## members
 
 A single level applies to every class. An object sets it per class: keys are type
@@ -111,7 +131,7 @@ view's setting for one render, e.g. to export the same view with and without mem
 - **html** — one self-contained file (ELK inlined when installed). It contains *every*
   class the view allows; `focus`/`hops` only set where it starts. With `focus`, nested
   types are folded as in the focus diagram; search still finds them, in their box. Readers can search,
-  change focus and hops, toggle dependencies/inferred edges/cycle highlighting, expand
+  change focus and hops, toggle dependencies/body relations/inferred edges/cycle highlighting, expand
   members, and read your notes, highlights, cycles and unresolved references in a side
   panel.
 
