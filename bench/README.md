@@ -192,6 +192,8 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
   (`run.py --model --effort`, recorded per run). It asks whether a weaker model draws
   more edges without a basis or misses more relations, arm by arm, and whether Haiku with
   Draftsman matches Opus without a plugin for less. It is not a fourth round: compare it
-  with v3, not in line with v1 to v3. Arm C is not Haiku alone: its skill explores through
-  a subagent that night-market pins to Sonnet. `pool_edges.py` carries over the labels of
-  rounds 1 to 3 into it, a label depending only on the edge and the source.
+  with v3, not in line with v1 to v3. Arm C's skill may explore through a subagent that
+  night-market pins to Sonnet, but no run of v3 or v3-haiku called one: each ran on its
+  own model only. `pool_edges.py` carries over the labels of rounds 1 to 3 into it, a
+  label depending only on the edge and the source, and names its edges `V3S-` so that
+  the labeller does not read the model.

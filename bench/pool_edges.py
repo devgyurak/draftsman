@@ -60,7 +60,8 @@ def main() -> None:
 
     keys = sorted(pooled)
     random.Random(tasks['selection']['seed']).shuffle(keys)
-    prefix = 'E' if args.round == 'v1' else args.round[0].upper() + args.round[1:] + '-'
+    # a series keeps what changed out of its ids, which the labeller reads (V3S-0001)
+    prefix = 'E' if args.round == 'v1' else re.sub(r'-.*', 'S', args.round).upper() + '-'
     carried = {}
     # v1, v2, ... before this round; the earliest keeps an edge, which later ones carried. A
     # series of its own on round N's configuration with something changed (v3-haiku: another
