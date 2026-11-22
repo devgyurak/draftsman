@@ -72,6 +72,7 @@ class Resolver:
         self._suffix_cache: dict[str, Optional[str]] = {}
         self._tail_cache: dict[str, Optional[str]] = {}
         self._field_cache: dict[tuple[str, str], bool] = {}
+        self._ancestors_cache: dict[tuple[str, bool], list[str]] = {}
 
     # ------------------------------------------------------------ helpers
 
@@ -252,8 +253,12 @@ class Resolver:
         """External supertypes of the type, also those reached through project ones;
         ``starred`` adds what a supertype left unresolved may be through each wildcard
         import of its file (`HashMap` under `import java.util.*`)."""
+        if seen is None:   # asked for the type alone: the same answer every time
+            key = (rtype.qualified_name, starred)
+            if key not in self._ancestors_cache:
+                self._ancestors_cache[key] = self._external_ancestors(rtype, set(), starred)
+            return self._ancestors_cache[key]
         out: list[str] = []
-        seen = set() if seen is None else seen
         stack = [rtype]
         while stack:
             t = stack.pop()

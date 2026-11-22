@@ -325,11 +325,13 @@ class Extractor:
                     f"{len(spans) - MAX_ERROR_SPANS} more syntax errors after this line",
                     end_line=spans[-1][1]))
 
-        type_matches, member_matches, other = [], [], []
+        type_matches, member_matches, other, bodies = [], [], [], []
         namespaces: dict[int, str] = {}
         inline: list = []
         for _, caps in ts.QueryCursor(self.query).matches(tree.root_node):
-            if _root(caps, "type."):
+            if any(k.startswith("body.") for k in caps):
+                bodies.append(caps)   # most matches of a file: read apart (_body_refs)
+            elif _root(caps, "type."):
                 type_matches.append(caps)
             elif _root(caps, "member."):
                 member_matches.append(caps)
@@ -535,7 +537,7 @@ class Extractor:
         for nid in sorted(annotation_refs, key=lambda i: annotation_refs[i]["annotation.ref"][0].start_byte):
             self._annotation_ref(annotation_refs[nid], src, scope, types_by_node,
                                  set(annotation_refs))
-        self._body_refs(other, src, scope, types_by_node, members_by_node)
+        self._body_refs(bodies, src, scope, types_by_node, members_by_node)
 
         # what the build imports into every file (implicit usings), after the file's own
         for ns, origin in build_imports:
@@ -580,7 +582,7 @@ class Extractor:
                 stack.extend(reversed(found))
         owner.annotation_refs.append(ann)
 
-    def _body_refs(self, other, src, scope, types_by_node, members_by_node) -> None:
+    def _body_refs(self, matches, src, scope, types_by_node, members_by_node) -> None:
         """Names written in bodies, each with what may hide it there (query-protocol.md)."""
         regions: set[int] = set()
         inits: dict[int, str] = {}           # initializer block -> its `via`
@@ -588,10 +590,8 @@ class Extractor:
         refs, declared = [], []
         unread: set[int] = set()   # type nodes that are no name of the scope
         blind: set[int] = set()    # class bodies whose inherited members are not known
-        for caps in other:
-            if (n := _first(caps, "body.region")) is not None:
-                regions.add(n.id)
-            elif (n := _first(caps, "body.init")) is not None:
+        for caps in matches:
+            if (n := _first(caps, "body.init")) is not None:
                 # only a named type's own: a block in an anonymous class is in a body already
                 if self._owner(n, types_by_node)[0] is not None:
                     regions.add(n.id)
@@ -600,45 +600,94 @@ class Extractor:
                     else:
                         head = _text(n, src).split("{", 1)[0].strip()
                         inits[n.id] = f"{head} {{}}" if head else "{}"
-            elif (n := _first(caps, "body.class")) is not None:
+                continue
+            if (n := _first(caps, "body.class")) is not None:
                 sup = _first(caps, "body.class.super")
                 if sup is not None:
                     classes.setdefault(n.id, []).append(_text(sup, src))
-            elif (r := _root(caps, "body.ref.")) is not None:
-                position, node = r
-                if position == "receiver" and any(c.type == "super" for c in node.parent.children):
-                    continue   # `X.super.m()`: X is in type position, captured as such
-                refs.append(r)
-            elif (n := _first(caps, "body.var")) is not None:
-                declared.append((n, "variables"))
-            elif (n := _first(caps, "body.type")) is not None:
-                declared.append((n, "types"))
-            elif (n := _first(caps, "body.unread")) is not None:
-                unread.add(n.id)
-            elif (n := _first(caps, "body.blind")) is not None:
-                blind.add(n.id)
+                continue
+            # the rest capture one node each (a type name in a body is one match of many)
+            for cap, nodes in caps.items():
+                n = nodes[0]
+                if cap.startswith("body.ref."):
+                    position = cap[len("body.ref."):]
+                    if position == "receiver" and any(c.type == "super" for c in n.parent.children):
+                        continue   # `X.super.m()`: X is in type position, captured as such
+                    refs.append((position, n))
+                elif cap == "body.region":
+                    regions.add(n.id)
+                elif cap == "body.var":
+                    declared.append((n, "variables"))
+                elif cap == "body.type":
+                    declared.append((n, "types"))
+                elif cap == "body.unread":
+                    unread.add(n.id)
+                elif cap == "body.blind":
+                    blind.add(n.id)
         if not refs:
             return
         names: dict[int, BodyNames] = {}   # by the node of the member or initializer
 
-        def anchor(cur: ts.Node, start: int):
-            """(node id, via, member) of the member or initializer ``cur`` lies in, or None."""
-            if cur.id in inits:
-                return cur.id, inits[cur.id], None
-            members = members_by_node.get(cur.id)
-            if not members:
-                return None
+        # what every node lies in, worked out once per node: names in one member share
+        # their way up. anchors: the member or initializer node at or above a node, None at
+        # the named type; ups: (the named type, whether a body is on the way, the
+        # supertypes of the anonymous and local classes below the member, innermost first),
+        # or no type when an annotation or a blind class body is on the way
+        anchors: dict[int, Optional[ts.Node]] = {}
+        ups: dict[int, tuple] = {}
+        no_type = (None, False, ())
+
+        def anchor_of(cur: ts.Node) -> Optional[ts.Node]:
+            chain = []
+            while cur is not None and cur.id not in anchors:
+                if cur.id in types_by_node:
+                    anchors[cur.id] = None
+                    break
+                if cur.id in inits or members_by_node.get(cur.id):
+                    anchors[cur.id] = cur
+                    break
+                chain.append(cur)
+                cur = cur.parent
+            found = anchors.get(cur.id) if cur is not None else None
+            for c in chain:
+                anchors[c.id] = found
+            return found
+
+        def up(cur: ts.Node) -> tuple:
+            chain = []
+            while cur is not None and cur.id not in ups:
+                if cur.type in self.spec.annotation_nodes or cur.id in blind:
+                    ups[cur.id] = no_type   # an annotation's arguments are no body, even inside one
+                    break
+                if cur.id in types_by_node:
+                    ups[cur.id] = (cur, False, ())
+                    break
+                chain.append(cur)
+                cur = cur.parent
+            got = ups[cur.id] if cur is not None else no_type
+            for c in reversed(chain):
+                owner, in_body, around = got
+                if owner is not None:
+                    a = anchor_of(c)
+                    around = () if a is None or a.id == c.id else (
+                        ((classes[c.id],) if c.id in classes else ()) + around)
+                    got = (owner, in_body or c.id in regions, around)
+                ups[c.id] = got
+            return got
+
+        def place(a: ts.Node, start: int) -> tuple:
+            """(node id, via, member) of the member or initializer node ``a``."""
+            if a.id in inits:
+                return a.id, inits[a.id], None
+            members = members_by_node[a.id]
             # several declarators: the one whose name comes last before the name
             rm = max((m for m in members if m.at <= start), key=lambda m: m.at, default=members[0])
-            return cur.id, rm.member.name, rm
+            return a.id, rm.member.name, rm
 
         for node, kind in declared:
-            cur = node.parent
-            while cur is not None and cur.id not in types_by_node:
-                if (a := anchor(cur, node.start_byte)) is not None:
-                    getattr(names.setdefault(a[0], BodyNames()), kind).add(_text(node, src))
-                    break
-                cur = cur.parent
+            if (a := anchor_of(node.parent)) is not None:
+                key = place(a, node.start_byte)[0]
+                getattr(names.setdefault(key, BodyNames()), kind).add(_text(node, src))
         # `T` in `<T extends Foo>` is declared there; `Inner` in `o.new Inner()` is o's
         not_refs = {n.id for n, _ in declared} | unread
         # a receiver is a dotted name, not an expression (`this.x.m()`, `a[0].B.m()`)
@@ -648,26 +697,16 @@ class Extractor:
         for position, node in sorted(refs, key=lambda r: r[1].start_byte):
             if node.parent.id in whole:
                 continue   # `Foo` in `p.Foo`: the whole name is recorded
-            in_body, place, around = False, None, []
-            cur = node.parent
-            while cur is not None and cur.id not in types_by_node:
-                if cur.type in self.spec.annotation_nodes or cur.id in blind:
-                    break   # an annotation's arguments are no body, even inside one
-                in_body |= cur.id in regions
-                if place is None:
-                    if cur.id in classes:
-                        around.append(classes[cur.id])
-                    place = anchor(cur, node.start_byte)
-                cur = cur.parent
-            else:
-                if cur is None or place is None or not in_body:
-                    continue
-                key, via, rm = place
-                parts = self._parts(node)
-                types_by_node[cur.id].body_refs.append(RawBodyRef(
-                    ".".join(_text(n, src) for n in parts), position,
-                    [(_line(n), _utf16_col(n, src)) for n in parts], via, scope, rm,
-                    names.setdefault(key, BodyNames()), around))
+            owner, in_body, around = up(node.parent)
+            a = anchor_of(node.parent)
+            if owner is None or a is None or not in_body:
+                continue
+            key, via, rm = place(a, node.start_byte)
+            parts = self._parts(node)
+            types_by_node[owner.id].body_refs.append(RawBodyRef(
+                ".".join(_text(n, src) for n in parts), position,
+                [(_line(n), _utf16_col(n, src)) for n in parts], via, scope, rm,
+                names.setdefault(key, BodyNames()), list(around)))
 
     def _parts(self, node: ts.Node) -> list[ts.Node]:
         """The identifiers of a dotted name, without the annotations, type arguments and
