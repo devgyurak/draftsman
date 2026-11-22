@@ -115,3 +115,51 @@
 (type_alias_declaration name: (type_identifier) @alias value: (_) @alias.type)
 ; `import Inner = Outer.Inner;` (an import alias of a namespace member)
 (import_alias (identifier) @alias . (nested_identifier) @alias.type)
+
+; ---------------------------------------------------------------- bodies
+; where names are read: bodies of methods and accessors, field initializers, static
+; blocks, enum members' values
+(method_definition body: (statement_block) @body.region)
+(public_field_definition value: (_) @body.region)
+(enum_assignment value: (_) @body.region)
+(class_static_block) @body.init
+
+; names written in a body. A type name stands where only a type can (`: Foo`, `as Foo`,
+; `<Foo>`, `implements Foo`); any other name is a value, which a variable may be: `new
+; Foo()`, `Foo.m()`, `x instanceof Foo`, `typeof Foo`, `<Foo />`, `Foo` as an argument.
+; A dotted value is captured as a whole and by its parts (the extractor keeps the whole).
+; A plain value that starts lower-case is left out: it is a variable or a function in all
+; but a class named so, which is then missed, never misread, and the extraction is faster
+(type_identifier) @body.ref.type
+(nested_type_identifier) @body.ref.type
+((identifier) @body.ref.receiver (#match? @body.ref.receiver "^[^a-z]"))
+(member_expression object: [(identifier) (member_expression)]) @body.ref.receiver
+(shorthand_property_identifier) @body.ref.receiver
+; a decorator's arguments are no body (queries/tsx.scm adds JSX's closing tags)
+(decorator) @body.blind
+
+; what may hide one: variables, functions, local types and type parameters declared in
+; the member
+(variable_declarator name: (identifier) @body.var)
+(required_parameter pattern: (identifier) @body.var)
+(optional_parameter pattern: (identifier) @body.var)
+(arrow_function parameter: (identifier) @body.var)
+(catch_clause parameter: (identifier) @body.var)
+(for_in_statement left: (identifier) @body.var)
+(function_declaration name: (identifier) @body.var)
+(generator_function_declaration name: (identifier) @body.var)
+(function_expression name: (identifier) @body.var)
+(pair_pattern value: (identifier) @body.var)
+(array_pattern (identifier) @body.var)
+(rest_pattern (identifier) @body.var)
+(assignment_pattern left: (identifier) @body.var)
+(shorthand_property_identifier_pattern) @body.var
+(type_parameter name: (type_identifier) @body.type)
+(class_declaration name: (type_identifier) @body.type)
+(abstract_class_declaration name: (type_identifier) @body.type)
+(class name: (type_identifier) @body.type)
+(interface_declaration name: (type_identifier) @body.type)
+(type_alias_declaration name: (type_identifier) @body.type)
+(enum_declaration name: (identifier) @body.type)
+(mapped_type_clause name: (type_identifier) @body.type)
+(infer_type (type_identifier) @body.type)

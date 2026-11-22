@@ -192,12 +192,13 @@ SCOPE_RULES = {
         # `Receipt.Companion.Parser`: the types of a plain companion are Receipt's
         "kotlin": ("StripeGateway", "dependency", "Parser"),
     },
-    # a name written in a body (issue #2); the other languages read no bodies yet (#5). The
-    # witness's fourth item is the `evidence` it must carry: a signature added later would
-    # make the same pair without the body rule
+    # a name written in a body (issues #2 and #5); the other languages read no bodies yet
+    # (#5). The witness's fourth item is the `evidence` it must carry: a signature added later
+    # would make the same pair without the body rule
     "name in a body": {
         **_ALL,
         "java": ("StripeGateway", "dependency", "Money", "body"),   # `new Receipt.Money(...)`
+        "typescript": ("StripeGateway", "dependency", "Money", "body"),   # `: Receipt.Money`
     },
     "package re-export by wildcard": {
         **_ALL,

@@ -114,6 +114,12 @@ class TypeScriptSpec(LanguageSpec):
     visibility_keywords = {"public": "public", "protected": "protected", "private": "private"}
     import_suffix_match = True
     inherited_member_types = False
+    nested_types_in_scope = False
+    receiver_part_nodes = frozenset({"identifier", "property_identifier", "member_expression",
+                                     "shorthand_property_identifier"})
+    type_only_kinds = frozenset({"interface"})
+    fields_in_scope = False
+    receiver_package_heads = False
 
     def type_text(self, type_node, text, src):
         return _PADDED_DOT.sub(".", text)   # `rxjs          .Observable`, see _import_types
@@ -194,4 +200,5 @@ class TypeScriptSpec(LanguageSpec):
 class TsxSpec(TypeScriptSpec):
     name = "tsx"
     grammar = "tsx"
+    extra_queries = ("tsx",)
     extensions = (".tsx",)

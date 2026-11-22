@@ -15,6 +15,7 @@ export class StripeGateway implements PaymentGateway {
   }
 
   async charge(order: Order): Promise<Receipt> {
+    const fee: Receipt.Money = { cents: 0, currency: 'usd' };
     return new Receipt();
   }
 }
