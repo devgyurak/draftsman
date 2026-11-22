@@ -133,7 +133,7 @@ reported as undecided by the rules above:
 | Same simple name that the focus file's imports do not decide, though the other end would | stays *undecidable*, as *Names* says; counted and reported |
 | An outer type drawn as using its nested type, with no use | *wrong kind or direction* as drawn, *self* at the top level; it stays out of the main scoring |
 | A nested type drawn under its outer and inner names run together (`ConnectionResponse` for `Connection.Response`, `RangeSpans` for `Range.Spans`), a name the checkout does not have | the nested type, renamed, as `Outer_Inner`; not a class that does not exist (third round, as the first round's labels already did) |
-| A type drawn under its package's last name and its own run together (`UnixBuffer` for `io.netty.channel.unix.Buffer`), or a nested type under a short name its drawn supertypes fit (`HttpRequest` inheriting `HttpBase` for `HttpConnection.Request`, though a JDK `HttpRequest` is imported elsewhere) | that type, renamed (v3-haiku) |
+| A type drawn under its package's last name and its own run together (`UnixBuffer` for `io.netty.channel.unix.Buffer`), or a nested type under a short name its drawn supertypes fit (`HttpRequest` inheriting `HttpBase` for `HttpConnection.Request`, though a JDK `HttpRequest` is imported elsewhere) | that type, renamed (a later series of the third round) |
 
 ## Labelling procedure
 
