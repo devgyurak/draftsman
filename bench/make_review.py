@@ -29,7 +29,10 @@ ALWAYS = {'unsupported', 'indirect', 'wrong_kind_or_direction', 'undecidable'}
 FLAGGED = {'v1': {'E0032', 'E0259', 'E0071', 'E0149', 'E0132', 'E0461', 'E0256', 'E0243',
            'E0278', 'E0227', 'E0206', 'E0275'},
            'v2': {f'V2-{n:04d}' for n in (6, 116, 264, 498, 79, 356, 37, 188, 393, 313, 29, 262, 9,
-                                          308, 340, 94, 121, 197, 436, 123, 339)}}
+                                          308, 340, 94, 121, 197, 436, 123, 339)},
+           # the labeller's report: rows to look at first, and those whose two levels differ
+           'v3': {f'V3-{n:04d}' for n in (74, 226, 411, 365, 285, 442, 425, 235,
+                                          36, 398, 111, 409, 199, 381)}}
 _PD = 'common/src/main/java/io/netty/util/internal/PlatformDependent.java:622'
 _SSL = 'microbench/src/main/java/io/netty/microbench/handler/ssl/AbstractSslEngineBenchmark.java:128'
 _ANON = 'RUBRIC "Decided at review": anonymous class as a node, strongest evidence of the pair'
