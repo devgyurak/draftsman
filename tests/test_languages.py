@@ -192,6 +192,12 @@ SCOPE_RULES = {
         # `Receipt.Companion.Parser`: the types of a plain companion are Receipt's
         "kotlin": ("StripeGateway", "dependency", "Parser"),
     },
+    # a name written in a body (`evidence` "body", issue #2); the other languages read no
+    # bodies yet, each a follow-up issue of its own
+    "name in a body": {
+        **_ALL,
+        "java": ("StripeGateway", "dependency", "Money"),   # `new Receipt.Money(...)` in charge
+    },
     "package re-export by wildcard": {
         **_ALL,
         # shop/pay/__init__.py: from .gateway import *

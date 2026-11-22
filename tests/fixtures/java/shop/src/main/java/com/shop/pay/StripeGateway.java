@@ -9,6 +9,9 @@ public class StripeGateway implements PaymentGateway {
 
     @Override
     public Receipt charge(Order order) {
+        if (fee == null) {
+            fee = new Receipt.Money(0, "usd");   // a name in a body: the only dependency on Money
+        }
         return null;
     }
 }
