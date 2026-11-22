@@ -17,8 +17,9 @@ Notes for anyone with `view.json` files written against a development build:
   `tree-sitter-language-pack` fetches each grammar from GitHub on first use; in the
   benchmark that fetch failed twice (HTTP 500), `draw.py` ended in a traceback, and one
   run drew its diagram by hand from `grep`. `draw.py` and `extract.py` now exit 2 with
-  what failed and what to do: try again or tell the user, and not draw by hand. Added
-  after the benchmark measured 0.4.1 (`30d8f04`); it changes only that failure.
+  what failed and what to do: try again or tell the user, and not draw by hand. It
+  changes only that failure, which the benchmark's images no longer meet: they fetch the
+  grammar when built.
 - **`draw.py` warns when a focus diagram is drawn from part of a project.** Run on Haiku,
   the benchmark's Draftsman arm extracted one module of Netty in two of six runs
   (`handler/src/main/java`, `codec-socks`) and so missed the focus's relations to the
