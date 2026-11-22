@@ -127,7 +127,13 @@ def main() -> None:
                     'verdict': verdict, 'new_label_drawn': drawn, 'new_file_line_drawn': line_drawn,
                     'new_label_top': top_, 'new_file_line_top': line_top, 'reviewer_note': note})
     with open(sheet, 'w', newline='') as fh:
-        w = csv.DictWriter(fh, fieldnames=list(out[0]))
+        # nothing labelled anew (every edge carried over) still leaves an empty sheet
+        fields = list(out[0]) if out else [
+            *csv.DictReader(open(labels / 'blind_edges.csv', newline='')).fieldnames,
+            'review_because', 'focus_incident', 'cited_drawn', 'cited_top', 'files_naming_both',
+            'verdict', 'new_label_drawn', 'new_file_line_drawn', 'new_label_top',
+            'new_file_line_top', 'reviewer_note']
+        w = csv.DictWriter(fh, fieldnames=fields)
         w.writeheader()
         w.writerows(out)
     print(f'{len(must)} to review in full, {len(sample)} sampled of {len(rest)}; '

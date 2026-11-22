@@ -236,3 +236,9 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
     hand (after `30d8f04`, so not measured), and the images fetch the Java grammar when
     they are built: from the next round on, B's time leaves out that download, which every
     earlier B run included (how long it took was not measured).
+  - Labels and scores (v3-haiku-0.4.1): all 253 distinct edges had been labelled in an
+    earlier round, the hand-drawn run's included, so none went to a labeller or a reviewer
+    (`make_review.py` writes an empty sheet). Arm B's recall out of the focus in Netty is
+    1.00 against v3-haiku's 0.66 (declared relations; 0.61 → 1.00 with bodies), as on Opus;
+    no edge without a basis, as before. B alone, and six Netty runs: see above for what
+    that does and does not show.
