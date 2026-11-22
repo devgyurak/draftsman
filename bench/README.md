@@ -217,3 +217,22 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
   v3-haiku. It asks whether that warning changes what Haiku extracts; arms A and C are
   unchanged from v3-haiku, so they are not run again. `pool_edges.py` carries over the
   labels of rounds 1 to 3 and of v3-haiku, and names this series' edges `V3S2-`.
+  - Results (v3-haiku-0.4.1): 21 runs, all exit 0, the skill in all 21, $0.12. In Netty
+    four of the six runs began by extracting one module; all four got the warning and drew
+    again from the repository's root (in v3-haiku two of six began so, and neither drew
+    again). Two of six against four of six is noise at this size; what the series shows is
+    that the warning turned all four around. Arms A and C were not run again, so B's
+    figures here beside v3-haiku's A and C are runs from different times: saying more
+    than that, about B against A or C, takes a round with all three arms.
+  - In two runs the language pack's download of the Java grammar from GitHub failed with
+    HTTP 500, which no earlier round saw. `T2-spring-petclinic-OwnerRepository-B-2` tried
+    again and drew with `draw.py`; its time and turns include the retry.
+    `T2-jsoup-Safelist-B-2` waited, tried again, failed, then drew by reading the sources
+    with grep, and said so at the top of its answer (11 turns, 49 s): one of B's 21
+    diagrams here is drawn by hand, and is labelled and scored as drawn. It is kept: the
+    rubric's failures (no diagram, unparsable, a limit reached, a question asked) do not
+    cover it, and no rule reruns a run for an outside failure; one made after seeing the
+    results would not be fair. Since then `draw.py` exits 2 on it and says not to draw by
+    hand (after `30d8f04`, so not measured), and the images fetch the Java grammar when
+    they are built: from the next round on, B's time leaves out that download, which every
+    earlier B run included (how long it took was not measured).

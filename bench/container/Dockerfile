@@ -21,6 +21,9 @@ WORKDIR /home/bench
 COPY --chown=bench repos/ /opt/bench/repos/
 COPY --chown=bench plugins/ /opt/bench/plugins/
 RUN npm ci --prefix /opt/bench/plugins/draftsman/skills/draftsman/scripts --no-audit --no-fund
+# the language pack downloads each grammar on first use: fetch Java's now, so a run never
+# depends on GitHub (third-round runs and before downloaded it, and that time was theirs)
+RUN python3 -c "import tree_sitter_language_pack as t; t.get_language('java')"
 
 ARG DRAFTSMAN_COMMIT
 ARG NIGHT_MARKET_COMMIT
