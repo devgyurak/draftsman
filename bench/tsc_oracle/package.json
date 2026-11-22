@@ -1,0 +1,9 @@
+{
+  "name": "draftsman-tsc-oracle",
+  "private": true,
+  "type": "module",
+  "description": "The TypeScript compiler as the answer key for body relations (bench/tsc_oracle/oracle.py)",
+  "dependencies": {
+    "typescript": "5.9.3"
+  }
+}

@@ -55,7 +55,8 @@ def expected(root: Path, suffixes: Iterable[str], marker: str = "//>"
             seen: Counter = Counter()
             for item in m.group(1).split():
                 name, _, rest = item.partition("=")
-                answer, _, position = rest.partition("/")
+                # a TypeScript answer is a path (`p/foo.Foo/r`): the position follows the last /
+                answer, position = rest.rsplit("/", 1) if "/" in rest else (rest, "")
                 hits = [h.start() for h in re.finditer(rf"(?<![\w$]){re.escape(name)}(?![\w$])",
                                                        code)]
                 if seen[name] >= len(hits):
