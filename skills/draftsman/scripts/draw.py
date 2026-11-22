@@ -160,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
 
     report = Report(ir, view, scene, excludes, args.max_types, passed)
     if scene.focus and not from_ir:
-        report.part_of_repository(args.path, set(args.lang or LANGUAGES), excludes, argv)
+        report.part_of_repository(args.path, set(ir.languages), excludes, argv)
     if fmt != "html" and size(scene) > args.max_types:
         report.too_many()
         report.footer(ir_path)
@@ -188,6 +188,29 @@ def main(argv: list[str] | None = None) -> int:
     return code
 
 
+def _sources_outside(root: Path, inside: Path, langs: set[str], excludes: list[str],
+                     files: int = 1000, dirs: int = 5000) -> tuple[int, bool]:
+    """(how many source files of ``langs`` lie under ``root`` but not ``inside``, whether
+    that is all of them): counting stops after ``files`` of them or ``dirs`` directories."""
+    import os
+    from draftsman.langs import spec_for_path
+    from draftsman.langs.base import SKIP_DIRS
+    from extract import excluded
+    n = seen = 0
+    for dirpath, dirnames, filenames in os.walk(root):
+        here = Path(dirpath)
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and (here / d).resolve() != inside]
+        seen += 1
+        for fn in filenames:
+            spec = spec_for_path(fn)
+            if spec is not None and spec.name in langs and (here / fn).resolve() != inside and \
+                    not excluded((here / fn).relative_to(root).as_posix(), excludes):
+                n += 1
+        if n >= files or seen >= dirs:
+            return n, False
+    return n, True
+
+
 # what a project's root holds: a repository, a build that may have modules below it
 ROOT_MARKERS = (".git", "pom.xml", "settings.gradle", "settings.gradle.kts", "build.gradle",
                 "build.gradle.kts", "package.json", "pyproject.toml", "setup.py",
@@ -197,11 +220,15 @@ ROOT_MARKERS = (".git", "pom.xml", "settings.gradle", "settings.gradle.kts", "bu
 def repository_root(path: Path) -> Path | None:
     """The root of the project ``path`` lies in: going up, the last directory of the
     unbroken run of directories that carry a build or repository file (a module's
-    `pom.xml`, then the parent build's), or the first one with `.git`."""
+    `pom.xml`, then the parent build's), or the first one with `.git`. Never the home
+    directory, the filesystem's root or above: a `package.json` there is no project's."""
     cur = path.resolve()
     cur = cur if cur.is_dir() else cur.parent
+    home = Path.home().resolve()
     found = None
     for d in (cur, *cur.parents):
+        if d == home or d.parent == d:
+            break
         marked = any((d / m).exists() for m in ROOT_MARKERS) or any(d.glob("*.sln"))
         if marked:
             found = d
@@ -246,21 +273,20 @@ class Report:
                            argv: list[str]) -> None:
         """Warn when ``path`` is part of a larger project whose other sources were not read:
         the focus may be related to their types. The scope stays as asked."""
-        from extract import discover
         root = repository_root(path)
         inside = path.resolve()
         if root is None or root == inside:
             return
         # the test directories the extraction left out stay out
-        tests = [p for p in excludes if p in TEST_EXCLUDES]
-        others = [f for f, _ in discover(root, langs, tests)
-                  if not f.resolve().is_relative_to(inside)]
+        others, complete = _sources_outside(root, inside, langs,
+                                            [p for p in excludes if p in TEST_EXCLUDES])
         if not others:
             return
+        count = f"{others}" if complete else f"at least {others}"
         at = next(i for i, a in enumerate(argv) if not a.startswith("-")
                   and Path(a).resolve() == inside)   # <path> as it was written
         again = [*argv[:at], str(root), *argv[at + 1:]]
-        self.line(f"warning: extracted {path} only; {len(others)} more source files of "
+        self.line(f"warning: extracted {path} only; {count} more source files of "
                   f"{root} were not read, and the focus's relations to their types are "
                   "missing. To draw from the whole project:")
         self.lines.append("  " + shlex.join(["python3", sys.argv[0] or "draw.py", *again]))

@@ -270,3 +270,43 @@ def test_draw_warns_when_a_focus_is_drawn_from_part_of_a_project(tmp_path):
     (tmp_path / "b" / "src" / "main" / "java" / "q" / "B.java").unlink()
     assert "warning: extracted" not in run("draw.py", module, "--focus", "A",
                                            "--work", tmp_path / "w3").stderr
+
+
+def _write(root, files):
+    for name, text in files.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(text)
+
+
+def test_the_part_of_a_project_warning_counts_only_what_could_relate(tmp_path):
+    # another language in the same repository cannot relate to a Java focus
+    _write(tmp_path / "app", {
+        ".git/HEAD": "", "backend/pom.xml": "<project/>", "frontend/package.json": "{}",
+        "backend/src/main/java/shop/Order.java": "package shop; class Order { Item i; }",
+        "backend/src/main/java/shop/Item.java": "package shop; class Item { }",
+        "frontend/src/cart.ts": "export class Cart { }"})
+    res = run("draw.py", tmp_path / "app" / "backend", "--focus", "Order", "--work", tmp_path / "w")
+    assert res.returncode == 0, res.stderr
+    assert "warning: extracted" not in res.stderr
+    # a build file somewhere above the home directory's projects is no project's root, and
+    # nor is the home directory itself
+    _write(tmp_path / "home", {
+        "package.json": "{}", "other/Z.java": "class Z { }",
+        "scratch/proj/p/A.java": "package p; class A { B b; }",
+        "scratch/proj/p/B.java": "package p; class B { }"})
+    env = {**__import__("os").environ, "HOME": str(tmp_path / "home")}
+    res = subprocess.run([sys.executable, str(SCRIPTS / "draw.py"),
+                          str(tmp_path / "home" / "scratch" / "proj"), "--focus", "A",
+                          "--work", str(tmp_path / "w2")], capture_output=True, text=True, env=env)
+    assert res.returncode == 0, res.stderr
+    assert "warning: extracted" not in res.stderr
+
+
+def test_counting_the_sources_outside_stops_at_a_bound(tmp_path):
+    sys.path.insert(0, str(SCRIPTS))
+    from draw import _sources_outside
+    _write(tmp_path, {f"m{i}/X{i}.java": "class X { }" for i in range(5)})
+    inside = (tmp_path / "m0").resolve()
+    assert _sources_outside(tmp_path, inside, {"java"}, []) == (4, True)
+    assert _sources_outside(tmp_path, inside, {"java"}, [], files=2) == (2, False)
+    assert _sources_outside(tmp_path, inside, {"kotlin"}, []) == (0, True)

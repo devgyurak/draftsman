@@ -16,9 +16,10 @@ Notes for anyone with `view.json` files written against a development build:
   (`handler/src/main/java`, `codec-socks`) and so missed the focus's relations to the
   other modules' types (recall out of the focus 0.66, 1.00 on Opus). With a focus, when
   the path lies in a larger project (the run of directories with a `pom.xml`, a
-  `build.gradle`, a `package.json`, ... above it, or `.git`) whose other sources were
-  not read, the report says how many and gives the command that draws from the
-  project's root. It never widens the scope itself: one module may be what the user
+  `build.gradle`, a `package.json`, ... above it, or `.git`; never the home directory or
+  above) whose other sources of the languages extracted were not read, the report says
+  how many (counting stops at 1000: "at least") and gives the command that draws from
+  the project's root. It never widens the scope itself: one module may be what the user
   wants, and without a focus it is more likely to be.
 - **Names in Java method bodies are relations** (#2). A project type a body names, in
   type position (`new Foo()`, a cast, `instanceof`, a local variable's type, `X.class`,
