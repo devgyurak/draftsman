@@ -210,35 +210,16 @@ Changes to the prompt, the arms or the rubric after the pilot are listed here.
     runs it extracted one module (`handler/src/main/java`, `codec-socks`) instead of the
     repository, so the types of the other modules were not there to relate, and one run
     left dependencies out (`--relations`).
-- 2026-11-23, a second series on the third round's configuration (v3-haiku-0.4.1): arm B
-  only, 21 runs, on Draftsman 0.4.1 (`30d8f04`, whose `draw.py` warns when a focus
-  diagram is extracted from part of a project and gives the command for its root), the
-  image otherwise the third round's, `claude-haiku-5-5` at effort `medium` as in
-  v3-haiku. It asks whether that warning changes what Haiku extracts; arms A and C are
-  unchanged from v3-haiku, so they are not run again. `pool_edges.py` carries over the
-  labels of rounds 1 to 3 and of v3-haiku, and names this series' edges `V3S2-`.
-  - Results (v3-haiku-0.4.1): 21 runs, all exit 0, the skill in all 21, $0.12. In Netty
-    four of the six runs began by extracting one module; all four got the warning and drew
-    again from the repository's root (in v3-haiku two of six began so, and neither drew
-    again). Two of six against four of six is noise at this size; what the series shows is
-    that the warning turned all four around. Arms A and C were not run again, so B's
-    figures here beside v3-haiku's A and C are runs from different times: saying more
-    than that, about B against A or C, takes a round with all three arms.
-  - In two runs the language pack's download of the Java grammar from GitHub failed with
-    HTTP 500, which no earlier round saw. `T2-spring-petclinic-OwnerRepository-B-2` tried
-    again and drew with `draw.py`; its time and turns include the retry.
-    `T2-jsoup-Safelist-B-2` waited, tried again, failed, then drew by reading the sources
-    with grep, and said so at the top of its answer (11 turns, 49 s): one of B's 21
-    diagrams here is drawn by hand, and is labelled and scored as drawn. It is kept: the
-    rubric's failures (no diagram, unparsable, a limit reached, a question asked) do not
-    cover it, and no rule reruns a run for an outside failure; one made after seeing the
-    results would not be fair. Since then `draw.py` exits 2 on it and says not to draw by
-    hand (after `30d8f04`, so not measured), and the images fetch the Java grammar when
-    they are built: from the next round on, B's time leaves out that download, which every
-    earlier B run included (how long it took was not measured).
-  - Labels and scores (v3-haiku-0.4.1): all 253 distinct edges had been labelled in an
-    earlier round, the hand-drawn run's included, so none went to a labeller or a reviewer
-    (`make_review.py` writes an empty sheet). Arm B's recall out of the focus in Netty is
-    1.00 against v3-haiku's 0.66 (declared relations; 0.61 → 1.00 with bodies), as on Opus;
-    no edge without a basis, as before. B alone, and six Netty runs: see above for what
-    that does and does not show.
+- 2026-11-23, a second series on the third round's configuration (v3-haiku-0.4.1): all
+  three arms, 63 runs, on Draftsman 0.4.1, whose `draw.py` warns when a focus diagram is
+  extracted from part of a project and gives the command for its root, and exits 2 when the
+  language pack cannot download a grammar; `claude-haiku-5-5` at effort `medium` as in
+  v3-haiku. The image is the first round's with Draftsman's files replaced and the Java
+  grammar fetched when it is built, so unlike every earlier round no run downloads it: B's
+  time leaves that download out (how long it took was not measured). `pool_edges.py`
+  carries over the labels of rounds 1 to 3 and of v3-haiku, and names this series' edges
+  `V3S2-`.
+  - It replaces a first run of this series, arm B only on `30d8f04`, which was discarded
+    at the maintainer's request (it stays in the history); two of its runs met a failed
+    grammar download (HTTP 500), one then drawing by hand, which is why `draw.py` now
+    exits 2 there and the image fetches the grammar.
