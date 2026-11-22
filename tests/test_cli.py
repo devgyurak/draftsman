@@ -235,7 +235,10 @@ def test_draw_reports_and_narrows_body_relations(tmp_path):
     assert "body dependency 3" in res.stderr   # the repository line counts them apart
     res = run("draw.py", tmp_path / "ir.json", "--focus", "F", "--hops", "2", "--body", "none")
     assert ": body" not in res.stdout
-    assert "bodies: dependencies read from names in bodies are left out" in res.stderr
+    assert "bodies: dependencies read from names in bodies are left out (--body focus or all " \
+        "draws them)" in res.stderr
+    res = run("draw.py", tmp_path / "ir.json")   # without a focus, "focus" would draw none
+    assert "left out (--body all draws them)" in res.stderr
     res = run("draw.py", tmp_path / "ir.json", "--focus", "F", "--hops", "2", "--max-types", "3")
     assert res.returncode == 3
     assert "  --body none: 2 types, without the classes only a body relation brings in" \

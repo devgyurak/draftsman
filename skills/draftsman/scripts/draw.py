@@ -308,8 +308,11 @@ class Report:
         mode = self.view.body_mode
         if mode == "none":
             if any(is_body(r) for r in self.ir.relations):
+                # without a focus, "focus" has nothing to touch (the viewer aside)
+                which = "focus or all" if self.scene.focus or self.view.output == "html" \
+                    else "all"
                 self.line("bodies: dependencies read from names in bodies are left out "
-                          "(--body focus or all draws them)")
+                          f"(--body {which} draws them)")
             return
         drawn = sum(is_body(r) for r in self.scene.relations)
         if self.view.output == "html":
