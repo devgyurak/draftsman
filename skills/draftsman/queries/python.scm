@@ -14,6 +14,21 @@
 (import_statement name: (dotted_name) @import.module)
 (import_statement name: (aliased_import name: (dotted_name) @import.module alias: (identifier) @import.alias))
 
+; `__all__ = ["A", "B"]` (also `+=`): the names `from m import *` brings in; `__all__` in
+; any other form (`__all__.extend(...)`, `a_all + b_all`) cannot be read
+(module [(assignment left: (identifier) @_all (#eq? @_all "__all__") right: (_) @exports)
+         (expression_statement
+           (assignment left: (identifier) @_all (#eq? @_all "__all__") right: (_) @exports))])
+(module [(augmented_assignment left: (identifier) @_all (#eq? @_all "__all__")
+                               right: (_) @exports)
+         (expression_statement
+           (augmented_assignment left: (identifier) @_all (#eq? @_all "__all__")
+                                 right: (_) @exports))])
+(module [(call function: (attribute object: (identifier) @_all (#eq? @_all "__all__"))) @exports
+         (expression_statement
+           (call function: (attribute object: (identifier) @_all (#eq? @_all "__all__")))
+             @exports)])
+
 ; ---------------------------------------------------------------- types
 (class_definition name: (identifier) @name) @type.class
 
@@ -92,3 +107,76 @@
 (type_alias_statement left: (type (identifier) @alias) right: (type) @alias.type)
 (module (expression_statement (assignment left: (identifier) @alias)))
 (module (assignment left: (identifier) @alias))
+
+; ---------------------------------------------------------------- bodies
+; where names are read: methods' bodies and the values of assignments directly in a
+; class body (its fields' initializers); a method's decorators, parameters and return
+; type are not
+(function_definition body: (block) @body.region)
+(class_definition
+  body: (block (expression_statement (assignment left: (identifier) right: (_) @body.region))))
+(class_definition body: (block (assignment left: (identifier) right: (_) @body.region)))
+
+; names written in a body. Each is a value, which a variable may be, also in an
+; annotation (`x: Foo`): `Foo()`, `Foo.create()`, `isinstance(x, Foo)`, `except Foo`. A
+; dotted value is captured as a whole and by its parts (the extractor keeps the whole).
+; A plain name that starts lower-case is left out: a class named so is missed, never
+; misread
+((identifier) @body.ref.receiver (#match? @body.ref.receiver "^[^a-z]"))
+(attribute object: [(identifier) (attribute)]) @body.ref.receiver
+; no names of the scope: a keyword argument's name, the names in an import (it binds them,
+; below) and in `global`/`nonlocal`
+(keyword_argument name: (identifier) @body.unread)
+[(import_statement) (import_from_statement) (future_import_statement)
+ (global_statement) (nonlocal_statement)] @body.blind
+
+; a branch of a test of the platform or of the Python version (`if sys.platform ==
+; "win32":`) is decided by mypy for the platform it runs on, by pyright and ty for every
+; platform: no name in it is read, and a class it declares is no one class
+(if_statement condition: (_) @_test (#match? @_test "sys\\.(platform|version_info)")
+  consequence: (block) @body.guarded)
+(if_statement condition: (_) @_test (#match? @_test "sys\\.(platform|version_info)")
+  alternative: [(elif_clause consequence: (block) @body.guarded)
+                (else_clause body: (block) @body.guarded)])
+(elif_clause condition: (_) @_test (#match? @_test "sys\\.(platform|version_info)")
+  consequence: (block) @body.guarded)
+(if_statement
+  alternative: (elif_clause condition: (_) @_test (#match? @_test "sys\\.(platform|version_info)"))
+  alternative: (else_clause body: (block) @body.guarded))
+
+; what may hide one: parameters (of the method and of the functions and lambdas in it),
+; the names its statements bind, and local functions and classes
+(parameters (identifier) @body.var)
+(lambda_parameters (identifier) @body.var)
+(typed_parameter . (identifier) @body.var)
+(default_parameter name: (identifier) @body.var)
+(typed_default_parameter name: (identifier) @body.var)
+(list_splat_pattern (identifier) @body.var)
+(dictionary_splat_pattern (identifier) @body.var)
+(assignment left: (identifier) @body.var)
+(augmented_assignment left: (identifier) @body.var)
+(pattern_list (identifier) @body.var)
+(tuple_pattern (identifier) @body.var)
+(list_pattern (identifier) @body.var)
+(for_statement left: (identifier) @body.var)
+(for_in_clause left: (identifier) @body.var)
+(as_pattern_target (identifier) @body.var)
+(as_pattern_target (tuple (identifier) @body.var))
+(named_expression name: (identifier) @body.var)
+(nonlocal_statement (identifier) @body.var)
+(case_pattern . (dotted_name . (identifier) @body.var .) .)
+(function_definition name: (identifier) @body.var)
+(class_definition name: (identifier) @body.type)
+(function_definition type_parameters: (type_parameter
+  (type [(identifier) @body.type (constrained_type . (type (identifier) @body.type))
+         (splat_type (identifier) @body.type)])))
+(class_definition type_parameters: (type_parameter
+  (type [(identifier) @body.type (constrained_type . (type (identifier) @body.type))
+         (splat_type (identifier) @body.type)])))
+; an import in a function binds its names there (at the top of the file it is an import)
+(import_from_statement name: (dotted_name . (identifier) @body.import))
+(import_from_statement name: (aliased_import alias: (identifier) @body.import))
+(import_statement name: (dotted_name . (identifier) @body.import))
+(import_statement name: (aliased_import alias: (identifier) @body.import))
+; `global Foo` makes Foo a variable of the module, wherever the function stands
+(global_statement (identifier) @body.global)

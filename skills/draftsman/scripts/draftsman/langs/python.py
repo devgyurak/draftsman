@@ -47,6 +47,15 @@ class PythonSpec(LanguageSpec):
     builtins = frozenset(_BUILTINS)
     import_suffix_match = True
     inherited_member_types = False
+    receiver_part_nodes = frozenset({"identifier", "attribute"})
+    fields_in_scope = False          # a class attribute is `self.X` or `Cls.X` in a method
+    receiver_package_heads = False   # `models.Model()` goes through what the file imports
+    nested_types_in_bodies = False   # a method writes `Outer.Inner`
+    initializers_in_class_scope = True
+    rebinding_hides = True
+    module_imports_bind_heads = True
+    submodules_need_import = True
+    suffix_skips_no_package = True
 
     def package_root(self, root):
         # the way Python names modules: a root inside packages (django/db/models with
@@ -72,6 +81,14 @@ class PythonSpec(LanguageSpec):
         base = package[: len(package) - (dots - 1)] if dots > 1 else package
         rest = text[dots:]
         return ".".join([*base, rest] if rest else base)
+
+    def star_exports(self, name, scope, certain=False):
+        # `__all__` when the module has one, else every name not starting with `_`; an
+        # `__all__` that cannot be read (`a_all + b_all`) is taken to list every such name,
+        # except where that has to be certain
+        if scope.exports_unread:
+            return not certain and not name.startswith("_")
+        return name in scope.exports if scope.exports is not None else not name.startswith("_")
 
     def normalize_type(self, text):
         return _strip_quotes(text) if text else text
