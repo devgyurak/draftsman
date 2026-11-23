@@ -81,6 +81,8 @@ class RawBodyRef:
     # supertypes of the anonymous and local classes around the name, innermost first:
     # their members are in scope before the named type's
     classes: list[list[str]] = field(default_factory=list)
+    # how many type arguments each part is written with (LanguageSpec.arity), or None
+    arities: list[Optional[int]] = field(default_factory=list)
 
     @property
     def line(self) -> int:
@@ -100,6 +102,8 @@ class RawType:
     modifiers: list[str] = field(default_factory=list)
     annotations: list[str] = field(default_factory=list)
     generics: list[str] = field(default_factory=list)
+    # the generics count of each declaration merged into it (`Repo` and `Repo<T>`)
+    arities: set[int] = field(default_factory=set)
     members: list[RawMember] = field(default_factory=list)
     supers: list[RawSuper] = field(default_factory=list)
     annotation_refs: list[RawAnnotation] = field(default_factory=list)
@@ -687,7 +691,9 @@ class Extractor:
             if (n := _first(caps, "body.init")) is not None:
                 # only a named type's own: a block in an anonymous class is in a body already
                 if self._owner(n, types_by_node)[0] is not None:
-                    regions.add(n.id)
+                    # the body alone when the init is its declaration (whose parameters
+                    # are the body's names, and whose signature is no body)
+                    regions.add((_first(caps, "body.init.region") or n).id)
                     if (name := _first(caps, "body.init.name")) is not None:
                         inits[n.id] = _text(name, src)   # a compact constructor
                     elif (via := self.spec.init_via(n, src)) is not None:
@@ -715,7 +721,7 @@ class Extractor:
                     declared.append((n, "variables"))
                 elif cap == "body.field":
                     if (owner := self._owner(n, types_by_node)[0]) is not None:
-                        owner.body_fields.add(_text(n, src))
+                        owner.body_fields.add(self.spec.body_name_text(_text(n, src)))
                 elif cap == "body.generated":
                     if (owner := self._owner(n, types_by_node)[0]) is not None:
                         owner.body_fields.update(self.spec.generated_fields(n, src))
@@ -847,7 +853,8 @@ class Extractor:
                             (_text(node, src), fn.id, node.start_byte, imp))
                         continue
                     kind = "variables"
-                getattr(names.setdefault(key, BodyNames()), kind).add(_text(node, src))
+                getattr(names.setdefault(key, BodyNames()), kind).add(
+                    self.spec.body_name_text(_text(node, src)))
             elif self.spec.initializers_in_class_scope and kind in ("variables", "imports") \
                     and (cls := class_around(node.parent)) is not None:
                 in_class.setdefault(cls.id, set()).add(_text(node, src))
@@ -935,9 +942,9 @@ class Extractor:
                 # before the import, outside its function, or two imports of the name
                 ref_names = BodyNames(member_names.variables | {head}, member_names.types)
             types_by_node[owner.id].body_refs.append(RawBodyRef(
-                ".".join(_text(n, src) for n in parts), position,
+                ".".join(self.spec.body_name_text(_text(n, src)) for n in parts), position,
                 [(_line(n), _utf16_col(n, src)) for n in parts], via, ref_scope, rm,
-                ref_names, list(around)))
+                ref_names, list(around), [self.spec.arity(n) for n in parts]))
 
     def _enclosing(self, node: ts.Node, type_ids: set[int]) -> Optional[ts.Node]:
         """The function or the type whose body ``node`` stands in, or None."""

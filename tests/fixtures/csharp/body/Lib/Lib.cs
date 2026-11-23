@@ -8,6 +8,10 @@ namespace Lib
     public class Invoice
     {
     }
+
+    public class Box
+    {
+    }
 }
 
 namespace Lib.Extra

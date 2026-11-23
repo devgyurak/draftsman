@@ -89,13 +89,14 @@
 (property_declaration value: (_) @body.region)
 (variable_declarator name: (_) . (_) @body.region)
 (enum_member_declaration value: (_) @body.region)
-; bodies of no listed member: their `via` is CSharpSpec.init_via's
-(operator_declaration body: (_) @body.init)
-(conversion_operator_declaration body: (_) @body.init)
-(destructor_declaration body: (_) @body.init)
-(indexer_declaration value: (_) @body.init)
-(indexer_declaration accessors: (accessor_list) @body.init)
-(event_declaration accessors: (accessor_list) @body.init)
+; bodies of no listed member, whose parameters are its names: their `via` is
+; CSharpSpec.init_via's
+(operator_declaration body: (_) @body.init.region) @body.init
+(conversion_operator_declaration body: (_) @body.init.region) @body.init
+(destructor_declaration body: (_) @body.init.region) @body.init
+(indexer_declaration value: (_) @body.init.region) @body.init
+(indexer_declaration accessors: (accessor_list) @body.init.region) @body.init
+(event_declaration accessors: (accessor_list) @body.init.region) @body.init
 ; a primary constructor's base arguments: `class B(int x) : A(x)`
 (base_list (argument_list) @body.init)
 

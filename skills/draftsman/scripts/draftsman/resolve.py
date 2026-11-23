@@ -1066,8 +1066,10 @@ class _Builder:
     def _add(self, t: RawType) -> None:
         existing = self.types.get(t.qualified_name)
         if existing is None:
+            t.arities = {len(t.generics)}
             self.types[t.qualified_name] = t
             return
+        existing.arities.add(len(t.generics))
         # partial declarations (C# partial, TS declaration merging, Kotlin expect/actual)
         # merge by name; a class declaration wins over an interface of the same name,
         # and a Kotlin `expect` declaration is where the type is said to live
@@ -1270,6 +1272,9 @@ class _Builder:
                 continue
             if len(self.projects.get(target, ())) > 1:
                 continue   # one id, a type in each of several projects
+            if ref.arities and ref.arities[n - 1] is not None \
+                    and ref.arities[n - 1] not in self.types[target].arities:
+                continue   # `Repo<int>` is no Repo: another type of the name, further out
             line, col = ref.places[n - 1]
             self.body_uses.append((ref.scope.file, line, col, rtype.qualified_name, target))
             self.relations.append(Relation(rtype.qualified_name, target, "dependency",

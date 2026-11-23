@@ -66,12 +66,13 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     assert wrong == []
     # every project type is drawn, but a type's own name, the part of a longer name
     # (`Order` in `Order.Line`), in top-level statements, after `global::`, through an
-    # alias (`O`), and where a variable of the name has the type's name for its type
+    # alias (`O`), where a variable of the name has the type's name for its type
     # (`Order Order`: Roslyn reads `Order.Create()` as the type, `Order.Total` as the
-    # variable; the extractor reads neither)
+    # variable; the extractor reads neither), and where the arity written is not the
+    # nearest type's (`Box` beside Shop.Box<T>: Roslyn's is Lib.Box further out)
     missed = [(file, line, answer) for (file, line, col), (answer, position) in want.items()
               if answer in builder.types and (file, line, col) not in drawn]
-    own = [("Lib/Lib.cs", 17, "Lib.Extra.Receipt"), ("Shop/Bodies.cs", 30, "Shop.Bodies"),
+    own = [("Lib/Lib.cs", 21, "Lib.Extra.Receipt"), ("Shop/Bodies.cs", 30, "Shop.Bodies"),
            ("Shop/Order.cs", 9, "Shop.Order"), ("Shop/Order.cs", 10, "Shop.Order"),
            ("Shop/Order.cs", 14, "Shop.Order.Line"), ("Shop/Order.cs", 21, "Shop.Customer"),
            ("Shop/Order.cs", 26, "Shop.Status"), ("Shop/Order.cs", 40, "Shop.Money"),
@@ -86,7 +87,9 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     color_color = [("Shop/Hiding.cs", 11, "Shop.Order"), ("Shop/Hiding.cs", 17, "Shop.Money"),
                    ("Shop/Hiding.cs", 29, "Shop.Money"), ("Shop/Hiding.cs", 35, "Shop.Order"),
                    ("Shop/Hiding.cs", 77, "Shop.Customer")]
-    assert sorted(missed) == sorted(own + parts + top_level + global_ + alias + color_color)
+    arity = [("Shop/Signatures.cs", 14, "Lib.Box")]
+    assert sorted(missed) == sorted(own + parts + top_level + global_ + alias + color_color
+                                    + arity)
 
 
 def _body(ir) -> list[tuple]:

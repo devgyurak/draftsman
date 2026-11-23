@@ -247,6 +247,15 @@ class LanguageSpec:
         `X.razor.cs`, `X.xaml.cs`): they hide a type in its bodies as fields do."""
         return {}
 
+    def body_name_text(self, text: str) -> str:
+        """The name an identifier in a body is, as written (C#'s `@Order` is `Order`)."""
+        return text
+
+    def arity(self, part: "ts.Node") -> Optional[int]:
+        """How many type arguments a part of a name in a body is written with (C#'s
+        `Repo<int>`: 1, `Repo`: 0), or None where a type's arity does not choose it."""
+        return None
+
     def init_via(self, node: "ts.Node", src: bytes) -> Optional[str]:
         """The `via` of a body no listed member holds (`@body.init` without `.name`), or
         None for its text before `{` (Java's `static {}`)."""

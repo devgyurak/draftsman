@@ -350,10 +350,24 @@ class CSharpSpec(LanguageSpec):
     # `E.V`, and a bare name, which in `nameof(Order)` is a type
     annotation_value_args = frozenset({"member_access_expression", "identifier"})
 
+    def body_name_text(self, text):
+        return text.removeprefix("@")   # a verbatim identifier
+
+    def arity(self, part):
+        args = part.parent.child_by_field_name("type_arguments") if part.parent is not None \
+            and part.parent.type == "generic_name" else None
+        if args is None and part.parent is not None and part.parent.type == "generic_name":
+            args = next((c for c in part.parent.named_children
+                         if c.type == "type_argument_list"), None)
+        if args is None:
+            return 0
+        # `Repo<,>`: no type in it, a comma between two
+        return max(len(args.named_children), sum(1 for c in args.children if c.type == ",") + 1)
+
     def init_via(self, node, src):
-        # the body of an operator, a destructor, an indexer or an event's accessors, or a
+        # an operator, a destructor, an indexer or an event (their accessors), or a
         # primary constructor's base arguments (the constructor's, named as the class)
-        decl = node.parent
+        decl = node if node.type != "argument_list" else node.parent
         text = lambda n: src[n.start_byte:n.end_byte].decode("utf8", "replace")   # noqa: E731
         if decl.type == "operator_declaration":
             op = decl.child_by_field_name("operator")
