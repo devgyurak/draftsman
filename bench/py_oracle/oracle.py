@@ -110,7 +110,8 @@ def class_tokens(files: list[tuple[Path, str, str]]) -> dict[tuple[str, int, int
     one inside a function: where a definition a language server answers with points."""
     tokens = {}
     for path, mod, _ in files:
-        text = path.read_text(encoding="utf-8")
+        # without a UTF-8 BOM, which ast.parse rejects ("invalid non-printable character")
+        text = path.read_text(encoding="utf-8-sig")
         lines = text.split("\n")
         try:
             tree = ast.parse(text)
