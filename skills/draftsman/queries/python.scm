@@ -171,7 +171,10 @@
                     (list [(identifier) @body.var (list_splat (identifier) @body.var)])])
 (named_expression name: (identifier) @body.var)
 ; `del Foo` binds Foo as much as an assignment does (in a function it is a local)
-(delete_statement [(identifier) @body.var (expression_list (identifier) @body.var)])
+(delete_statement [(identifier) @body.var
+                   (expression_list [(identifier) @body.var
+                                     (tuple (identifier) @body.var) (list (identifier) @body.var)])
+                   (tuple (identifier) @body.var) (list (identifier) @body.var)])
 (nonlocal_statement (identifier) @body.var)
 (case_pattern . (dotted_name . (identifier) @body.var .) .)
 ; `case Bar(real=Foo)`, `case Bar() as Foo`, `case [*Foo]`, `case {**Foo}` bind Foo; in
@@ -183,6 +186,11 @@
 (function_definition name: (identifier) @body.var)
 (class_definition name: (identifier) @body.type)
 (type_alias_statement left: (type (identifier) @body.var))
+; `type Pair[T] = tuple[T, T]`: Pair, and T in the statement
+(type_alias_statement left: (type (generic_type . (identifier) @body.var)))
+(type_alias_statement left: (type (generic_type (type_parameter
+  (type [(identifier) @body.var (constrained_type . (type (identifier) @body.var))
+         (splat_type (identifier) @body.var)])))))
 (function_definition type_parameters: (type_parameter
   (type [(identifier) @body.type (constrained_type . (type (identifier) @body.type))
          (splat_type (identifier) @body.type)])))

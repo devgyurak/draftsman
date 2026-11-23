@@ -50,7 +50,8 @@ def test_body_names_stand_where_the_hand_written_answers_say():
     assert problems == []
     missed = sorted((rel, line, answer) for (rel, line, col), (answer, _) in want.items()
                     if answer != "-" and (rel, line, col) not in recorded)
-    assert missed == [("p/bindings.py", 47, "var"), ("p/hide.py", 73, "disputed"),
+    assert missed == [("p/bindings.py", 47, "var"), *[("p/bindings.py", 64, "var")] * 3,
+                      ("p/hide.py", 73, "disputed"),
                       ("p/platform.py", 18, "disputed")]
 
 

@@ -54,3 +54,12 @@ class Bindings:
             case [Foo, *rest]:              #> Foo=-
                 return Foo                  #> Foo=var/r
         return Inner()                      #> Inner=p.bar.Inner/r
+
+    def generic_alias(self):
+        type Pair[Foo] = tuple[Foo, Foo]    #> Pair=- Foo=- Foo=tparam/r Foo=tparam/r
+        return Pair                         #> Pair=var/r
+
+    def deleted_many(self, flag):
+        Foo = Bar = Inner = 1
+        del (Foo, Bar), [Inner]             #> Foo=var/r Bar=var/r Inner=var/r
+        return 0
