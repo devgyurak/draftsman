@@ -172,6 +172,12 @@
 (named_expression name: (identifier) @body.var)
 (nonlocal_statement (identifier) @body.var)
 (case_pattern . (dotted_name . (identifier) @body.var .) .)
+; `case Bar(real=Foo)`, `case Bar() as Foo`, `case [*Foo]`, `case {**Foo}` bind Foo; in
+; `case Bar(Foo=0)` it is an attribute's name
+(keyword_pattern (dotted_name . (identifier) @body.var .))
+(keyword_pattern . (identifier) @body.unread)
+(as_pattern (case_pattern) (identifier) @body.var)
+(splat_pattern (identifier) @body.var)
 (function_definition name: (identifier) @body.var)
 (class_definition name: (identifier) @body.type)
 (type_alias_statement left: (type (identifier) @body.var))
