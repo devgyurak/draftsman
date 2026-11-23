@@ -726,7 +726,9 @@ class Resolver:
 
     def _imports_module(self, parts: list[str], scope: FileScope, spec) -> bool:
         """Whether the file imports the module a dotted name's parts reach (`models.base`
-        after `from django.db import models`), or one inside it."""
+        after `from django.db import models`), or one inside it, as a module: `import
+        p.bar`, not `from p.bar import Bar` or `from p import bar`, after which pyright and
+        ty find no `p.bar`."""
         sep = spec.separator
         heads = [imp.path for imp in scope.imports if not imp.wildcard
                  and imp.local_name == parts[0]]
@@ -734,7 +736,7 @@ class Resolver:
             heads.append(parts[0])
         for head in heads:
             module = sep.join([head, *parts[1:]])
-            if any(imp.path == module or imp.path.startswith(module + sep)
+            if any(imp.module and (imp.path == module or imp.path.startswith(module + sep))
                    for imp in scope.imports):
                 return True
         return False
