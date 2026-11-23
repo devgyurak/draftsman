@@ -1,6 +1,6 @@
 [project]
 name = "draftsman"
-version = "0.6.0"
+version = "0.7.0"
 description = "Class diagrams whose relations come from a parser, not from an LLM"
 requires-python = ">=3.10"
 license = "Apache-2.0"

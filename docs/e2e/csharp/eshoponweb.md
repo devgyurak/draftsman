@@ -8,7 +8,7 @@ A reference ASP.NET Core application: MVC, Razor Pages, Blazor admin, a public A
 | Commit | `4da8212117` (2025-01-13) |
 | Extracted | `src/` (tests are under `tests/`) |
 
-Measured on 2026-11-23 with Draftsman after 0.6.0 (at `3e14b4d`).
+Measured on 2026-11-23 with Draftsman 0.7.0 (at `3e14b4d`; 0.7.0 extracts the same `ir.json`).
 
 ## Run
 

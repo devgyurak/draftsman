@@ -7,8 +7,8 @@ Notes for anyone with `view.json` files written against a development build:
 - **0.3.0**: the entries below on nested types and annotations change the default
   focus diagram and the relations in `ir.json`; results measured with 0.2.0 (the
   benchmark's runs among them) are not comparable with 0.3.0 ones.
-- **After 0.6.0**: C#'s `ir.json` gains the relations read from names in bodies (below);
-  results measured with 0.6.0 are not comparable on what C# bodies relate. One declared
+- **0.7.0**: C#'s `ir.json` gains the relations read from names in bodies (below);
+  results measured with 0.6.0 are not comparable with 0.7.0 ones on what C# bodies relate. One declared
   relation changes: eShop's `BasketService` extends the gRPC-generated
   `Basket.BasketBase`, an external type now; and two of eShop's dependencies go to the type
   the file's own `using` names (`OrderingContextSeed`'s `CardType`,
@@ -110,7 +110,7 @@ Notes for anyone with `view.json` files written against a development build:
   (`Field`). Django extracts in about 2.5 s instead of 1.0 s. jsoup's, petclinic's,
   Netty's, TypeORM's and nest's `ir.json` are byte for byte the same; the C#, Kotlin and
   C++ e2e projects were not run again.
-- **Names in C# method bodies are relations** (#5, after 0.6.0). As in Java, a project
+- **Names in C# method bodies are relations** (#5, 0.7.0). As in Java, a project
   type a body names where only a type stands (a local's type, `new Foo()`, a cast,
   `typeof`, `as`, a pattern's type, type arguments, `is Foo` alone) or where an expression
   does (`Foo.Create()`, `nameof(Foo)`, `case Status.Open:`) is a dependency marked
@@ -138,7 +138,7 @@ Notes for anyone with `view.json` files written against a development build:
   e2e focus diagrams grow from 5 to 7 types (`BasketService`), 13 to 22 (`Logger`) and 20
   to 27 (`OrderingContext`). jsoup's, petclinic's, Netty's, nest's, TypeORM's, httpx's and
   Django's `ir.json` are byte for byte the same.
-- **More C# forms that drew a wrong type in a body** (#5, after 0.6.0). A review's four
+- **More C# forms that drew a wrong type in a body** (#5, 0.7.0). A review's four
   sets of sources written by hand drew 23, 11, 4 and 4 wrong names, now closed: a base
   class's private nested type or field, a member of a base class outside the sources
   (`ControllerBase.User`, `Exception.Data`, from a table of .NET's and ASP.NET Core's
@@ -156,7 +156,7 @@ Notes for anyone with `view.json` files written against a development build:
   a file-scoped namespace, 7 fewer under MAUI's base classes, which the table does not
   know, and 2 fewer behind OpenTelemetry's and Polly's namespaces.
   Lost and documented: a symbol no build defines and `#if !DEBUG` read as compiled.
-- **C# namespaces around the code, and a qualified name's first part** (#5, after 0.6.0).
+- **C# namespaces around the code, and a qualified name's first part** (#5, 0.7.0).
   Two more reviews' sets of sources written by hand drew wrong forms, now closed. A
   namespace outside the sources around the code is looked in before the file's usings, as
   C# does: `Host` in `namespace Microsoft.Extensions.Hosting` and `Random` in `namespace
