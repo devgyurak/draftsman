@@ -182,3 +182,18 @@ def test_an_enum_member_hides_a_class_in_the_enum(tmp_path):
         "a.ts": 'import { Foo } from "./foo";\n'
                 'export enum E { Foo = 1, B = Foo }\nexport enum F { C = Foo.N }\n'})
     assert _body(ir) == [("a.F", "foo.Foo", "C", 3)]
+
+
+def test_a_namespace_variable_hides_a_class_in_the_namespace(tmp_path):
+    # in the namespaces inside it too, and only where a value stands
+    ir = extract_source(tmp_path, {
+        "foo.ts": "export class Foo { static make() { return 1; } }",
+        "a.ts": """import { Foo } from "./foo";
+export namespace NS {
+  const Foo = { make: () => 2 };
+  export class A { m(): number { const f: Foo | null = null; return Foo.make(); } }
+  export namespace Inner { export class B { m() { return Foo.make(); } } }
+}
+export class C { m() { return Foo.make(); } }
+"""})
+    assert _body(ir) == [("a.C", "foo.Foo", "m", 7), ("a.NS.A", "foo.Foo", "m", 4)]

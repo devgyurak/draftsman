@@ -551,7 +551,7 @@ class Extractor:
         for nid in sorted(annotation_refs, key=lambda i: annotation_refs[i]["annotation.ref"][0].start_byte):
             self._annotation_ref(annotation_refs[nid], src, scope, types_by_node,
                                  set(annotation_refs))
-        self._body_refs(bodies, src, scope, types_by_node, members_by_node)
+        self._body_refs(bodies, src, scope, types_by_node, members_by_node, namespaces)
 
         # what the build imports into every file (implicit usings), after the file's own
         for ns, origin in build_imports:
@@ -596,7 +596,8 @@ class Extractor:
                 stack.extend(reversed(found))
         owner.annotation_refs.append(ann)
 
-    def _body_refs(self, matches, src, scope, types_by_node, members_by_node) -> None:
+    def _body_refs(self, matches, src, scope, types_by_node, members_by_node,
+                   namespaces) -> None:
         """Names written in bodies, each with what may hide it there (query-protocol.md)."""
         regions: set[int] = set()
         inits: dict[int, str] = {}           # initializer block -> its `via`
@@ -698,6 +699,21 @@ class Extractor:
             rm = max((m for m in members if m.at <= start), key=lambda m: m.at, default=members[0])
             return a.id, rm.member.name, rm
 
+        def namespace_path(cur: Optional[ts.Node]) -> Optional[tuple[str, ...]]:
+            """The names of the namespaces around ``cur``, outermost first (`namespace A.B`
+            is A, B), or None inside a type or an opaque node (a function)."""
+            path: list[str] = []
+            while cur is not None:
+                if cur.id in types_by_node or self.spec.is_opaque(cur):
+                    return None
+                if cur.id in namespaces:
+                    path[:0] = namespaces[cur.id].split(self.spec.separator)
+                cur = cur.parent
+            return tuple(path)
+
+        # variables a namespace block declares, by the namespace's path in the file: every
+        # block of one namespace shares them, so as not to miss an exported one
+        in_namespace: dict[tuple[str, ...], set[str]] = {}
         for node, kind in declared:
             if (a := anchor_of(node.parent)) is not None:
                 # a member inside a member is the outer one's: TypeScript's parameter
@@ -706,6 +722,12 @@ class Extractor:
                     a = outer
                 key = place(a, node.start_byte)[0]
                 getattr(names.setdefault(key, BodyNames()), kind).add(_text(node, src))
+            elif kind == "variables" and (path := namespace_path(
+                    # a function's name is the scope's around it
+                    node.parent.parent if node.parent.child_by_field_name("name") == node
+                    else node.parent)):
+                in_namespace.setdefault(path, set()).add(_text(node, src))
+        seeded: set[int] = set()   # members given the variables of the namespaces around
         # `T` in `<T extends Foo>` is declared there; `Inner` in `o.new Inner()` is o's
         not_refs = {n.id for n, _ in declared} | unread
         # a receiver is a dotted name, not an expression (`this.x.m()`, `a[0].B.m()`)
@@ -721,11 +743,17 @@ class Extractor:
             if owner is None or a is None or not (in_body or node.id in regions):
                 continue
             key, via, rm = place(a, node.start_byte)
+            member_names = names.setdefault(key, BodyNames())
+            if key not in seeded:
+                seeded.add(key)
+                if in_namespace and (path := namespace_path(owner.parent)):
+                    for k in range(1, len(path) + 1):
+                        member_names.variables |= in_namespace.get(path[:k], set())
             parts = self._parts(node)
             types_by_node[owner.id].body_refs.append(RawBodyRef(
                 ".".join(_text(n, src) for n in parts), position,
                 [(_line(n), _utf16_col(n, src)) for n in parts], via, scope, rm,
-                names.setdefault(key, BodyNames()), list(around)))
+                member_names, list(around)))
 
     def _dotted(self, node: ts.Node) -> bool:
         """Whether a receiver is a dotted name: every node of it one of
