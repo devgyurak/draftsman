@@ -6,6 +6,7 @@ and joins the compilations each file is in.
 
     uv run bench/roslyn_oracle/oracle.py selftest
     uv run bench/roslyn_oracle/oracle.py key DIR [-o OUT.jsonl] [--compare] [-v]
+    uv run bench/roslyn_oracle/oracle.py review [SET ...]
     uv run bench/roslyn_oracle/oracle.py run REPO --checkout DIR -o OUT.jsonl
     uv run bench/roslyn_oracle/oracle.py scope REPO OUT.jsonl ir.json
     uv run bench/roslyn_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR [-v]
@@ -15,7 +16,9 @@ and joins the compilations each file is in.
 `selftest` checks the key against the hand-written answers in tests/fixtures/csharp/body
 (tests/fixtures/java/body/README.md gives the marker format). `key` answers for any
 directory: every `.csproj` below it is compiled, every `.cs` file below it recorded, and
-`--compare` checks the extractor's body relations of the same files against it. `run`
+`--compare` checks the extractor's body relations of the same files against it; `review`
+does that for every set of sources reviews wrote by hand (review/, one directory each) and
+fails on a mismatch review/README.md does not list as a known limit. `run`
 compiles a repository's projects as REPOS below gives them and records the sources its
 end-to-end page extracts (docs/e2e/csharp/); the checkout is restored (and built, where
 REPOS says) in the container first, which takes the network. `scope` fails unless the key
@@ -61,6 +64,8 @@ import answer_key  # noqa: E402
 from extract import discover  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "csharp" / "body"
+# sets of sources written by hand in reviews, each a directory of projects (`review`)
+REVIEW = HERE / "review"
 SUFFIXES = (".cs",)
 IMAGE = "draftsman-roslyn"
 NUGET = "draftsman-nuget"
@@ -217,6 +222,53 @@ def key(args) -> int:
         return 0
     root = args.directory.resolve()
     return check(root, discover(root, {"csharp"}, []), recs, args.verbose)
+
+
+def review(args) -> int:
+    """Every set of hand-written sources below review/ (each a directory with its .csproj
+    files) through `key --compare`: the names drawn and the mismatches of each. Fails on a
+    mismatch review/README.md does not list as a known limit (`- `set/File.cs:line:col``)
+    and on fewer names drawn than it lists for the set (`| `set` | n |`)."""
+    import contextlib
+    import io
+    import re
+    readme = (REVIEW / "README.md").read_text()
+    known = set(re.findall(r"^- `([^`]+)`", readme, re.M))
+    counts = {k: int(v) for k, v in re.findall(r"^\| `(\w+)` \| (\d+) \|", readme, re.M)}
+    sets = sorted((d for d in REVIEW.iterdir() if d.is_dir() and not args.sets
+                   or d.name in (args.sets or ())), key=lambda d: (len(d.name), d.name))
+    new, seen = [], set()
+    for d in sets:
+        with tempfile.TemporaryDirectory() as tmp:
+            text = io.StringIO()
+            with contextlib.redirect_stdout(text), contextlib.redirect_stderr(io.StringIO()):
+                recs = key_dir(d, Path(tmp, "key.jsonl"))
+                failed = check(d.resolve(), discover(d.resolve(), {"csharp"}, []), recs, True)
+        out = text.getvalue()
+        drawn = re.search(r"compare: (\d+) names drawn", out)
+        wrong = re.findall(r"^  (?:mismatch|drawn where nothing is compiled): (\S+)", out, re.M)
+        places = list(dict.fromkeys(f"{d.name}/{w.rstrip(':')}" for w in wrong))
+        seen.update(places)
+        fresh = [p for p in places if p not in known]
+        new += fresh
+        n = int(drawn.group(1)) if drawn else 0
+        fewer = d.name in counts and n < counts[d.name]
+        if fewer or not drawn:
+            new.append(d.name)
+        errors = sum(r["errors"] for r in recs if "compilation" in r)
+        print(f"{d.name}: {n if drawn else '?'} names drawn, {len(places)} mismatches"
+              + (f", {errors} compile errors" if errors else "")
+              + (f", {len(fresh)} not among the known limits" if fresh else "")
+              + (f", fewer than the {counts[d.name]} README.md lists" if fewer else "")
+              + (" (scope check failed)" if not drawn else ""))
+        for line in out.splitlines():
+            m = re.match(r"  (?:mismatch|drawn where nothing is compiled): (\S+)", line)
+            if m and f"{d.name}/{m.group(1).rstrip(':')}" in fresh:
+                print(line)
+    gone = sorted(k for k in known if k.split("/", 1)[0] in {d.name for d in sets} and k not in seen)
+    for k in gone:
+        print(f"known limit no longer a mismatch: {k}")
+    return 1 if new else 0
 
 
 def sources(repo: str, checkout: Path) -> list[tuple[Path, str]]:
@@ -414,6 +466,9 @@ def main(argv=None) -> int:
                    help="check the extractor's body relations of the same files against it")
     d.add_argument("-v", "--verbose", action="store_true", help="list every miss and mismatch")
     d.set_defaults(fn=key)
+    v = sub.add_parser("review")
+    v.add_argument("sets", nargs="*", help="only these sets (directory names below review/)")
+    v.set_defaults(fn=review)
     r = sub.add_parser("run")
     r.add_argument("repo", choices=sorted(REPOS))
     r.add_argument("--checkout", type=Path, required=True)

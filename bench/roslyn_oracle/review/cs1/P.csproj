@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>CS0168;CS0219;CS0164;CS8321;CS0649;CS0169;CS0414;CS0162;CS8618;CS8602;CS8600;CS0067;CS8981</NoWarn>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFrameworks>net11.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>CS0168;CS0219;CS0164;CS8321;CS0649;CS0169;CS0414;CS0162;CS8618;CS8602;CS8600;CS0067;CS8981;CS8604;CS8603;CS8601</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="Lib2.Order" Alias="Ord" />
+    <Using Include="Lib2.Invoice" Alias="Invoice" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net11.0</TargetFramework><Nullable>enable</Nullable><NoWarn>CS0169;CS0649;CS0414;CS0628</NoWarn></PropertyGroup></Project>
