@@ -75,6 +75,9 @@ class FileScope:
     type_params: set[str] = field(default_factory=set)  # file-wide (Python TypeVar)
     aliases: set[str] = field(default_factory=set)      # qualified type alias names
     alias_targets: dict[str, str] = field(default_factory=dict)  # alias -> type it names
+    # alias -> the namespace it is declared in, where its target is looked up ("" for the
+    # top of the file; LanguageSpec.block_imports)
+    alias_blocks: dict[str, str] = field(default_factory=dict)
     inline_namespaces: set[str] = field(default_factory=set)    # C++ `inline namespace v1`
     # a type or alias seen only inside the namespace block that declares it -> that
     # block's first and last line (TypeScript's member a block does not export)

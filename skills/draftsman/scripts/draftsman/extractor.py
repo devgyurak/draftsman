@@ -617,6 +617,16 @@ class Extractor:
                         scope.block_local[q] = (_line(block), block.end_point[0] + 1)
                     if target:
                         scope.alias_targets[q] = spec.normalize_type(target)
+                    if spec.block_imports:
+                        parts, cur = [], n.parent
+                        while cur is not None:
+                            if cur.id in namespaces:
+                                parts.insert(0, namespaces[cur.id])
+                            cur = cur.parent
+                        scope.alias_blocks[q] = spec.separator.join(
+                            p for p in [scope.namespace, *parts] if p) if parts \
+                            else scope.namespace if package_at is not None \
+                            and n.start_byte > package_at else ""
                     if any(a <= n.start_byte < b for a, b in conditional):
                         scope.conditional_aliases.add(q)
             elif (n := _first(caps, "annotation")) is not None:

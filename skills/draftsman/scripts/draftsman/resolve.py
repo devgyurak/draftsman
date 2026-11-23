@@ -981,10 +981,11 @@ class Resolver:
         if any((ns + spec.separator + name if ns else name) in self.index for ns in chain):
             return None
         # the target is looked up where the alias is declared (`using O = Lib.Order;` at the
-        # top of the file: from the global namespace, not from `namespace Shop.Sub`)
+        # top of the file, also before `namespace A.C;`: from the global namespace, not from
+        # the namespace of the use; in a namespace block or after a file-scoped namespace,
+        # from that namespace)
         res = self.resolve(written.name, rtype, None, scope=entry[1], strict=True,
-                           at_namespace=alias.rsplit(spec.separator, 1)[0]
-                           if spec.separator in alias else "")
+                           at_namespace=entry[1].alias_blocks.get(alias, ""))
         return res.target if res.status == PROJECT else None
 
     def _binds(self, head: str, rtype: RawType, ref: RawBodyRef) -> bool:
