@@ -52,7 +52,7 @@ from mypy.nodes import (
     TryStmt, TupleExpr, TypeInfo, TypeVarExpr, WhileStmt, WithStmt,
 )
 from mypy.options import Options
-from mypy.patterns import AsPattern, StarredPattern
+from mypy.patterns import AsPattern, MappingPattern, StarredPattern
 from mypy.traverser import TraverserVisitor
 from mypy.types import (
     AnyType, Instance, TypeAliasType, TypeVarType,
@@ -357,6 +357,12 @@ class Uses(TraverserVisitor):
 
     def visit_starred_pattern(self, p: StarredPattern) -> None:
         pass
+
+    def visit_mapping_pattern(self, p: MappingPattern) -> None:
+        for key in p.keys:   # not the binding of `case {**rest}`
+            key.accept(self)
+        for value in p.values:
+            value.accept(self)
 
     def visit_func_def(self, f: FuncDef) -> None:
         # a function in the body: its defaults, annotations and body; not its name
