@@ -167,6 +167,21 @@ def _protobuf_types(project: Path) -> tuple[tuple[str, frozenset], ...]:
     return tuple((ns, frozenset(n)) for ns, n in out.items())
 
 
+def _razor_members(text: str) -> set[str]:
+    """The members a .razor file declares in its component class: `@inject T Name`, and
+    the fields and properties of its @code and @functions blocks (any name before `;`,
+    `=`, `{ get` or `=>` there, which may take in a local or two: those only hide)."""
+    names = set(re.findall(r"^\s*@inject\s+.+?\s+(\w+)\s*$", text, re.M))
+    for block in re.finditer(r"@(?:code|functions)\s*\{", text):
+        depth, at = 1, block.end()
+        while depth and at < len(text):
+            depth += {"{": 1, "}": -1}.get(text[at], 0)
+            at += 1
+        names |= set(re.findall(r"(\w+)\s*(?:;|=(?!=)|\{\s*(?:get|set|init)\b|=>)",
+                                text[block.end():at]))
+    return names
+
+
 def _blank(line: bytes) -> bytes:
     return re.sub(rb"[^\r]", b" ", line)
 
@@ -404,6 +419,67 @@ class CSharpSpec(LanguageSpec):
                 out.append((at, at + len(line)))
             at += len(line) + 1
         return out
+
+    def generated_fields(self, node, src):
+        text = lambda n: src[n.start_byte:n.end_byte].decode("utf8", "replace")   # noqa: E731
+        name = text(node.child_by_field_name("name")).rsplit(".", 1)[-1].removesuffix("Attribute")
+        target = node.parent.parent if node.parent is not None else None   # attribute_list's
+        if target is None:
+            return []
+        if name == "ObservableProperty" and target.type == "field_declaration":
+            # `_name`, `m_name` and `name` all make `Name`
+            out = []
+            for d in (c for c in target.named_children if c.type == "variable_declaration"):
+                for v in (c for c in d.named_children if c.type == "variable_declarator"):
+                    n = re.sub(r"^(m_|_)", "", text(v.child_by_field_name("name")))
+                    out.append(n[:1].upper() + n[1:])
+            return out
+        if name == "RelayCommand" and target.type == "method_declaration":
+            return [text(target.child_by_field_name("name")).removesuffix("Async") + "Command"]
+        if name == "JsonSerializable":
+            # a property per type, named by it (`List<Order>`: ListOrder, `Order[]`:
+            # OrderArray) unless TypeInfoPropertyName says otherwise, and Default
+            args = text(node)
+            given = re.search(r'TypeInfoPropertyName\s*=\s*"(\w+)"', args)
+            of = re.search(r"typeof\s*\((.*)\)", args, re.S)
+            if given:
+                return [given.group(1), "Default"]
+            if of:
+                written = re.sub(r"\bglobal::|[\w]+\.(?=\w)", "", of.group(1))
+                written = written.replace("[]", "Array")
+                return ["".join(re.findall(r"\w+", written)), "Default"]
+            return ["Default"]
+        return []
+
+    def companion_fields(self, path):
+        name = path.name
+        if name.endswith(".razor.cs"):
+            razor = path.with_name(name.removesuffix(".cs"))
+            texts = [razor]
+            project = _project_file(path.resolve().parent)
+            top = project.parent if project else path.parent
+            cur = path.parent
+            while True:   # _Imports.razor injects into every component below it
+                texts.append(cur / "_Imports.razor")
+                if cur.resolve() == top.resolve() or cur.parent == cur:
+                    break
+                cur = cur.parent
+            names: set[str] = set()
+            for t in texts:
+                try:
+                    names |= _razor_members(t.read_text(encoding="utf-8-sig"))
+                except OSError:
+                    pass
+            return {razor.stem: names} if names else {}
+        if name.endswith(".xaml.cs"):
+            try:
+                xaml = path.with_name(name.removesuffix(".cs")).read_text(encoding="utf-8-sig")
+            except OSError:
+                return {}
+            cls = re.search(r'\bx:Class\s*=\s*"([\w.]+)"', xaml)
+            names = set(re.findall(r'\bx:Name\s*=\s*"(\w+)"', xaml))
+            return {cls.group(1).rsplit(".", 1)[-1]: names} if cls and names else {}
+        return {}
 
     def implicit_types(self, root_node):
         # top-level statements are the body of an implicit `Program` of the project

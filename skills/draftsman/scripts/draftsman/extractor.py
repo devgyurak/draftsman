@@ -530,6 +530,10 @@ class Extractor:
             if rt is not None:
                 types_by_node[nid] = rt
                 raw.types.append(rt)
+        for name, fields in spec.companion_fields(path).items():
+            for rt in raw.types:
+                if rt.name == name:
+                    rt.body_fields |= fields
 
         # --- members
         members_by_node: dict[int, list[RawMember]] = {}
@@ -712,6 +716,9 @@ class Extractor:
                 elif cap == "body.field":
                     if (owner := self._owner(n, types_by_node)[0]) is not None:
                         owner.body_fields.add(_text(n, src))
+                elif cap == "body.generated":
+                    if (owner := self._owner(n, types_by_node)[0]) is not None:
+                        owner.body_fields.update(self.spec.generated_fields(n, src))
                 elif cap == "body.type":
                     declared.append((n, "types"))
                 elif cap == "body.import":

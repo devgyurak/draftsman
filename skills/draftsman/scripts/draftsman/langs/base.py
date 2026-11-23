@@ -235,6 +235,18 @@ class LanguageSpec:
         namespaces around and the imports bring in, as declared types do."""
         return {}
 
+    def generated_fields(self, node: "ts.Node", src: bytes) -> list[str]:
+        """The members a source generator declares in the type around ``node``, an
+        attribute captured as `@body.generated` (C#'s `[ObservableProperty] string name`
+        declares `Name`): they hide a type in its bodies as fields do."""
+        return []
+
+    def companion_fields(self, path: Path) -> dict[str, set[str]]:
+        """Simple name of a type the file declares -> members a file beside it declares
+        in that type's generated part (C#'s `X.razor` `@inject`, `X.xaml` `x:Name` for
+        `X.razor.cs`, `X.xaml.cs`): they hide a type in its bodies as fields do."""
+        return {}
+
     def init_via(self, node: "ts.Node", src: bytes) -> Optional[str]:
         """The `via` of a body no listed member holds (`@body.init` without `.name`), or
         None for its text before `{` (Java's `static {}`)."""

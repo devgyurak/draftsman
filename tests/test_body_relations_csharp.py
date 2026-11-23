@@ -230,3 +230,46 @@ public class Handler { }
         "App/Platforms/Android/MainApplication.cs":
             "namespace App;\npublic class MainApplication { object M() => MauiProgram.Create(); }\n"})
     assert _body(ir) == [("App.MauiProgram", "App.Handler", "Create", 15)]
+
+
+def test_a_member_generated_code_declares_hides_a_type(tmp_path):
+    # Razor's @inject (also from _Imports.razor) and @code members, XAML's x:Name,
+    # CommunityToolkit.Mvvm's [ObservableProperty] and [RelayCommand], System.Text.Json's
+    # [JsonSerializable] (Roslyn: each is the generated member, not the type)
+    types = "namespace Gen;\npublic class Customer { public static Customer Guest = new(); }\n" \
+            "public class Order { public static int Max = 1; }\npublic class Load { public static int Max = 1; }\n"
+    ir = extract_source(tmp_path, {
+        "Types.cs": types,
+        "Web/Web.csproj": '<Project Sdk="Microsoft.NET.Sdk.Razor"></Project>',
+        "Web/_Imports.razor": "@inject System.Text.StringBuilder Order\n",
+        "Web/Pages/Comp.razor": "@inject System.Text.StringBuilder Customer\n<p></p>\n"
+                                "@code {\n    private int Load = 1;\n}\n",
+        "Web/Pages/Comp.razor.cs": """namespace Gen.Web;
+public partial class Comp
+{
+    int M() => Customer.Length + Order.Length + Load.CompareTo(1);
+}
+public class Plain { object M() => Customer.Guest; }
+""",
+        "App/MainPage.xaml": '<ContentPage x:Class="Gen.App.MainPage"><Label x:Name="Customer" /></ContentPage>',
+        "App/MainPage.xaml.cs": "namespace Gen.App;\npublic partial class MainPage { object M() => Customer.Text; }\n",
+        "Lib/Model.cs": """using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using System.Text.Json.Serialization;
+namespace Gen;
+public partial class ViewModel
+{
+    [ObservableProperty] private string _customer = "";
+    [RelayCommand] private void Load() { }
+    int M() => Customer.Length + LoadCommand.GetHashCode() + Order.Max;
+}
+[JsonSerializable(typeof(Customer))]
+[JsonSerializable(typeof(System.Collections.Generic.List<Order>))]
+public partial class Ctx
+{
+    object M() => Customer.Type;
+    object N() => Order.Max;
+}
+"""})
+    assert _body(ir) == [("Gen.Ctx", "Gen.Order", "N", 16), ("Gen.ViewModel", "Gen.Order", "M", 9),
+                         ("Gen.Web.Plain", "Gen.Customer", "M", 6)]
