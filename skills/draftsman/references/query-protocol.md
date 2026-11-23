@@ -52,6 +52,7 @@ a body is, which names it writes, and what may hide them there.
 | `@body.region` | – | a body: a method or constructor body, a field initializer, an enum constant's arguments and body. A name is read only at or below one (a TypeScript field initializer may be the name itself: `X = Kind.A`), so a signature's `List<Foo>` is not |
 | `@body.init` (+ `@body.init.name`, `@body.init.region`) | – | a body of no listed member, `via` `.name` when given (a record's compact constructor), else `LanguageSpec.init_via` (C#'s `operator +`, `~Order`, `this[]`), else its text before `{` plus `{}` (initializer blocks: `static {}`, `{}`). With `.region` the init is a declaration whose body that is: its parameters are the body's names, its signature no body (C#'s operators and indexers). Only a named type's own count |
 | `@body.ref.type` / `@body.ref.receiver` | yes | a name written in a body: `.type` where only a type can stand (every type name: `new Foo()`, a cast, `X.class`, `X.this`), `.receiver` where a variable can too (`Foo.bar()`; in TypeScript every value: `new Foo()`, `typeof Foo`, `<Foo />`; in Python every name, an annotation's too). A receiver is a dotted name: every node of it one of `LanguageSpec.receiver_part_nodes` (not `this.x`, `new Foo(x).m`). A capture whose parent is captured too is part of that name and dropped (`Foo` in `p.Foo`), and so is one captured as `@body.type` (`T` in `<T extends Foo>`). The name is its identifiers joined by `.`, leaving out annotations, comments and `LanguageSpec.type_argument_nodes` (`Outer<T>.Inner` is `Outer.Inner`, and `T` a name of its own); each part keeps its line and column, in UTF-16 code units as javac counts them |
+| `@body.declared_type` | – | a declaration's type in an expression (C#'s `declaration_expression`): its names are read only where LanguageSpec.declaration_read says the language reads a declaration there |
 | `@body.unread` | – | a type node that is no name of the scope, never recorded: looked up in the type of an expression (Java `o.new Inner()`), or no name at all (`X.super` in `X.super::m`, where `X` is; a label in a TypeScript type, `[Foo: string]`) |
 | `@body.blind` | – | a class body whose inherited members are not known (the anonymous class of Java `o.new Inner() { }`), or a node whose names are read elsewhere or not at all (TypeScript decorators, TSX closing tags): no name in it is recorded |
 | `@body.var` | – | a variable declared in a member: parameters, locals, lambda, catch, for and pattern variables, resources, fields of local classes, local functions and destructured names (TypeScript), every name a statement binds (Python) |
@@ -127,8 +128,10 @@ namespace outside the sources declares, None when unknown; also those of a names
 around the code, before the file's imports), `outside_namespace_exists` (a namespace
 the table knows, also one holding only namespaces) and `package_namespace` (a namespace of
 a package the file's build project references, or a project it references passes on),
-and `implicit_variables` (names a body binds without declaring them: C#'s `value` in a
-setter, `field` in a property's accessor). Each of them draws less where a build may differ, never more.
+`implicit_variables` (names a body binds without declaring them: C#'s `value` in a
+setter, `field` in a property's accessor) and `declaration_read` (whether a declaration
+`@body.declared_type` captures is one where it stands: C#'s `out` arguments and
+deconstructions, not `F(Order < b, Customer > d)`). Each of them draws less where a build may differ, never more.
 
 ## Ownership
 

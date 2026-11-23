@@ -115,8 +115,8 @@ is that type. Aliases of aliases are followed.
   length, so line numbers are exact). tree-sitter cannot parse `#if` inside a base list,
   a parameter list, an expression or around a second method header, and one
   deterministic configuration avoids reading both. The limit: `#if !FEATURE` keeps the
-  side where the feature is off. A `#if` line inside a multi-line string would be
-  blanked too.
+  side where the feature is off. A `#if` line inside a multi-line string (verbatim, raw)
+  or a `/* */` comment is no directive.
 - Library types: type keywords (`int`, `string`, ...) are builtins. Well-known library
   types (`IDisposable`, `CancellationToken`, `Encoding`, `IEqualityComparer`, `ILogger`)
   are external with their real namespace (`System.Threading.CancellationToken`) only when
@@ -131,7 +131,7 @@ is that type. Aliases of aliases are followed.
   `[assembly: ...]` attributes belong to no type.
 - Names in bodies (`evidence: "body"`; method, constructor, accessor, operator, indexer
   and local function bodies, constructor initializers, field, property and enum member
-  initializers, a primary constructor's base arguments; not attributes, parameter
+  initializers, a primary constructor's base arguments, a record's too; not attributes, parameter
   defaults or top-level statements): a name where only a type stands (a local's type,
   `new Foo()`, a cast, `typeof`, `default`, `as`, a pattern's or a `catch`'s type, type
   arguments, a lambda's or local function's parameter types, and `is Foo` alone, which C#
@@ -178,9 +178,11 @@ is that type. Aliases of aliases are followed.
   (`Box` where the nearest Box is `Box<T>`) draws nothing; nor does `(Foo) - 1` or
   `(Foo)[0]`, which C# reads as a parenthesized name (an element access before `[`, which
   tree-sitter takes for a cast of a collection expression; `(Foo[])[]` stays a cast), a
-  property pattern's path (`{ Customer.Name: "x" }`), or `F(Order < b, Customer > d)`, two
-  comparisons tree-sitter reads as a declaration (a call's argument declares only after
-  `out`, `ref` or `in`). `value` in a setter (and `init`, `add`, `remove`) and C# 14's `field`
+  property pattern's path (`{ Customer.Name: "x" }`), or a declaration where C# reads none:
+  tree-sitter reads `F(Order < b, Customer > d)`, `[Order < b, Customer > d]` and
+  `this[...]` alike as `Order<b, Customer> d`, two comparisons to C#, which declares only
+  in an `out` (`ref`, `in`) argument and a deconstruction's tuple (left of `=` or of a
+  `foreach`). `value` in a setter (and `init`, `add`, `remove`) and C# 14's `field`
   in a property's accessor are variables, which hide a type of the name. On the three e2e
   repositories tree-sitter's parse of the (preprocessed) sources has no ERROR or MISSING
   node.
