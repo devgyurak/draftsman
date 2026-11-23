@@ -7,6 +7,12 @@ Notes for anyone with `view.json` files written against a development build:
 - **0.3.0**: the entries below on nested types and annotations change the default
   focus diagram and the relations in `ir.json`; results measured with 0.2.0 (the
   benchmark's runs among them) are not comparable with 0.3.0 ones.
+- **0.6.0**: Python's `ir.json` gains the relations read from names in bodies (below);
+  results measured with 0.5.0 are not comparable with 0.6.0 ones on what Python bodies
+  relate, and a few Python declarations change (an import in a function or a class body
+  is no longer the file's; a suffix match of an import no longer drops a package).
+  TypeScript's changes where a namespace's own type shares the name of an import (below);
+  nest's and TypeORM's `ir.json` are the same.
 - **0.5.0**: TypeScript's `ir.json` gains the relations read from names in bodies
   (below); results measured with 0.4.x are not comparable with 0.5.0 ones on what
   TypeScript bodies relate. Nothing changes for the other languages.
@@ -61,7 +67,7 @@ Notes for anyone with `view.json` files written against a development build:
   connected types and the viewer's cycles stay on declarations. Netty extracts in about
   4.0 s instead of 2.4 s. The other languages read no bodies yet (#5); Django's and
   TypeORM's `ir.json` are byte for byte the same, the other e2e projects were not run again.
-- **Names in Python method bodies are relations** (#5, after 0.5.0). As in Java and
+- **Names in Python method bodies are relations** (#5, 0.6.0). As in Java and
   TypeScript, a project class a method body or a class-level value names is a dependency
   marked `evidence: "body"`; every name is a value, in an annotation too (`Foo()`,
   `Foo.create()`, `isinstance(x, Foo)`, `except Foo`, `x: Foo`, `models.Model()`). Python
@@ -97,7 +103,7 @@ Notes for anyone with `view.json` files written against a development build:
   (`Field`). Django extracts in about 2.5 s instead of 1.0 s. jsoup's, petclinic's,
   Netty's, TypeORM's and nest's `ir.json` are byte for byte the same; the C#, Kotlin and
   C++ e2e projects were not run again.
-- **More Python forms that drew a wrong class in a body** (#5, after 0.5.0). Sources
+- **More Python forms that drew a wrong class in a body** (#5, 0.6.0). Sources
   written by hand for review, run through the extractor and the three checkers together,
   drew a class where the checkers name something else: 21, 15 and 2 names in three sets,
   now 0. An attribute's name after a value was read as a name of the scope
@@ -123,7 +129,7 @@ Notes for anyone with `view.json` files written against a development build:
   there in a way that changes a relation: still 4065 and 186 names, 3 and 0 mismatches,
   the same keys), and so are jsoup's, petclinic's, Netty's, TypeORM's and nest's.
 - **A Python checker that marks code unreachable and names nothing there abstains** (#5,
-  after 0.5.0). The answer key's rule changes, and with it the pass condition of #5: a
+  0.6.0). The answer key's rule changes, and with it the pass condition of #5: a
   checker that gives no definition at a place and marks the place unreachable itself
   abstains (mypy: a block its semantic analysis skips; pyright: the range of its hint of
   unreachable code, pulled with `textDocument/diagnostic`, which it sends only to a client
@@ -157,7 +163,7 @@ Notes for anyone with `view.json` files written against a development build:
   names; Django and httpx unchanged (each `ir.json` byte for byte the same, also the
   other e2e projects').
 - **A Python name a module imports from outside and from the project is no class where it
-  is taken** (#5, after 0.5.0). A fourth set of hand-written sources found 4 and 2 wrong
+  is taken** (#5, 0.6.0). A fourth set of hand-written sources found 4 and 2 wrong
   names, now 0: `from q.w import Button` and `from tkinter import Button` in one module
   (in either order, the outside one under `try:` too) made another file's `from
   q.out_last import Button` and `out_last.Button()` q.w's class, where it is tkinter's at
@@ -169,7 +175,7 @@ Notes for anyone with `view.json` files written against a development build:
   a test when turned off. Turned off on Django and httpx, the rule changes no name: every
   e2e `ir.json` is byte for byte the same.
 - **A Python name a module binds to two classes, or as a variable, is no class where it
-  is taken** (#5, after 0.5.0). A third set of hand-written sources found 3 and 4 wrong
+  is taken** (#5, 0.6.0). A third set of hand-written sources found 3 and 4 wrong
   names, now 0: `from .a import Foo` and `from .b import Foo` in `dup/__init__.py` (or two
   star imports that both bring in `Both`, a name and a star import, a class and a star
   import), and another file's `from q.dup import Foo`, `dup.Foo()` or `from q.one import
@@ -183,7 +189,7 @@ Notes for anyone with `view.json` files written against a development build:
   names, 3 and 0 mismatches), and so are jsoup's, petclinic's, Netty's, TypeORM's and
   nest's.
 - **Three more Python forms drawn where the checkers disagree, and a BOM in the key** (#5,
-  after 0.5.0). A second set of hand-written sources found 6, 2 and 1 wrong names, now 0;
+  0.6.0). A second set of hand-written sources found 6, 2 and 1 wrong names, now 0;
   the earlier sets stay at 0. A star import from outside the sources hid the names of its
   own file only: a name is as uncertain where another file takes it, through a project
   module's star import that brings one in (`from q.gui import *`, gui.py importing
@@ -203,7 +209,7 @@ Notes for anyone with `view.json` files written against a development build:
   to `isinstance(self, Auditable)` in common/base.py, as its other bodies name classes
   from files with `from stripe import *` or `from shop.promo import *`. jsoup's,
   petclinic's, Netty's, TypeORM's and nest's `ir.json` are byte for byte the same.
-- **A TypeScript namespace's own type comes before an import of its name** (after 0.5.0).
+- **A TypeScript namespace's own type comes before an import of its name** (0.6.0).
   In `import { Foo } from "./foo"; namespace N2 { class Foo {} export class A { f: Foo |
   null = null } }`, A's Foo is N2's, as the compiler says, but the extractor checked the
   file's imports first, as Java does, and drew `foo.Foo`, in declared and body relations
