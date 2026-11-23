@@ -113,6 +113,13 @@
 (is_pattern_expression pattern: (constant_pattern . [(identifier) (generic_name)] .) @body.ref.type)
 ; `a * b` read as a pointer type in a declaration: no type
 (pointer_type type: (_) @body.unread)
+; `(Order) - 1`: C# reads a parenthesized name before `-`, `+`, `&`, `*`, `++`, `--` or `^`
+; as an expression, not a cast (only a keyword type casts there: `(int)-1`)
+(cast_expression
+  type: [(identifier) (generic_name) (qualified_name) (alias_qualified_name)] @body.unread
+  value: (prefix_unary_expression . ["-" "+" "&" "*" "++" "--" "^"]))
+; a property pattern's member path: `{ Customer.Name: "x" }` names members, not a type
+(subpattern . (member_access_expression) @body.blind)
 
 ; where an expression stands, which a variable may be: the head of a member access
 ; (`Foo.Create()`, `Foo.Line.Make()`, `Repo<int>.Make()`), `nameof(Foo)`, a constant
@@ -147,6 +154,12 @@
 ; are its properties)
 (class_declaration (parameter_list (parameter name: (identifier) @body.field)))
 (struct_declaration (parameter_list (parameter name: (identifier) @body.field)))
+; a C# 14 extension block's receiver is a parameter of every member in it, its type
+; parameters are types there (both in scope across the static class around it)
+(extension_declaration (receiver_parameter name: (identifier) @body.field))
+(extension_declaration (type_parameter_list (type_parameter name: (identifier) @body.hidden_tparam)))
+; a delegate is a type ir.json does not record: it hides a type of its name
+(delegate_declaration name: (identifier) @body.hidden_type)
 ; an event field, which is no member of ir.json
 (event_field_declaration (variable_declaration (variable_declarator name: (identifier) @body.field)))
 ; members a source generator declares in the type (CommunityToolkit.Mvvm's

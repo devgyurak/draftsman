@@ -116,6 +116,9 @@ class RawType:
     body_fields: set[str] = field(default_factory=set)
     # declared in code a build may leave out (LanguageSpec.conditional_ranges)
     conditional: bool = False
+    # names of types the type declares that ir.json does not record (C#'s nested delegates:
+    # "type"; an extension block's type parameters: "tparam"; `@body.hidden_type`)
+    hidden_types: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -733,6 +736,18 @@ class Extractor:
                 elif cap == "body.generated":
                     if (owner := self._owner(n, types_by_node)[0]) is not None:
                         owner.body_fields.update(self.spec.generated_fields(n, src))
+                elif cap in ("body.hidden_type", "body.hidden_tparam"):
+                    kind = "type" if cap == "body.hidden_type" else "tparam"
+                    if (owner := self._owner(n, types_by_node)[0]) is not None:
+                        owner.hidden_types[_text(n, src)] = kind
+                    elif kind == "type":   # a delegate of a namespace: no type of ir.json
+                        parts, cur = [], n.parent
+                        while cur is not None:
+                            if cur.id in namespaces:
+                                parts.insert(0, namespaces[cur.id])
+                            cur = cur.parent
+                        ns = self.spec.separator.join(p for p in [scope.namespace, *parts] if p)
+                        scope.build_types.setdefault(ns, set()).add(_text(n, src))
                 elif cap == "body.type":
                     declared.append((n, "types"))
                 elif cap == "body.import":

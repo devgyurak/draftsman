@@ -511,6 +511,11 @@ class Resolver:
         # nested types of this type and its enclosing types, including inherited ones
         cur: Optional[RawType] = rtype
         while cur is not None:
+            hidden = cur.hidden_types.get(name)
+            if hidden == "tparam":
+                return Resolution(TPARAM)
+            if hidden:   # a nested type ir.json does not record (a C# delegate)
+                return Resolution(EXTERNAL, cur.qualified_name + sep + name)
             inherited = spec.inherited_member_types and (inherit or cur is not rtype)
             found = spec.nested_types_in_scope and nested and self._member_type(
                 cur, name, sep, inherited, set())
@@ -1237,6 +1242,7 @@ class _Builder:
         existing.body_refs.extend(t.body_refs)
         existing.body_fields |= t.body_fields
         existing.conditional |= t.conditional
+        existing.hidden_types.update(t.hidden_types)
         existing.generics += [g for g in t.generics if g not in existing.generics]
         for m in t.modifiers:
             if m not in existing.modifiers:
