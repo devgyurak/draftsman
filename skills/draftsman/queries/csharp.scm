@@ -124,6 +124,17 @@
 (cast_expression
   type: [(identifier) (qualified_name) (alias_qualified_name)] @body.unread
   value: (collection_expression))
+; `F(Order < b, Customer > d)`: two comparisons, which tree-sitter reads as a declaration
+; `Order<b, Customer> d`; a call's argument declares a variable only after `out` (or
+; `ref`, `in`; also after a name, `result: out Order o`); a deconstruction's
+; `(Order k, Customer l) = ...` does without
+(argument_list ((argument
+   (declaration_expression type: [(identifier) (generic_name) (qualified_name)] @body.unread)) @_arg
+ (#not-match? @_arg "^([A-Za-z_@][A-Za-z0-9_]*[ \t\r\n]*:[ \t\r\n]*)?(out|ref|in)[ \t\r\n]")))
+(argument_list ((argument
+   (declaration_expression type: (generic_name (type_argument_list
+     [(identifier) (generic_name) (qualified_name)] @body.unread)))) @_arg
+ (#not-match? @_arg "^([A-Za-z_@][A-Za-z0-9_]*[ \t\r\n]*:[ \t\r\n]*)?(out|ref|in)[ \t\r\n]")))
 ; a property pattern's member path: `{ Customer.Name: "x" }` names members, not a type
 (subpattern . (member_access_expression) @body.blind)
 
