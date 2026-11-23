@@ -20,9 +20,9 @@
 // A body is a method, constructor or accessor body, a property initializer, a static
 // block or an enum member's initializer, with everything inside them (functions, classes,
 // object literals); decorators are not read. "pos" is "type" where only a type can stand
-// (`: Foo`, `as Foo`, `<Foo>`, `implements Foo`) and "receiver" where a value stands,
-// which a variable may be (`new Foo()`, `Foo.m()`, `x instanceof Foo`, `typeof Foo`,
-// `<Foo />`, `Foo` passed as an argument). Of a dotted name (`ns.Foo.m()`) each part that
+// (`: Foo`, `as Foo`, `<Foo>`, `implements Foo`, `import("./m").Foo`) and "receiver"
+// where a value stands, which a variable may be (`new Foo()`, `Foo.m()`, `x instanceof
+// Foo`, `typeof Foo`, `<Foo />`, `Foo` passed as an argument). Of a dotted name (`ns.Foo.m()`) each part that
 // is a type is recorded, "maximal" when no type part follows. Lines are 1-based, columns
 // 0-based in UTF-16 code units.
 
@@ -204,6 +204,14 @@ function visit(node, from, inType) {
     }
     if (ts.isTypeQueryNode(node)) {   // `typeof Foo`: a value
       chain(entityParts(node.exprName), true, "receiver", from);
+      for (const a of node.typeArguments ?? []) visit(a, from, true);
+      return;
+    }
+    if (ts.isImportTypeNode(node)) {   // `import("./m").Foo`, `typeof import("./m").Foo`
+      if (node.qualifier) {
+        chain(entityParts(node.qualifier), node.isTypeOf, node.isTypeOf ? "receiver" : "type",
+              from);
+      }
       for (const a of node.typeArguments ?? []) visit(a, from, true);
       return;
     }
