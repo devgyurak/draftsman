@@ -1147,9 +1147,11 @@ class _Builder:
         # projects are two types (two projects' `partial class Program`), and so is one
         # a project declares implicitly (LanguageSpec.implicit_types)
         self.projects: dict[str, set] = {}
+        self.part_files: dict[str, set[str]] = {}   # type id -> the files declaring a part
         for f in files:
             for t in f.types:
                 self.projects.setdefault(t.qualified_name, set()).add(f.scope.project)
+                self.part_files.setdefault(t.qualified_name, set()).add(f.path)
             for t in f.scope.implicit_types:
                 self.projects.setdefault(t, set()).add(f.scope.project)
         self._alias_cache: dict[str, tuple[list, list]] = {}

@@ -329,9 +329,15 @@ def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: 
     for file, line, col, src, dst in builder.body_uses:
         if file in skipped and (skipped[file] == "all" or line in skipped[file]):
             print(f"  drawn where nothing is compiled: {file}:{line}:{col + 1} {src} -> {dst}")
-    # a project type is the same when ir.json's file for the id is one that declares it
-    return answer_key.compare(builder.body_uses, recs, verbose, key="Roslyn",
-                              same=lambda r, dst: where.get(dst) in r.get("files", ()))
+    # a project type is the same when the files declaring it are among those ir.json makes
+    # the id of (one type of `Repo` and `Repo<T>`), all of one project: two projects' types
+    # of one id (their `Program`) are two
+    project = {f.path: f.scope.project for f in raw}
+
+    def same(r: dict, dst: str) -> bool:
+        parts = builder.part_files.get(dst, set())
+        return set(r.get("files", ())) <= parts and len({project[f] for f in parts}) == 1
+    return answer_key.compare(builder.body_uses, recs, verbose, key="Roslyn", same=same)
 
 
 def compare(args) -> int:
