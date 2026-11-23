@@ -44,4 +44,17 @@ namespace Shop.Rev.Ctx
     // a record's base arguments are a body, as a class's are
     public record RecBase(int N);
     public record RecSub(int M) : RecBase((int)Status.Open);   //> RecBase=- Status=Shop.Status/r
+
+    // `#if` in a verbatim string or a comment is no directive
+    public class Text
+    {
+        public string A() => @"
+#if false
+";
+        public object B() => Status.Open;   //> Status=Shop.Status/r
+        /*
+#if false
+        */
+        public object C() => Status.Open;   //> Status=Shop.Status/r
+    }
 }

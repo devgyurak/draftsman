@@ -53,6 +53,70 @@ _TYPE_DECLARATIONS = frozenset({"class_declaration", "struct_declaration", "reco
                                 "interface_declaration", "enum_declaration", "compilation_unit"})
 
 
+def _in_text(src: bytes) -> set[int]:
+    """The (0-based) lines that begin inside a string or a comment several lines long (a
+    verbatim `@"..."`, a raw string between three quotes or more, a `/* ... */`): a `#if`
+    there is no directive."""
+    out: set[int] = set()
+    i, n, line = 0, len(src), 0
+    while i < n:
+        c = src[i]
+        if c == 0x0A:   # \n
+            line += 1
+            i += 1
+        elif src.startswith(b"//", i):
+            j = src.find(b"\n", i)
+            i = n if j < 0 else j
+        elif src.startswith(b"/*", i):
+            j = src.find(b"*/", i + 2)
+            end = n if j < 0 else j + 2
+            first = line
+            line += src.count(b"\n", i, end)
+            out.update(range(first + 1, line + 1))
+            i = end
+        elif c == 0x27:   # a char literal: '"', '\''
+            j = i + 1
+            while j < n and src[j] not in (0x27, 0x0A):
+                j += 2 if src[j] == 0x5C else 1
+            i = j + 1
+        elif c in (0x24, 0x40, 0x22):   # $ @ "
+            j = i
+            while j < n and src[j] in (0x24, 0x40):
+                j += 1
+            if j >= n or src[j] != 0x22:
+                i += 1
+                continue
+            prefix = src[i:j]
+            quotes = 0
+            while j + quotes < n and src[j + quotes] == 0x22:
+                quotes += 1
+            if quotes >= 3:   # raw: ends at as many quotes
+                k = src.find(b'"' * quotes, j + quotes)
+                end = n if k < 0 else k + quotes
+            elif b"@" in prefix:   # verbatim: "" is a quote
+                k = j + 1
+                while k < n:
+                    if src[k] == 0x22:
+                        if k + 1 < n and src[k + 1] == 0x22:
+                            k += 2
+                            continue
+                        break
+                    k += 1
+                end = min(n, k + 1)
+            else:   # regular: one line, \ escapes
+                k = j + 1
+                while k < n and src[k] not in (0x22, 0x0A):
+                    k += 2 if src[k] == 0x5C else 1
+                end = min(n, k + 1)
+            first = line
+            line += src.count(b"\n", i, end)
+            out.update(range(first + 1, line + 1))
+            i = end
+        else:
+            i += 1
+    return out
+
+
 def _blanked(src: bytes) -> bytes:
     """The code preprocess blanks that some build compiles: #elif and #else branches, not
     a branch no build takes (`#if false`, the #else of `#if true`)."""
@@ -68,8 +132,9 @@ def _lines(src: bytes):
     # depends on a symbol, one true whatever the symbols]
     stack: list[list] = []
     active, inside, dead = True, False, False
-    for line in src.split(b"\n"):
-        m = _CONDITIONAL.match(line)
+    text = _in_text(src) if b"#" in src else set()
+    for at, line in enumerate(src.split(b"\n")):
+        m = _CONDITIONAL.match(line) if at not in text else None
         if not m:
             yield line, active, inside, dead
             continue
@@ -694,8 +759,10 @@ class CSharpSpec(LanguageSpec):
             if len(below) > 2 and below[0] == "Platforms" and below[1] in _PLATFORM_FOLDERS:
                 return [(0, len(src))]
         out, at, stack, off = [], 0, [], False   # stack: whether each #if's branch was off
-        for line in src.split(b"\n"):
-            m = re.match(rb"^[ \t]*#[ \t]*(if|elif|else|endif)\b(.*)", line)
+        text = _in_text(src) if b"#" in src else set()
+        for number, line in enumerate(src.split(b"\n")):
+            m = re.match(rb"^[ \t]*#[ \t]*(if|elif|else|endif)\b(.*)", line) \
+                if number not in text else None
             if m and m.group(1) == b"if":
                 stack.append(off)
                 off = off or _without_platforms(m.group(2).decode("utf8", "replace"), maui) is False
