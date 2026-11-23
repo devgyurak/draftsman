@@ -113,6 +113,7 @@ class TypeScriptSpec(LanguageSpec):
     builtins = frozenset(_BUILTINS)
     visibility_keywords = {"public": "public", "protected": "protected", "private": "private"}
     import_suffix_match = True
+    namespaces_before_imports = True
     inherited_member_types = False
     nested_types_in_scope = False
     receiver_part_nodes = frozenset({"identifier", "property_identifier", "member_expression",

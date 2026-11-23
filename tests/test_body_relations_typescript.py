@@ -62,12 +62,14 @@ def test_body_relations_go_where_the_hand_written_answers_say():
             wrong.append((file, line, answer))
     assert wrong == []
     # every project type is drawn, but the part of a longer name (`Foo` in `Foo.Inner`), a
-    # type's own name, and one the member declares a variable of further down (the
-    # destructured `Foo` in `locals`: the member is the scope)
+    # type's own name, one the member declares a variable of further down (the
+    # destructured `Foo` in `locals`: the member is the scope), and one an alias names
+    # (`import Shape = Shop.Item`: an alias draws nothing in a body)
     missed = [(file, line, answer) for (file, line, col), (answer, position) in want.items()
               if answer in builder.types and (file, line, col) not in drawn]
     assert sorted(missed) == [("p/a.ts", 34, "p/foo.Foo"), ("p/a.ts", 35, "p/foo.Foo"),
-                              ("p/a.ts", 72, "p/foo.Foo"), ("p/foo.ts", 6, "p/foo.Foo")]
+                              ("p/a.ts", 72, "p/foo.Foo"), ("p/foo.ts", 6, "p/foo.Foo"),
+                              ("p/shadow.ts", 15, "p/shop.Shop.Item")]
 
 
 def _body(ir) -> list[tuple]:
@@ -218,3 +220,28 @@ def test_an_enum_member_written_as_a_string_hides_a_class_in_the_enum(tmp_path):
         "foo.ts": "export class Foo { }",
         "a.ts": 'import { Foo } from "./foo";\nexport enum E { "Foo" = 1, B = Foo }\n'})
     assert _body(ir) == []
+
+
+def test_a_namespace_type_comes_before_an_import_of_its_name(tmp_path):
+    # in declarations and in bodies; an alias in the namespace too, drawn through to its
+    # target where a member's type names it
+    ir = extract_source(tmp_path, {
+        "foo.ts": "export class Foo { }",
+        "other.ts": "export namespace Lib { export class Foo { } }",
+        "a.ts": """import { Foo } from "./foo";
+export namespace N2 {
+  class Foo { }
+  export class A { f: Foo | null = null; m() { return new Foo(); } }
+}
+export class B { f: Foo | null = null; }
+""",
+        "b.ts": """import { Foo } from "./foo";
+import { Lib } from "./other";
+export namespace N3 {
+  import Foo = Lib.Foo;
+  export class C { f: Foo | null = null; }
+}
+"""})
+    assert sorted((r.from_, r.to, r.evidence or "") for r in ir.relations) == [
+        ("a.B", "foo.Foo", ""), ("a.N2.A", "a.N2.Foo", ""), ("a.N2.A", "a.N2.Foo", "body"),
+        ("b.N3.C", "other.Lib.Foo", "")]

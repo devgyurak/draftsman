@@ -139,6 +139,10 @@ class LanguageSpec:
     # Name resolution behaviour
     parent_namespace_lookup: bool = False  # C#, C++: types of enclosing namespaces are visible
     import_suffix_match: bool = False      # Python, TS: match import paths by unique suffix
+    # Whether the types and aliases of the namespaces around a type come before the file's
+    # imports of one name: TypeScript's `namespace N { class Foo {} }` is a scope inside
+    # the module, so its Foo hides an imported Foo (Java's single-type import comes first)
+    namespaces_before_imports: bool = False
     # Java, C#, Kotlin, C++: member types of supertypes are in scope by simple name.
     # Not in Python (class bodies are not scopes) or TS (merged namespaces are not inherited)
     inherited_member_types: bool = True

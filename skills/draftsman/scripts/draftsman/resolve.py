@@ -477,6 +477,19 @@ class Resolver:
                     return Resolution(EXTERNAL, outside)
             cur = self.index.get(cur.outer) if cur.outer else None
 
+        def in_namespaces() -> Optional[Resolution]:
+            for ns in chain:
+                cand = ns + sep + name if ns else name
+                if cand in self.index:
+                    return Resolution(PROJECT, cand)
+                if cand in self.inline_names:
+                    return Resolution(PROJECT, self.inline_names[cand])
+                if cand in self.aliases:
+                    return Resolution(ALIAS, cand)  # a type alias: drawn through to its target
+            return None
+
+        if spec.namespaces_before_imports and (found := in_namespaces()):
+            return found
         for imp in scope.imports:
             if not imp.wildcard and not imp.module and imp.local_name == name:
                 if imp.ambiguous:
@@ -497,14 +510,8 @@ class Resolver:
                     return self._not_found(imp.path, spec)
                 return Resolution(EXTERNAL, imp.path)
 
-        for ns in chain:
-            cand = ns + sep + name if ns else name
-            if cand in self.index:
-                return Resolution(PROJECT, cand)
-            if cand in self.inline_names:
-                return Resolution(PROJECT, self.inline_names[cand])
-            if cand in self.aliases:
-                return Resolution(ALIAS, cand)  # a type alias: drawn through to its target
+        if not spec.namespaces_before_imports and (found := in_namespaces()):
+            return found
 
         external_wildcards: list[Import] = []
         shared_wildcards: list[Import] = []   # declared in the project too, but not this name
