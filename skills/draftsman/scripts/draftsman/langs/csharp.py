@@ -103,7 +103,7 @@ _PLATFORM_FOLDERS = ("Android", "iOS", "MacCatalyst", "Windows", "Tizen")
 def _without_platforms(condition: str, platforms: bool = True) -> Optional[bool]:
     """An #if condition with every platform symbol false (``platforms``; else they are
     unknown, as any other symbol): True, False, or None when it depends on a symbol."""
-    tokens = re.findall(r"&&|\|\||[!()]|[A-Za-z_][A-Za-z0-9_]*", condition.split("//")[0])
+    tokens = re.findall(r"&&|\|\||==|!=|[!()]|[A-Za-z_][A-Za-z0-9_]*", condition.split("//")[0])
     at = 0
 
     def peek():
@@ -132,11 +132,19 @@ def _without_platforms(condition: str, platforms: bool = True) -> Optional[bool]
             return False
         return None
 
-    def conjunction():
+    def equality():
         v = unary()
+        while peek() in ("==", "!="):
+            negate = take() == "!="
+            w = unary()
+            v = None if v is None or w is None else (v == w) != negate
+        return v
+
+    def conjunction():
+        v = equality()
         while peek() == "&&":
             take()
-            w = unary()
+            w = equality()
             v = False if v is False or w is False else (None if v is None or w is None else True)
         return v
 

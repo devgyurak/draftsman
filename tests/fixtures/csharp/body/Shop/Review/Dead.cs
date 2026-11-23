@@ -29,6 +29,16 @@ namespace Shop.Rev.Dead
 #else
         public int Order = 0;
 #endif
+#if false == false
+        public object J() => new Order();   //> Order=Shop.Order/t
+#else
+        public object K() => new Order();   //> Order=-
+#endif
+#if true != true
+        public object L() => new Order();   //> Order=-
+#else
+        public object M() => new Order();   //> Order=Shop.Order/t
+#endif
         public object H() => new Always();   //> Always=Shop.Rev.Dead.Never.Always/t
         public object I() => new Order();   //> Order=Shop.Order/t
     }
