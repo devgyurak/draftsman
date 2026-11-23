@@ -161,3 +161,16 @@ def test_a_jsx_element_names_its_class_once(tmp_path):
         "a.tsx": 'import { Widget } from "./w";\n'
                  'export class A { render() { return <Widget></Widget>; } }\n'})
     assert _body(ir) == [("a.A", "w.Widget", "render", 2)]
+
+
+def test_a_parameter_property_hides_a_class_in_the_constructor_only(tmp_path):
+    # elsewhere the property is `this.Foo`
+    ir = extract_source(tmp_path, {
+        "foo.ts": "export class Foo { static make() { return 1; } }",
+        "a.ts": """import { Foo } from "./foo";
+export class A {
+  constructor(private Foo: any, public readonly Bar?: any) { Foo.make(); }
+  m() { return Foo.make(); }
+}
+"""})
+    assert _body(ir) == [("a.A", "foo.Foo", "m", 4)]

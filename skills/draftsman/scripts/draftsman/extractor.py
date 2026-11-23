@@ -700,6 +700,10 @@ class Extractor:
 
         for node, kind in declared:
             if (a := anchor_of(node.parent)) is not None:
+                # a member inside a member is the outer one's: TypeScript's parameter
+                # property `constructor(private x)` is a parameter in the body
+                while (outer := anchor_of(a.parent)) is not None:
+                    a = outer
                 key = place(a, node.start_byte)[0]
                 getattr(names.setdefault(key, BodyNames()), kind).add(_text(node, src))
         # `T` in `<T extends Foo>` is declared there; `Inner` in `o.new Inner()` is o's
