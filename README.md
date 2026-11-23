@@ -200,9 +200,9 @@ at every place on the five Java and TypeScript projects: javac for Java
 (`bench/javac_oracle`; jsoup without its 22 in `org.jsoup.examples`, which the benchmark
 leaves out), the TypeScript compiler for TypeScript (`bench/tsc_oracle`). Python has no
 compiler, so the answer is where mypy, pyright and ty name the same declaration
-(`bench/py_oracle`): every name drawn in httpx matches it, and all but 3 of Django's 4065,
-which are drawn where ty alone sees no definition (it takes their branch for never
-taken).
+(`bench/py_oracle`; a checker that names nothing where it marks the code unreachable
+abstains, and the others decide): every name drawn in httpx and in Django (4065) matches
+it.
 
 Unresolved references are split by reason: *ambiguous* (a project type shares the name; it is
 listed, not picked), *outside* (only something outside the sources could provide it: a

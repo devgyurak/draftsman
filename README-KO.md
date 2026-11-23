@@ -186,9 +186,8 @@ Java, TypeScript, Python의 관계 수는 선언에서 나온 관계와, 그 뒤
 `Foo.bar()`)에서 나온 관계입니다. Java와 TypeScript의 다섯 프로젝트에서 본문 관계는 모든 자리가 컴파일러의 해석과
 일치합니다. Java는 javac와 대조했고(`bench/javac_oracle`. jsoup은 벤치마크가 빼는 `org.jsoup.examples`의 22개를
 제외), TypeScript는 TypeScript 컴파일러와 대조했습니다(`bench/tsc_oracle`). Python에는 컴파일러가 없어 mypy,
-pyright, ty 셋이 같은 선언을 가리키는 자리를 답으로 삼습니다(`bench/py_oracle`). httpx는 그린 이름이 모두 일치하고,
-Django는 4065개 중 3개를 빼고 일치합니다. 그 3개는 ty만 정의를 내놓지 않는 자리입니다(ty는 그 분기를 실행되지 않는
-분기로 봅니다).
+pyright, ty 셋이 같은 선언을 가리키는 자리를 답으로 삼습니다(`bench/py_oracle`. 스스로 도달 불가로 표시한 자리에서
+정의를 내놓지 않은 검사기는 기권하고, 나머지가 정합니다). httpx와 Django(4065개)에서 그린 이름이 모두 일치합니다.
 
 미해결 참조는 이유별로 나눴습니다. *ambiguous*는 같은 이름의 프로젝트 타입이 있어 후보로만 적고 고르지 않은 것,
 *outside*는 소스 밖에 있는 것(와일드카드·기본 import, 외부 상위 타입의 중첩 타입)으로만 설명되는 것,

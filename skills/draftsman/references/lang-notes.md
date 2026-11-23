@@ -366,12 +366,20 @@ is that type. Aliases of aliases are followed.
   Bar`). In a body nothing comes through a
   star import whose `__all__` cannot be read (`__all__ = a_all + b_all`). No name in a
   branch of a `sys.platform` or `sys.version_info` test is read, and a class declared in
-  one draws nothing, in its file or where another imports it. Checked against mypy, pyright and ty together
-  (`bench/py_oracle`): the key is where all three name the same declaration, and a place
-  where they differ (18 in Django, none in httpx) is to draw nothing. httpx: 186 names,
-  0 mismatches; Django: 4,065 names, 3 drawn where they differ: ty alone takes `elif
-  db_field.name in self.raw_id_fields:` for never true, since the class sets
-  `raw_id_fields = ()`, and gives no definition in it. The key is the name as static
+  one draws nothing, in its file or where another imports it; nor is one in code only run
+  outside type checking (after `if TYPE_CHECKING:` or `typing.TYPE_CHECKING`, under `if`
+  or `elif not TYPE_CHECKING:`, the running value of `Foo() if TYPE_CHECKING else Bar()`),
+  where mypy and pyright see nothing and only ty answers. Checked against mypy, pyright
+  and ty together (`bench/py_oracle`): the key is where they name the same declaration, and
+  a place where they differ (15 in Django, none in httpx) is to draw nothing. A checker
+  that gives no definition where it marks the code unreachable itself abstains (mypy in a
+  block its semantic analysis skips, pyright in the range of its hint of unreachable code,
+  ty there too or where its hover says `Never`), and the others decide, two or more of
+  them; after `return`, under `if False:` or `if PY2:`, after a false `assert` on the
+  version, one checker abstains and the other two agree. Django: ty abstains at 8 places
+  (`elif db_field.name in self.raw_id_fields:`, which it takes for never true since the
+  class sets `raw_id_fields = ()`), mypy and pyright at none; httpx: none. httpx: 186
+  names, 0 mismatches; Django: 4,065 names, 0 mismatches. The key is the name as static
   analysis sees it: monkeypatching, a name another module rebinds later, and code only
   another platform runs are in none of the three. Known limits: a plain name that starts
   lower-case is not read (a class named so is missed); a nested class reached through a

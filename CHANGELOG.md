@@ -70,9 +70,9 @@ Notes for anyone with `view.json` files written against a development build:
   unannotated functions too) and asks pyright's and ty's language servers for the
   definition at each place; where they differ, nothing may be drawn. httpx: 186 names
   drawn, 0 mismatches (529 places checked, none disputed, none left undrawn); Django: 4065
-  names, 3 drawn where ty alone gives no definition (it takes `elif db_field.name in
-  self.raw_id_fields:` for never true, the class setting `raw_id_fields = ()`), none at
-  the other 15 places the checkers dispute, 18 of the key's names left undrawn. A
+  names, 0 mismatches since a checker that marks a place unreachable and names nothing
+  there abstains (below; before, 3 were drawn where ty alone gave no definition), none at
+  the 15 places the checkers dispute, 18 of the key's names left undrawn. A
   fixture of 120 names, which the three agree with, pins every form that binds a name,
   each written by hand; three drew a class before they were closed (`with f as (Foo)`,
   `case Bar.Inner:`, a class beside a star import of its name). Python scopes names
@@ -122,6 +122,31 @@ Notes for anyone with `view.json` files written against a development build:
   Django's and httpx's `ir.json` are byte for byte the same (none of these forms occurs
   there in a way that changes a relation: still 4065 and 186 names, 3 and 0 mismatches,
   the same keys), and so are jsoup's, petclinic's, Netty's, TypeORM's and nest's.
+- **A Python checker that marks code unreachable and names nothing there abstains** (#5,
+  after 0.5.0). The answer key's rule changes, and with it the pass condition of #5: a
+  checker that gives no definition at a place and marks the place unreachable itself
+  abstains (mypy: a block its semantic analysis skips; pyright: the range of its hint of
+  unreachable code, pulled with `textDocument/diagnostic`, which it sends only to a client
+  that declares the Unnecessary tag; ty: that hint, or a `Never` hover); the others
+  decide, and only two or more of them giving the same is agreement. A definition given
+  in code marked unreachable is an answer, and no definition without the mark is one too
+  (a submodule the file does not import). Records keep `abstained`; `oracle.py run` and
+  `checkers` count it per checker. Django: ty abstains at 8 places, mypy and pyright at
+  none; the 3 places drawn where ty alone gave no definition (`elif db_field.name in
+  self.raw_id_fields:` with `raw_id_fields = ()`) are agreed now, so Django has 0
+  mismatches and 15 disputed places instead of 18 (the entries below say 3, measured
+  with the earlier key); httpx: no abstention, unchanged. In the fixture, after
+  `return`, `if False:`, `if 0:`, `while True:` and a false version assert pyright
+  abstains and mypy and ty agree; under `if PY2:` mypy abstains; mypy on this machine
+  abstains in a branch of a platform test, so pyright and ty decide there. Where mypy and
+  pyright both abstain, only ty is left and the place is disputed: code only run outside
+  type checking (`else:` after `if TYPE_CHECKING:`, `typing.TYPE_CHECKING` too, `if` and
+  `elif not TYPE_CHECKING:`, and the running value of `Foo() if TYPE_CHECKING else
+  Bar()`, where pyright gives no definition), whose names the extractor no longer reads,
+  as for a platform test; a branch of a version test is another such place, already not
+  read. The fixture grows to 251 names; turning abstention off fails the key's selftest
+  at 6 places, turning the extractor's rule off fails both tests. Neither changes
+  Django's or httpx's `ir.json`, nor the other e2e projects'.
 - **A nested Python class its class body binds twice is no one class** (#5, after
   0.5.0). `if x: class Cond` / `else: class Cond` in Foo made `Foo.Cond()` a relation to
   Foo.Cond, where ty answers both statements and `object.__init__` (the call of their

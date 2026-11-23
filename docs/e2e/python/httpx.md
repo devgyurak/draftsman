@@ -8,7 +8,7 @@ An HTTP client: sync and async clients, transports, typed models.
 | Commit | `7cff5f79bc` (2026-11-16) |
 | Extracted | the `httpx/` package |
 
-Measured on 2026-11-23 with Draftsman after 0.5.0 (at `0933197`; the same at `12e7df6`).
+Measured on 2026-11-23 with Draftsman after 0.5.0 (at `0933197`; the same at `51904e1`).
 
 ## Run
 
