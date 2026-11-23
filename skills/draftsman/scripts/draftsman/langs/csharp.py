@@ -62,6 +62,75 @@ def _lines(src: bytes):
             yield line, active, bool(stack)
 
 
+# the symbols a platform's target framework defines (`net11.0-ios`: IOS, and
+# IOS15_0_OR_GREATER and the like), none of which a plain `net11.0` build defines
+_PLATFORM_SYMBOL = re.compile(r"(ANDROID|IOS|MACCATALYST|MACOS|TVOS|WINDOWS|TIZEN)"
+                              r"(\d+(_\d+)*_OR_GREATER)?")
+# the folders a .NET MAUI app compiles for one platform only
+_PLATFORM_FOLDERS = ("Android", "iOS", "MacCatalyst", "Windows", "Tizen")
+
+
+def _without_platforms(condition: str) -> Optional[bool]:
+    """An #if condition with every platform symbol false: True, False, or None when it
+    depends on another symbol."""
+    tokens = re.findall(r"&&|\|\||[!()]|[A-Za-z_][A-Za-z0-9_]*", condition.split("//")[0])
+    at = 0
+
+    def peek():
+        return tokens[at] if at < len(tokens) else None
+
+    def take():
+        nonlocal at
+        at += 1
+        return tokens[at - 1]
+
+    def unary():
+        if peek() == "!":
+            take()
+            v = unary()
+            return None if v is None else not v
+        if peek() == "(":
+            take()
+            v = disjunction()
+            if peek() == ")":
+                take()
+            return v
+        t = take() if peek() is not None else ""
+        if t == "true":
+            return True
+        if t == "false" or _PLATFORM_SYMBOL.fullmatch(t):
+            return False
+        return None
+
+    def conjunction():
+        v = unary()
+        while peek() == "&&":
+            take()
+            w = unary()
+            v = False if v is False or w is False else (None if v is None or w is None else True)
+        return v
+
+    def disjunction():
+        v = conjunction()
+        while peek() == "||":
+            take()
+            w = conjunction()
+            v = True if v is True or w is True else (None if v is None or w is None else False)
+        return v
+
+    return disjunction()
+
+
+@lru_cache(maxsize=None)
+def _uses_maui(project: Path) -> bool:
+    for p in (project, _build_props(project.parent)):
+        doc = _msbuild(p) if p else None
+        if doc is not None and any(_local(el.tag) == "UseMaui" and (el.text or "").strip().lower()
+                                   == "true" for el in doc.iter()):
+            return True
+    return False
+
+
 @lru_cache(maxsize=None)
 def _protobuf_types(project: Path) -> tuple[tuple[str, frozenset], ...]:
     """(namespace, type names) Grpc.Tools generates for the project's `<Protobuf Include>`
@@ -310,6 +379,31 @@ class CSharpSpec(LanguageSpec):
         # directive lines (same length, so line numbers stay exact). One deterministic
         # configuration, and it parses wherever the directives sit
         return b"\n".join(line if kept else _blank(line) for line, kept, _ in _lines(src))
+
+    def platform_ranges(self, src, path, root):
+        # in a .NET MAUI app: its Platforms/<platform>/ folders, and the first branch of an
+        # #if that is false with every platform symbol false (`#if IOS || MACCATALYST`, not
+        # `#if !WINDOWS`), which only a platform's build compiles
+        project = _project_file(path.resolve().parent)
+        if project is None or not _uses_maui(project):
+            return []
+        below = path.resolve().relative_to(project.parent).parts
+        if len(below) > 2 and below[0] == "Platforms" and below[1] in _PLATFORM_FOLDERS:
+            return [(0, len(src))]
+        out, at, stack, off = [], 0, [], False   # stack: whether each #if's branch was off
+        for line in src.split(b"\n"):
+            m = re.match(rb"^[ \t]*#[ \t]*(if|elif|else|endif)\b(.*)", line)
+            if m and m.group(1) == b"if":
+                stack.append(off)
+                off = off or _without_platforms(m.group(2).decode("utf8", "replace")) is False
+            elif m and m.group(1) in (b"elif", b"else"):
+                off = stack[-1] if stack else off   # blanked anyway
+            elif m and stack:
+                off = stack.pop()
+            elif off:
+                out.append((at, at + len(line)))
+            at += len(line) + 1
+        return out
 
     def implicit_types(self, root_node):
         # top-level statements are the body of an implicit `Program` of the project

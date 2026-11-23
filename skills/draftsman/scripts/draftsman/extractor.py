@@ -614,7 +614,7 @@ class Extractor:
             self._annotation_ref(annotation_refs[nid], src, scope, types_by_node,
                                  set(annotation_refs))
         self._body_refs(bodies, src, scope, types_by_node, members_by_node, namespaces,
-                        imports_by_node)
+                        imports_by_node, spec.platform_ranges(original, path, root))
 
         # what the build imports into every file (implicit usings), after the file's own
         for ns, origin in build_imports:
@@ -669,8 +669,9 @@ class Extractor:
         owner.annotation_refs.append(ann)
 
     def _body_refs(self, matches, src, scope, types_by_node, members_by_node,
-                   namespaces, imports_by_node) -> None:
-        """Names written in bodies, each with what may hide it there (query-protocol.md)."""
+                   namespaces, imports_by_node, unread_ranges=()) -> None:
+        """Names written in bodies, each with what may hide it there (query-protocol.md);
+        none in ``unread_ranges`` (LanguageSpec.platform_ranges)."""
         regions: set[int] = set()
         inits: dict[int, str] = {}           # initializer block -> its `via`
         classes: dict[int, list[str]] = {}   # body of an anonymous or local class -> supertypes
@@ -879,7 +880,8 @@ class Extractor:
         not_refs = {n.id for n, _ in declared} | unread
         # a receiver is a dotted name, not an expression (`this.x.m()`, `a[0].B.m()`)
         refs = [(p, n) for p, n in refs if n.id not in not_refs and (
-            p != "receiver" or self._dotted(n))]
+            p != "receiver" or self._dotted(n))
+            and not any(a <= n.start_byte < b for a, b in unread_ranges)]
         whole = {n.id for _, n in refs}
         for position, node in sorted(refs, key=lambda r: r[1].start_byte):
             if node.parent.id in whole:

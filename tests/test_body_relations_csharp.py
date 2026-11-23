@@ -199,3 +199,34 @@ public class Service
     assert any(r.from_ == "Shop.Api.Grpc.Service" and r.to == "Shop.Api.Model.BasketItem"
                for r in ir.relations) is False
 
+
+def test_code_only_a_platform_builds_draws_nothing_in_a_maui_app(tmp_path):
+    # Platforms/<platform>/ and `#if ANDROID`; `#if !WINDOWS` is compiled for net11.0 too
+    app = """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><UseMaui>true</UseMaui>
+</PropertyGroup></Project>"""
+    ir = extract_source(tmp_path, {
+        "App/App.csproj": app,
+        "App/MauiProgram.cs": """namespace App;
+public static class MauiProgram
+{
+    public static object Create()
+    {
+#if ANDROID
+        _ = new Handler();
+#elif IOS
+        _ = new Handler();
+#endif
+#if IOS || MACCATALYST
+        _ = new Handler();
+#endif
+#if !WINDOWS
+        _ = new Handler();
+#endif
+        return null!;
+    }
+}
+public class Handler { }
+""",
+        "App/Platforms/Android/MainApplication.cs":
+            "namespace App;\npublic class MainApplication { object M() => MauiProgram.Create(); }\n"})
+    assert _body(ir) == [("App.MauiProgram", "App.Handler", "Create", 15)]

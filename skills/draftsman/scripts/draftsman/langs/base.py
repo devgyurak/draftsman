@@ -218,6 +218,12 @@ class LanguageSpec:
         and `#else` branches): a body name of one of them may be that type in a build."""
         return set()
 
+    def platform_ranges(self, src: bytes, path: Path, root: Path) -> list[tuple[int, int]]:
+        """Byte ranges of code only a platform's build reads, which the answer key cannot
+        compile (a .NET MAUI app's `Platforms/iOS/`, its `#if ANDROID`): no name in them is
+        read for a body relation."""
+        return []
+
     def implicit_types(self, root_node: "ts.Node") -> list[str]:
         """Ids of the types a file declares without a declaration (C#'s `Program` of
         top-level statements): one per build project that has such a file."""
