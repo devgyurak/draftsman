@@ -96,6 +96,21 @@ binds `a`), `submodules_need_import` (a dotted receiver reaches a submodule only
 file imports it), `suffix_skips_no_package` (a suffix match of an import never drops a
 package of the sources) and `star_exports` (what a wildcard import brings in: `__all__`,
 else no `_` name; in a body nothing through a listing that cannot be read).
+C# adds `block_imports` (an import in a namespace block is looked at with that
+namespace's types, before the namespaces around it; declared relations too),
+`body_aliases` (a name that is an alias the file declares of one project type names it;
+TypeScript's aliases draw nothing in a body) and `color_color` (a field whose type has its
+name leaves the name a type before a static member or nested type), and hooks that tell a
+body relation what a build does beyond the sources: `body_name_text` (`@Order` is
+`Order`), `arity` (the type arguments a part is written with, which the type must take),
+`conditional_ranges`, `left_out_types` and `left_out_names` (code and names of `#if`
+branches some build leaves out or the parser never reads), `platform_ranges` (code only a
+platform's build compiles, which no answer key here can), `implicit_types` (a top-level
+`Program`), `project_references` (which build projects a file's project sees),
+`build_types` (types a build generates outside the sources, which hide as declared ones
+do), `generated_fields` (`@body.generated`) and `companion_fields` (members a file beside
+the source declares: `X.razor`, `X.xaml`), and `init_via` (the `via` of an operator or
+indexer body). Each of them draws less where a build may differ, never more.
 
 ## Ownership
 

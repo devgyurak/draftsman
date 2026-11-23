@@ -42,7 +42,7 @@ when you draw again.
 - `--members all|public|none`, `--hide GLOB` (types `'*Dto'`, members `'*#get*'`,
   `'*#toString'`), `--relations extends,implements,association`, `-o FILE` for a file the
   user asked for.
-- Java, TypeScript, Python: focus diagrams draw classes the focus's bodies name, or whose
+- Java, C#, TS, Python: focus diagrams draw classes the focus's bodies name, or whose
   bodies name it; `--body none` drops them.
 - Exit 2: a missing dependency; the message gives the install command
   (`references/setup.md` covers uv, sandboxes and Node). Never fall back to drawing by hand.

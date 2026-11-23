@@ -80,7 +80,7 @@ create altogether.
 ## body
 
 A name written in a body (`new Foo()`, `Foo.bar()`, a cast, a local variable's type) is a
-dependency marked `evidence: "body"` (Java, TypeScript and Python, see `ir-schema.md`). Bodies name
+dependency marked `evidence: "body"` (Java, C#, TypeScript and Python, see `ir-schema.md`). Bodies name
 far more types than declarations do, so they draw less by default:
 
 - `"focus"` (the default with `focus`): only the body relations that touch the focus (or

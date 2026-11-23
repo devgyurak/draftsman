@@ -27,7 +27,7 @@ number. Draftsman is a skill that splits the work the same way: a parser measure
 the agent only decides what to show, and a renderer draws it.
 
 - **Facts from a parser** — classes, members, inheritance, field associations with
-  multiplicity, and dependencies from signatures, annotations and (Java, TypeScript,
+  multiplicity, and dependencies from signatures, annotations and (Java, C#, TypeScript,
   Python) the type names method bodies write, each with a source location.
 - **Edited, not invented** — the agent can hide, group and annotate. A relation the parser
   did not find can only be added as an *inferred* edge with a rationale, drawn dotted.
@@ -182,9 +182,9 @@ checked), an SVG and an HTML viewer — on real projects, tests and generated co
 | Java | [spring-petclinic](docs/e2e/java/spring-petclinic.md) | 30 | 25 | 74 + 27 body | 0 | 0 |
 | Java | [jsoup](docs/e2e/java/jsoup.md) | 105 | 230 | 1310 + 1724 body | 0 | 0 |
 | Java | [Netty](docs/e2e/java/netty.md) | 2076 | 2752 | 17812 + 13818 body | 3 (2 outside, 1 unexplained) | 0 |
-| C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 366 | 199 (1 ambiguous, 198 outside) | 0 |
-| C# | [eShop](docs/e2e/csharp/eshop.md) `src/` | 497 | 506 | 959 | 526 (7 ambiguous, 515 outside, 4 unexplained) | 0 |
-| C# | [Serilog](docs/e2e/csharp/serilog.md) `src/Serilog` | 113 | 119 | 566 | 23 (23 outside) | 0 |
+| C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 366 + 207 body | 199 (1 ambiguous, 198 outside) | 0 |
+| C# | [eShop](docs/e2e/csharp/eshop.md) `src/` | 497 | 506 | 960 + 442 body | 520 (1 ambiguous, 515 outside, 4 unexplained) | 0 |
+| C# | [Serilog](docs/e2e/csharp/serilog.md) `src/Serilog` | 113 | 119 | 566 + 363 body | 23 (23 outside) | 0 |
 | Kotlin | [nowinandroid](docs/e2e/kotlin/nowinandroid.md) | 226 | 237 | 416 | 4 (3 outside, 1 unexplained) | 0 |
 | Kotlin | [Ktor](docs/e2e/kotlin/ktor.md) | 1578 | 2137 | 6897 | 586 (49 ambiguous, 537 outside) | 0 |
 | TypeScript | [nest](docs/e2e/typescript/nest.md) `packages/` | 730 | 738 | 2307 + 1117 body | 0 | 0 |
@@ -194,11 +194,14 @@ checked), an SVG and an HTML viewer — on real projects, tests and generated co
 | C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 | 2 (2 unexplained) | 9 spans in 8 files (5 in function bodies; `extern "C"`, `__has_include`, a gMock macro, a pointer-to-member field) |
 | C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2066 | 9983 | 309 (1 ambiguous, 4 outside, 304 unexplained; system and library headers, POCO's `#define` types) | 333 spans in 121 files (`#if` branches, pointers to members, explicit instantiations, `typeid`) |
 
-Java's, TypeScript's and Python's relations are the declared ones, then those read from
-names in method bodies (`new Foo()`, `Foo.bar()`), which match what the compiler resolves
-at every place on the five Java and TypeScript projects: javac for Java
+Java's, C#'s, TypeScript's and Python's relations are the declared ones, then those read
+from names in method bodies (`new Foo()`, `Foo.bar()`), which match what the compiler
+resolves at every place on the eight Java, C# and TypeScript projects: javac for Java
 (`bench/javac_oracle`; jsoup without its 22 in `org.jsoup.examples`, which the benchmark
-leaves out), the TypeScript compiler for TypeScript (`bench/tsc_oracle`). Python has no
+leaves out), Roslyn for C# (`bench/roslyn_oracle`, in a container with the SDK each
+repository pins; every compilation of a file, one per target framework and project, must
+agree; eShop's MAUI apps for plain `net11.0`, their platform code not), the TypeScript
+compiler for TypeScript (`bench/tsc_oracle`). Python has no
 compiler, so the answer is where mypy, pyright and ty name the same declaration
 (`bench/py_oracle`; a checker that names nothing where it marks the code unreachable
 abstains, and the others decide): every name drawn in httpx and in Django (4065) matches
@@ -214,7 +217,7 @@ the exact commands, and what every unresolved name and diagnostic is.
 
 - **It doesn't guess relations.** Anything not in `ir.json` is rejected unless it is an
   inferred edge between known or unresolved names — and those are drawn dotted.
-- **It reads only the type names in method bodies, and only in Java, TypeScript and Python.**
+- **It reads only the type names in method bodies, and only in Java, C#, TypeScript and Python.**
   `new Foo()`, `Foo.bar()`, casts and local variable types become dependencies marked as
   read from a body; what a call on a value reaches (`order.total()`) does not, and the
   other languages' bodies are not read yet ([#5](https://github.com/devgyurak/draftsman/issues/5)). It is

@@ -117,9 +117,61 @@ is that type. Aliases of aliases are followed.
   `Attribute` suffix is not taken for one), `typeof(X)` in the arguments is a type
   reference, and `E.V`, `nameof(X)` and bare names are drawn when they are project types.
   `[assembly: ...]` attributes belong to no type.
+- Names in bodies (`evidence: "body"`; method, constructor, accessor, operator, indexer
+  and local function bodies, constructor initializers, field, property and enum member
+  initializers, a primary constructor's base arguments; not attributes, parameter
+  defaults or top-level statements): a name where only a type stands (a local's type,
+  `new Foo()`, a cast, `typeof`, `default`, `as`, a pattern's or a `catch`'s type, type
+  arguments, a lambda's or local function's parameter types, and `is Foo` alone, which C#
+  reads as a type before a constant) is looked up among types; the head of a member
+  access (`Foo.Create()`, `Foo.Line.Make()`, `Repo<int>.Make()`), `nameof(Foo)` and a
+  constant pattern (`case Status.Open:`, a switch arm's `Foo =>`, `is not Foo`, `is A or
+  B`, the head of `is Status.Closed`) may be a variable, and draws nothing where one of
+  the name is in scope: a parameter, a local, a pattern, `out`, `foreach`, `catch`,
+  deconstruction, lambda or LINQ variable anywhere in the member (also after the name, so
+  a few are lost), a field, property, event or primary constructor parameter of the type,
+  of the types around it and of their project supertypes, a static field `using static`
+  brings in, or a member generated code declares (Razor's `@inject` and `@code` members of
+  `X.razor` for `X.razor.cs`, also from `_Imports.razor`; XAML's `x:Name` of `X.xaml` for
+  `X.xaml.cs`; CommunityToolkit.Mvvm's `[ObservableProperty]` and `[RelayCommand]`;
+  `[JsonSerializable(typeof(T))]`). A field or property whose type has its name
+  (`OrderStatus OrderStatus`) leaves the name the type before a nested type or a member
+  that is static wherever it is declared (C#'s "Color Color"), and the field before any
+  other. A `using` in a namespace block comes before the namespaces around it; an alias
+  the file declares of one project type (`using O = Shop.Order;`) names that type, unless
+  a namespace around declares a type of the name. A name the written arity does not fit
+  (`Box` where the nearest Box is `Box<T>`) draws nothing.
+- Where a build may resolve a body's name differently, nothing is drawn: a type declared
+  in the `#if` branch the parser reads (Serilog's `System.TimeProvider` for older
+  targets), a name a type, field or alias of an `#elif`/`#else` branch has, a name the
+  file resolves through a `using` in an `#if` branch, an id two build projects declare
+  (two projects' `partial class Program`, the implicit `Program` of top-level
+  statements), a type of a project the file's project does not reference
+  (`<ProjectReference>`, followed through), and in a .NET MAUI app code only a platform's
+  build compiles (`Platforms/<platform>/`, `#if ANDROID`, `#if IOS || MACCATALYST`). A
+  type gRPC generates from the project's `<Protobuf Include>` (each .proto's messages,
+  enums and services, in its `csharp_namespace`) hides a type of the name a `using`
+  brings in, also for declared relations. Checked against Roslyn (`bench/roslyn_oracle`,
+  each file's compilations joined; a place they resolve differently is no answer): 0
+  mismatches on eShopOnWeb, eShop and Serilog.
+- Known limits of bodies: a member a base class outside the sources declares is not known
+  (`ControllerBase.User`, `PageModel.Request`), so it hides nothing: a project type of its
+  name in a subclass's body is drawn where C# reads the member (none on the three e2e
+  repositories); the base's nested types the same. Lost: names in top-level statements
+  (no type the extractor sees holds them), after `global::`, through an alias another
+  file declares, a parameter or a local of its type's name (Color Color, whose type is
+  not kept), a static member beside an instance overload of its name, a name a file's
+  `using static` brings a field of (C# looks at the namespaces around first), a type of
+  another arity further out (`Lib.Box` beyond `Box<T>`), and a name a switch arm's
+  pattern variable shares elsewhere in the member.
 - Not handled: extension methods (they stay members of their static class, which is
   correct but not linked to the extended type), alias and static `<Using>` items in the
   project file, the .NET 8 rule that drops `System.Net.Http` for .NET Framework targets.
+  Declared relations ignore project references and the arity written (`Repo<int>` may
+  resolve to a `Repo` of the namespace around), take types of one id from two projects
+  for one (`Program`), see the `using X = ...` alias of a file without a namespace in
+  every file, and in a file-scoped namespace look at the file's aliases before the
+  namespaces around it (C# after).
 
 ## Kotlin
 
