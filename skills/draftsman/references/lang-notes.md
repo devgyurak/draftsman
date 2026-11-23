@@ -340,12 +340,20 @@ is that type. Aliases of aliases are followed.
   statements, a class and an import of its name, a class and a star import that brings
   in another one of that name) is no one class, there or where another file imports it;
   beside a star import of a module outside the sources (`from tkinter import *`), whose
-  names are not known, no name of the file is drawn.
+  names are not known, no name of the file is drawn, nor where another file takes the
+  name from it: by importing the name (`from q.outside import Button`, re-exported too),
+  through the module (`outside.Button()`), or by a star import of a project module that
+  brings such a star in (`from q.gui import *`, one step away or more).
   A dotted value goes through what the file imports (`models.Model()` after `from
   django.db import models`, `p.foo.Foo()` after `import p.foo`), never a variable, and
-  reaches a submodule only when the file imports it as a module (`models.base.ModelBase()`
-  draws nothing after `from django.db import models` alone; `p.bar.Bar()` nothing after
-  `from p.bar import Bar` or `from p import bar`, where pyright and ty find no `p.bar`). In a body nothing comes through a
+  reaches a submodule only through the name a module import binds, or one its package's
+  `__init__` imports relatively: `p.sub.near.Near()` after `import p.sub.near`, or after
+  `from . import near` (or `from .near import Near`) in `p/sub/__init__.py`, but not
+  `sub.near.Near()` after `from p import sub` and `import p.sub.near`, nor
+  `p.sub.near.Near()` after `import p.sub.near as n` or an absolute import in the
+  `__init__`, where pyright finds nothing (`models.base.ModelBase()` draws nothing after
+  `from django.db import models` alone; `p.bar.Bar()` nothing after `from p.bar import
+  Bar`). In a body nothing comes through a
   star import whose `__all__` cannot be read (`__all__ = a_all + b_all`). No name in a
   branch of a `sys.platform` or `sys.version_info` test is read, and a class declared in
   one draws nothing, in its file or where another imports it. Checked against mypy, pyright and ty together
@@ -362,7 +370,9 @@ is that type. Aliases of aliases are followed.
   p.foo`, `import p.bar`) `p.foo.Foo()` draws nothing, as `p` counts as bound twice;
   names in string annotations and type comments are not read. In a declaration, a nested
   class's annotation sees the outer class's nested classes (`class Outer: class Sub: x:
-  Inner` is `Outer.Inner`), which Python's scoping does not (the module's `Inner`).
+  Inner` is `Outer.Inner`), which Python's scoping does not (the module's `Inner`), and a
+  method's decorator does not see the class body (`Other = print` there, then `@Other`,
+  draws the module's class `Other`).
 - Not handled: `__all__` written as anything but a list or tuple of strings
   (`a_all + b_all`, `__all__.extend(...)`; a star import is then taken to bring in every
   name not starting with `_`, except in a body), attributes created outside `__init__`,

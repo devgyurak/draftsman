@@ -122,6 +122,27 @@ Notes for anyone with `view.json` files written against a development build:
   Django's and httpx's `ir.json` are byte for byte the same (none of these forms occurs
   there in a way that changes a relation: still 4065 and 186 names, 3 and 0 mismatches,
   the same keys), and so are jsoup's, petclinic's, Netty's, TypeORM's and nest's.
+- **Three more Python forms drawn where the checkers disagree, and a BOM in the key** (#5,
+  after 0.5.0). A second set of hand-written sources found 6, 2 and 1 wrong names, now 0;
+  the earlier sets stay at 0. A star import from outside the sources hid the names of its
+  own file only: a name is as uncertain where another file takes it, through a project
+  module's star import that brings one in (`from q.gui import *`, gui.py importing
+  tkinter's, one step away or more), through an import of the name (`from q.outside
+  import Button`, re-exported too) or through the module (`outside.Button()`). A
+  submodule was reached through any name for its package: it is reached through the name
+  its import binds (`import q.sub.near` binds `q`, not the `sub` of `from q import sub`;
+  `import q.sub.near as n` binds only `n`; `Import.aliased` tells that apart), or through a
+  package whose `__init__` imports it relatively (`from . import near`, which all three
+  checkers follow; not an absolute import). The key read no class of a file that starts
+  with a UTF-8 BOM (`ast.parse` rejects U+FEFF), so pyright's and ty's answers there were
+  "var" and every name of its classes was disputed. The fixture grows to 199 names; each
+  part of the rules fails a test when turned off. Turned off one at a time on Django and
+  httpx, no part changes a name (none hidden right, none kept out wrong): their `ir.json`
+  are byte for byte the same, 4065 and 186 names, 3 and 0 mismatches, and no file of
+  either starts with a BOM. The shop fixture's Python witness of a name in a body moves
+  to `isinstance(self, Auditable)` in common/base.py, as its other bodies name classes
+  from files with `from stripe import *` or `from shop.promo import *`. jsoup's,
+  petclinic's, Netty's, TypeORM's and nest's `ir.json` are byte for byte the same.
 - **A TypeScript namespace's own type comes before an import of its name** (after 0.5.0).
   In `import { Foo } from "./foo"; namespace N2 { class Foo {} export class A { f: Foo |
   null = null } }`, A's Foo is N2's, as the compiler says, but the extractor checked the
