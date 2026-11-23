@@ -226,15 +226,18 @@ is that type. Aliases of aliases are followed.
   aliases, drawn through to the project types they name. Standard-library globals (`Partial`, `Required`,
   `Float32Array`, `AsyncDisposable`, ...) are builtins.
 - Not handled: `exports` subpath maps in package.json, tsconfig `paths` aliases
-  (`@app/*`), `export * as ns from`.
+  (`@app/*`), `export * as ns from`, a default export re-exported by name (`export {
+  default as X } from`: X is unresolved where a member's type names it, and draws
+  nothing in a body).
 - Constructor parameter properties (`constructor(private repo: Repo)`, also optional
   ones: `protected q?: Q`) are fields;
   `#private` names are private. Properties of inline object types are not members, and
   the types inside them produce no relations (`options: { socketClass?: Type<X> }`).
   Fields without a written type (`reg = new Registry()`) have no type and no association:
   initialisers are not evaluated, though the names they write are body dependencies.
-- Default imports are resolved by the local name. Not handled: `declare module`, global
-  scripts without imports/exports, mixins built with functions.
+- Default imports are resolved by the local name. Not handled: `declare module`,
+  `declare global` blocks (`declare global { namespace JSX { ... } }`: their types are not
+  extracted), global scripts without imports/exports, mixins built with functions.
 - Decorators on a class, its members and parameters: the names their arguments pass are
   dependencies of the class (`via` `@Name`) when they are project classes,
   `@Module({imports: [UsersModule]})`, `@Type(() => Foo)`, `@InjectRepository(User)`,
