@@ -7,9 +7,9 @@ Notes for anyone with `view.json` files written against a development build:
 - **0.3.0**: the entries below on nested types and annotations change the default
   focus diagram and the relations in `ir.json`; results measured with 0.2.0 (the
   benchmark's runs among them) are not comparable with 0.3.0 ones.
-- **After 0.4.1** (not yet versioned): TypeScript's `ir.json` gains the relations read
-  from names in bodies (below); results measured with 0.4.x are not comparable with later
-  ones on what TypeScript bodies relate. Nothing changes for the other languages.
+- **0.5.0**: TypeScript's `ir.json` gains the relations read from names in bodies
+  (below); results measured with 0.4.x are not comparable with 0.5.0 ones on what
+  TypeScript bodies relate. Nothing changes for the other languages.
 - **0.4.1**: `draw.py` warns when a focus diagram is drawn from part of a project (below);
   the benchmark's v3 and v3-haiku measured 0.4.0 (`7d2358a`), without the warning.
 - **0.4.0**: Java's `ir.json` gains the relations read from names in method bodies, and a

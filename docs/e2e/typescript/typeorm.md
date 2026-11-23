@@ -8,7 +8,7 @@ An ORM for many databases: entity metadata, query builders, drivers, migrations 
 | Commit | `d5b143dd7e` (2026-11-16) |
 | Extracted | `packages/typeorm/src` (tests are under `packages/typeorm/test`) |
 
-Measured on 2026-11-23 with Draftsman at `ef0eb0d` (0.4.1 and the TypeScript body relations of #5, not yet released).
+Measured on 2026-11-23 with Draftsman 0.5.0 (at `ef0eb0d`; 0.5.0 extracts the same `ir.json`).
 
 ## Run
 

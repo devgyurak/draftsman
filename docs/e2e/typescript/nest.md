@@ -8,7 +8,7 @@ The NestJS framework monorepo: decorators, dependency injection, microservice tr
 | Commit | `09b656cb8d` (2026-11-16) |
 | Extracted | `packages/`, without tests and spec files |
 
-Measured on 2026-11-23 with Draftsman at `ef0eb0d` (0.4.1 and the TypeScript body relations of #5, not yet released).
+Measured on 2026-11-23 with Draftsman 0.5.0 (at `ef0eb0d`; 0.5.0 extracts the same `ir.json`).
 
 ## Run
 
