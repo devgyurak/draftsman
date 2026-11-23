@@ -207,8 +207,10 @@ is that type. Aliases of aliases are followed.
 - Ids are module path + name: `src/order/order.Order`; `index.ts` is its directory.
 - Scopes: a `namespace` block sees the module around it (`namespace Order { … Order … }`),
   and its own types and aliases (`class Foo`, `import Foo = Lib.Foo`) come before an
-  import of the same name. Members of a merged namespace are not inherited: a subclass of
-  `Base` must write `Base.Listener`.
+  import of the same name. One the block does not export is seen in that block alone
+  (another block of the namespace sees the import), as is everything in a namespace the
+  block does not export; in a `declare namespace` every member is exported. Members of a
+  merged namespace are not inherited: a subclass of `Base` must write `Base.Listener`.
 - Imports: named, aliased (`{ A as B }`), namespace (`* as pay` then `pay.Receipt`), and
   barrel re-exports: `export { X } from`, `export * from` and `export type * from` (TS 5.0;
   `type` is blanked before parsing, same length). Relative paths resolve exactly, and a

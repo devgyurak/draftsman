@@ -74,10 +74,11 @@ How a recorded name resolves follows the language's scoping, set in its `Languag
 `this.x`; an enum's own constants hide one in its bodies either way),
 `nested_types_in_scope` (whether a type sees its own nested types by simple name),
 `namespaces_before_imports` (whether the namespaces around a type come before the file's
-single-name imports: TypeScript), `type_only_kinds` (kinds that are no value, so a
-receiver of their name draws nothing: TypeScript interfaces) and `receiver_package_heads`
-(whether a dotted receiver whose head is no type is a package, as in Java, or goes
-through what the file imports, as TypeScript's `ns.Foo.m()`).
+single-name imports: TypeScript, where `local_block` keeps a member a namespace block
+does not export to that block), `type_only_kinds` (kinds that are no value, so a receiver
+of their name draws nothing: TypeScript interfaces) and `receiver_package_heads` (whether
+a dotted receiver whose head is no type is a package, as in Java, or goes through what
+the file imports, as TypeScript's `ns.Foo.m()`).
 
 ## Ownership
 
