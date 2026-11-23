@@ -94,6 +94,10 @@ def _module(path: str) -> str:
     return path
 
 
+def _exported(node) -> bool:
+    return node.parent is not None and node.parent.type == "export_statement"
+
+
 class TypeScriptSpec(LanguageSpec):
     name = "typescript"
     grammar = "typescript"
@@ -182,6 +186,30 @@ class TypeScriptSpec(LanguageSpec):
                 and node.parent.type in ("internal_module", "module"):
             return False
         return node.type in self.opaque_nodes
+
+    def local_block(self, decl_node):
+        # a namespace's member is the namespace's when exported, or in an ambient
+        # `declare namespace`, where every member is; otherwise its block's alone. So is
+        # an exported one of a namespace its block does not export: another block's
+        # `namespace Inner` is another namespace
+        cur = decl_node
+        while True:
+            exported = _exported(cur)
+            stmt = cur.parent if exported else cur
+            while stmt.parent is not None and stmt.parent.type == "expression_statement":
+                stmt = stmt.parent   # `namespace Inner {}` not exported is a statement
+            block = stmt.parent
+            if block is None or block.type != "statement_block" or block.parent is None \
+                    or block.parent.type not in ("internal_module", "module"):
+                return None   # at the module's top level
+            if not exported:
+                anc = block.parent
+                while anc is not None:
+                    if anc.type == "ambient_declaration":
+                        return None
+                    anc = anc.parent
+                return block.parent
+            cur = block.parent   # the namespace: exported from the block around it?
 
     def visibility(self, owner_kind, member_kind, modifiers, name, node):
         if name.startswith("#"):

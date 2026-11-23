@@ -69,6 +69,9 @@ class FileScope:
     aliases: set[str] = field(default_factory=set)      # qualified type alias names
     alias_targets: dict[str, str] = field(default_factory=dict)  # alias -> type it names
     inline_namespaces: set[str] = field(default_factory=set)    # C++ `inline namespace v1`
+    # a type or alias seen only inside the namespace block that declares it -> that
+    # block's first and last line (TypeScript's member a block does not export)
+    block_local: dict[str, tuple[int, int]] = field(default_factory=dict)
     # names the file may declare where the parser could not see it: simple name ->
     # namespace around it -> places (an argument of a blanked macro, a class head inside
     # a syntax error)
@@ -233,6 +236,11 @@ class LanguageSpec:
 
     def is_opaque(self, node: "ts.Node") -> bool:
         return node.type in self.opaque_nodes
+
+    def local_block(self, decl_node: "ts.Node") -> Optional["ts.Node"]:
+        """The namespace block a type or alias declaration is seen in alone, or None when
+        every block of its namespace sees it."""
+        return None
 
     def type_kind(self, captured_kind: str, modifiers: list[str]) -> str:
         if captured_kind == "class" and "abstract" in modifiers:

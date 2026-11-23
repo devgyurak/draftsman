@@ -245,3 +245,40 @@ export namespace N3 {
     assert sorted((r.from_, r.to, r.evidence or "") for r in ir.relations) == [
         ("a.B", "foo.Foo", ""), ("a.N2.A", "a.N2.Foo", ""), ("a.N2.A", "a.N2.Foo", "body"),
         ("b.N3.C", "other.Lib.Foo", "")]
+
+
+def test_a_namespace_member_not_exported_is_seen_in_its_own_block_only(tmp_path):
+    # another block of the namespace sees the import; an exported member every block sees
+    ir = extract_source(tmp_path, {
+        "foo.ts": "export class Foo { }\nexport class Bar { }\n",
+        "other.ts": "export namespace Lib { export class Bar { } }",
+        "a.ts": """import { Foo, Bar } from "./foo";
+import { Lib } from "./other";
+export namespace N {
+  class Foo { }
+  import Bar = Lib.Bar;
+  export class Shared { }
+  export class A { f: Foo | null = null; g: Bar | null = null; m() { return new Foo(); } }
+}
+export namespace N {
+  export class B { f: Foo | null = null; g: Bar | null = null; s: Shared | null = null;
+                   m() { return new Foo(); } }
+}
+"""})
+    assert sorted((r.from_, r.to, r.via, r.evidence or "") for r in ir.relations) == [
+        ("a.N.A", "a.N.Foo", "f", ""), ("a.N.A", "a.N.Foo", "m", "body"),
+        ("a.N.A", "other.Lib.Bar", "g", ""),
+        ("a.N.B", "a.N.Shared", "s", ""), ("a.N.B", "foo.Bar", "g", ""),
+        ("a.N.B", "foo.Foo", "f", ""), ("a.N.B", "foo.Foo", "m", "body")]
+
+
+def test_every_block_of_an_ambient_namespace_sees_its_members(tmp_path):
+    # in `declare namespace` every member is exported (tsc agrees)
+    ir = extract_source(tmp_path, {
+        "foo.ts": "export class Foo { }",
+        "a.ts": """import { Foo } from "./foo";
+declare namespace Amb { class Foo { } }
+declare namespace Amb { class User { f: Foo; } }
+void Foo;
+"""})
+    assert [(r.from_, r.to) for r in ir.relations] == [("a.Amb.User", "a.Amb.Foo")]

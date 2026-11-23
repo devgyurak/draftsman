@@ -448,6 +448,8 @@ class Extractor:
                 else:
                     owner_q = None
                     qname = f"{namespace}{sep}{name}" if namespace else name
+                if ns_parts and (block := spec.local_block(node)) is not None:
+                    scope.block_local[qname] = (_line(block), block.end_point[0] + 1)
             mods, annos = self._modifiers(caps.get("modifiers", []), node, src)
             entry["raw"] = RawType(
                 qualified_name=qname,
@@ -528,6 +530,8 @@ class Extractor:
                 q = self._qualify(n, _text(n, src), types_by_node, namespaces, scope)
                 if q is not None:
                     scope.aliases.add(q)
+                    if (block := spec.local_block(n.parent)) is not None:
+                        scope.block_local[q] = (_line(block), block.end_point[0] + 1)
                     if target:
                         scope.alias_targets[q] = spec.normalize_type(target)
             elif (n := _first(caps, "annotation")) is not None:

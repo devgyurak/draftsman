@@ -53,6 +53,9 @@ class Resolver:
                 self.scopes_by_ns.setdefault(s.namespace, []).append(s)
                 self.namespaces.add(s.namespace)
         self.aliases: set[str] = set().union(*(s.aliases for s in scopes)) if scopes else set()
+        # a type or alias seen only inside its namespace block -> (file, first, last line)
+        self.block_local: dict[str, tuple[str, int, int]] = {
+            q: (s.file, *lines) for s in scopes for q, lines in s.block_local.items()}
         # alias -> (the type text it names, the file scope that text is resolved in)
         self.alias_targets: dict[str, tuple[str, FileScope]] = {
             a: (text, s) for s in scopes for a, text in s.alias_targets.items()}
@@ -176,6 +179,14 @@ class Resolver:
                     f"import path {path} ends with project type {near}; is the extraction "
                     "root inside a package without __init__.py? Extract from its top"))
         return Resolution(EXTERNAL, path)
+
+    def _sees(self, rtype: RawType, qname: str) -> bool:
+        """Whether a type or alias is in scope by its simple name where ``rtype`` is
+        declared: one a namespace block keeps to itself (FileScope.block_local) only inside
+        that block."""
+        local = self.block_local.get(qname)
+        return local is None or (rtype.location.file == local[0]
+                                 and local[1] <= rtype.location.line <= local[2])
 
     def _namespace_chain(self, ns: Optional[str], sep: str, parents: bool,
                          floor: Optional[str] = None) -> list[str]:
@@ -480,6 +491,8 @@ class Resolver:
         def in_namespaces() -> Optional[Resolution]:
             for ns in chain:
                 cand = ns + sep + name if ns else name
+                if not self._sees(rtype, cand):
+                    continue
                 if cand in self.index:
                     return Resolution(PROJECT, cand)
                 if cand in self.inline_names:
