@@ -86,6 +86,7 @@ class FileScope:
     # LanguageSpec.left_out_types: types a build may declare that the parser never saw
     left_out_types: set[str] = field(default_factory=set)
     implicit_types: list[str] = field(default_factory=list)          # LanguageSpec.implicit_types
+    build_types: dict[str, set[str]] = field(default_factory=dict)   # LanguageSpec.build_types
     # names a statement at its top binds as a variable (`if x: Foo = None`, `del Foo`,
     # `global Foo` in a function): no class, also where another file takes them from it
     variables: set[str] = field(default_factory=set)
@@ -221,6 +222,12 @@ class LanguageSpec:
         """Ids of the types a file declares without a declaration (C#'s `Program` of
         top-level statements): one per build project that has such a file."""
         return []
+
+    def build_types(self, path: Path, root: Path) -> dict[str, set[str]]:
+        """namespace -> simple names of the types the build generates outside the sources
+        for the file's project (C#'s from `<Protobuf Include>`): they hide what the
+        namespaces around and the imports bring in, as declared types do."""
+        return {}
 
     def init_via(self, node: "ts.Node", src: bytes) -> Optional[str]:
         """The `via` of a body no listed member holds (`@body.init` without `.name`), or

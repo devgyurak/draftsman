@@ -172,3 +172,30 @@ def test_one_id_declared_by_two_projects_draws_nothing(tmp_path):
         "A/Use.cs": "namespace A; public class Use { object M() => typeof(Program); }\n"})
     assert _body(alone) == [("A.Use", "Program", "M", 1)]
 
+
+def test_a_type_grpc_generates_hides_one_an_import_brings_in(tmp_path):
+    # Grpc.Tools compiles the .proto into the project's namespace; with
+    # CompileOutputs="false" the generated code is in the sources instead
+    ir = extract_source(tmp_path, {
+        "Api/Api.csproj": """<Project Sdk="Microsoft.NET.Sdk.Web"><ItemGroup>
+<Protobuf Include="Proto\\basket.proto" GrpcServices="Server" />
+</ItemGroup></Project>""",
+        "Api/Proto/basket.proto": """syntax = "proto3";
+option csharp_namespace = "Shop.Api.Grpc";
+service Basket { rpc Get(GetRequest) returns (BasketItem) {} }
+message GetRequest { message Inner { } }
+message BasketItem { }
+""",
+        "Api/Model/BasketItem.cs": "namespace Shop.Api.Model;\npublic class BasketItem { }\npublic class GetRequest { }\n",
+        "Api/Grpc/Service.cs": """using Shop.Api.Model;
+namespace Shop.Api.Grpc;
+public class Service
+{
+    object M() => new BasketItem();
+    object N() => new Inner();
+}
+"""})
+    assert _body(ir) == []
+    assert any(r.from_ == "Shop.Api.Grpc.Service" and r.to == "Shop.Api.Model.BasketItem"
+               for r in ir.relations) is False
+

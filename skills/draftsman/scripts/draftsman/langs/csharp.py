@@ -62,6 +62,42 @@ def _lines(src: bytes):
             yield line, active, bool(stack)
 
 
+@lru_cache(maxsize=None)
+def _protobuf_types(project: Path) -> tuple[tuple[str, frozenset], ...]:
+    """(namespace, type names) Grpc.Tools generates for the project's `<Protobuf Include>`
+    items: each .proto's top-level messages and enums, a class per service and
+    `<File>Reflection`, in its `csharp_namespace` (or its package, each part capitalized).
+    Not for items with CompileOutputs="false", whose generated code is in the sources."""
+    doc = _msbuild(project)
+    out: dict[str, set[str]] = {}
+    for el in doc.iter() if doc is not None else ():
+        if _local(el.tag) != "Protobuf" or not el.get("Include") \
+                or el.get("CompileOutputs", "").lower() == "false":
+            continue
+        proto = project.parent / el.get("Include").replace("\\", "/")
+        try:
+            text = proto.read_text(encoding="utf-8-sig")
+        except OSError:
+            continue
+        text = re.sub(r"//[^\n]*|/\*.*?\*/", "", text, flags=re.S)
+        ns = re.search(r'option\s+csharp_namespace\s*=\s*"([^"]+)"', text)
+        package = re.search(r"^\s*package\s+([\w.]+)\s*;", text, re.M)
+        namespace = ns.group(1) if ns else ".".join(
+            p[:1].upper() + p[1:] for p in package.group(1).split(".")) if package else ""
+        names = out.setdefault(namespace, set())
+        depth = 0
+        for m in re.finditer(r"\b(message|enum|service)\s+(\w+)|[{}]", text):
+            if m.group(0) == "{":
+                depth += 1
+            elif m.group(0) == "}":
+                depth -= 1
+            elif depth == 0:
+                names.add(m.group(2))
+        stem = "".join(p[:1].upper() + p[1:] for p in re.split(r"[_.\-]", proto.stem) if p)
+        names.add(f"{stem}Reflection")
+    return tuple((ns, frozenset(n)) for ns, n in out.items())
+
+
 def _blank(line: bytes) -> bytes:
     return re.sub(rb"[^\r]", b" ", line)
 
@@ -278,6 +314,15 @@ class CSharpSpec(LanguageSpec):
     def implicit_types(self, root_node):
         # top-level statements are the body of an implicit `Program` of the project
         return ["Program"] if any(c.type == "global_statement" for c in root_node.children) else []
+
+    def build_types(self, path, root):
+        own = _project_file(path.resolve().parent)
+        projects = ([own] if own else []) + list(_linked_files(root.resolve()).get(path.resolve(), ()))
+        out: dict[str, set[str]] = {}
+        for project in dict.fromkeys(projects):
+            for ns, names in _protobuf_types(project):
+                out.setdefault(ns, set()).update(names)
+        return out
 
     def conditional_ranges(self, src):
         # what the first branch of an #if keeps

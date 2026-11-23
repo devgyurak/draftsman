@@ -343,7 +343,8 @@ class Extractor:
         self._packages = self._workspaces[root]
         scope = FileScope(file=rel, namespace=spec.file_namespace(mod_path), project=project,
                           left_out_types=spec.left_out_types(original),
-                          implicit_types=spec.implicit_types(tree.root_node))
+                          implicit_types=spec.implicit_types(tree.root_node),
+                          build_types=spec.build_types(path, root))
         raw = RawFile(path=rel, scope=scope)
         unseen: list[tuple[str, Unseen]] = [
             (name, Unseen(rel, line, line, macro))
