@@ -19,6 +19,7 @@ interprets **matches** (not individual captures) by capture name. Captures start
 | `@import.module` (+ `@import.alias`) | a whole module bound to a local name (`import * as pay`, `import typing as t`) |
 | `@alias` (+ `@alias.type`) | a type alias declaration and the type it names; references to it are drawn as references to that type |
 | `@typevar` | a file-wide type parameter (Python `T = TypeVar("T")`) |
+| `@exports` | the value of what lists the names a wildcard import of the file brings in (Python `__all__ = [...]`, `+=`): read when it is a list or tuple of strings, else the listing cannot be read (`FileScope.exports`, `exports_unread`) |
 
 ## Declarations
 
@@ -50,11 +51,14 @@ a body is, which names it writes, and what may hide them there.
 |---|---|---|
 | `@body.region` | – | a body: a method or constructor body, a field initializer, an enum constant's arguments and body. A name is read only at or below one (a TypeScript field initializer may be the name itself: `X = Kind.A`), so a signature's `List<Foo>` is not |
 | `@body.init` (+ `@body.init.name`) | – | a body of no listed member, `via` `.name` when given (a record's compact constructor), else its text before `{` plus `{}` (initializer blocks: `static {}`, `{}`). Only a named type's own count |
-| `@body.ref.type` / `@body.ref.receiver` | yes | a name written in a body: `.type` where only a type can stand (every type name: `new Foo()`, a cast, `X.class`, `X.this`), `.receiver` where a variable can too (`Foo.bar()`; in TypeScript every value: `new Foo()`, `typeof Foo`, `<Foo />`). A receiver is a dotted name: every node of it one of `LanguageSpec.receiver_part_nodes` (not `this.x`, `new Foo(x).m`). A capture whose parent is captured too is part of that name and dropped (`Foo` in `p.Foo`), and so is one captured as `@body.type` (`T` in `<T extends Foo>`). The name is its identifiers joined by `.`, leaving out annotations, comments and `LanguageSpec.type_argument_nodes` (`Outer<T>.Inner` is `Outer.Inner`, and `T` a name of its own); each part keeps its line and column, in UTF-16 code units as javac counts them |
+| `@body.ref.type` / `@body.ref.receiver` | yes | a name written in a body: `.type` where only a type can stand (every type name: `new Foo()`, a cast, `X.class`, `X.this`), `.receiver` where a variable can too (`Foo.bar()`; in TypeScript every value: `new Foo()`, `typeof Foo`, `<Foo />`; in Python every name, an annotation's too). A receiver is a dotted name: every node of it one of `LanguageSpec.receiver_part_nodes` (not `this.x`, `new Foo(x).m`). A capture whose parent is captured too is part of that name and dropped (`Foo` in `p.Foo`), and so is one captured as `@body.type` (`T` in `<T extends Foo>`). The name is its identifiers joined by `.`, leaving out annotations, comments and `LanguageSpec.type_argument_nodes` (`Outer<T>.Inner` is `Outer.Inner`, and `T` a name of its own); each part keeps its line and column, in UTF-16 code units as javac counts them |
 | `@body.unread` | – | a type node that is no name of the scope, never recorded: looked up in the type of an expression (Java `o.new Inner()`), or no name at all (`X.super` in `X.super::m`, where `X` is; a label in a TypeScript type, `[Foo: string]`) |
 | `@body.blind` | – | a class body whose inherited members are not known (the anonymous class of Java `o.new Inner() { }`), or a node whose names are read elsewhere or not at all (TypeScript decorators, TSX closing tags): no name in it is recorded |
-| `@body.var` | – | a variable declared in a member: parameters, locals, lambda, catch, for and pattern variables, resources, fields of local classes, local functions and destructured names (TypeScript) |
+| `@body.var` | – | a variable declared in a member: parameters, locals, lambda, catch, for and pattern variables, resources, fields of local classes, local functions and destructured names (TypeScript), every name a statement binds (Python) |
 | `@body.type` | – | a type name declared in a member: local classes, type parameters |
+| `@body.import` | – | a name an import binds (Python's import in a function): after it, in the function it stands in (the nearest opaque node) and those inside it, the name resolves through that import, which `@import*` captured too; elsewhere in the member, or where two imports of the name may run, it hides as a variable; outside any member it is the file's import |
+| `@body.global` | – | a variable of the file's top scope wherever it stands (Python `global Foo` in a function) |
+| `@body.guarded` | – | a block only some resolvers read (a branch of Python's `if sys.platform == ...`, which mypy decides for one platform): no name in it is recorded, and a class statement in it at the file's top is rebound (below) |
 | `@body.class` + `@body.class.super` | – | the body of an anonymous or local class and one supertype it names; the members it inherits are in scope inside it. Not for `o.new Inner() { }`, whose supertype is a member of o's type |
 
 A `@body.ref.*` belongs to the nearest enclosing named type, across opaque nodes (a name
@@ -66,7 +70,11 @@ the member declares anywhere may hide a type of that name anywhere in it, which 
 reference at worst. One in a member inside a member is the outer member's (TypeScript's
 parameter property `constructor(private x)`); a `@body.var` in a namespace block, outside
 any type and function, hides the name in every member of the types in that namespace and
-in the namespaces inside it, in every block of the namespace in the file. `@body.class` lists the anonymous and local classes around a
+in the namespaces inside it (of their nested types too), in every block of the namespace
+in the file; one at the file's top, outside any namespace, in every type of the file. With
+`LanguageSpec.rebinding_hides`, a name the file's top binds twice (two class statements,
+`@body.type`, or a class and an import, `@body.import`) hides as a variable does, and the
+class is `FileScope.rebound`: no one class where another file imports it either. `@body.class` lists the anonymous and local classes around a
 reference, innermost first.
 
 How a recorded name resolves follows the language's scoping, set in its `LanguageSpec`:
@@ -78,7 +86,14 @@ single-name imports: TypeScript, where `local_block` keeps a member a namespace 
 does not export to that block), `type_only_kinds` (kinds that are no value, so a receiver
 of their name draws nothing: TypeScript interfaces) and `receiver_package_heads` (whether
 a dotted receiver whose head is no type is a package, as in Java, or goes through what
-the file imports, as TypeScript's `ns.Foo.m()`).
+the file imports, as TypeScript's `ns.Foo.m()`). Python adds `nested_types_in_bodies`
+(a method does not see its class's nested types, its signature does),
+`initializers_in_class_scope` (a field's initializer sees the class's own names, which
+hide a type there), `rebinding_hides` (above), `module_imports_bind_heads` (`import a.b`
+binds `a`), `submodules_need_import` (a dotted receiver reaches a submodule only when the
+file imports it), `suffix_skips_no_package` (a suffix match of an import never drops a
+package of the sources) and `star_exports` (what a wildcard import brings in: `__all__`,
+else no `_` name; in a body nothing through a listing that cannot be read).
 
 ## Ownership
 

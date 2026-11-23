@@ -61,6 +61,42 @@ Notes for anyone with `view.json` files written against a development build:
   connected types and the viewer's cycles stay on declarations. Netty extracts in about
   4.0 s instead of 2.4 s. The other languages read no bodies yet (#5); Django's and
   TypeORM's `ir.json` are byte for byte the same, the other e2e projects were not run again.
+- **Names in Python method bodies are relations** (#5, after 0.5.0). As in Java and
+  TypeScript, a project class a method body or a class-level value names is a dependency
+  marked `evidence: "body"`; every name is a value, in an annotation too (`Foo()`,
+  `Foo.create()`, `isinstance(x, Foo)`, `except Foo`, `x: Foo`, `models.Model()`). Python
+  has no compiler, so the answer key is where three checkers name the same declaration:
+  `bench/py_oracle` walks mypy's tree after semantic analysis (it binds names in
+  unannotated functions too) and asks pyright's and ty's language servers for the
+  definition at each place; where they differ, nothing may be drawn. httpx: 186 names
+  drawn, 0 mismatches (529 places checked, none disputed, none left undrawn); Django: 4065
+  names, 3 drawn where ty alone gives no definition (it takes `elif db_field.name in
+  self.raw_id_fields:` for never true, the class setting `raw_id_fields = ()`), none at
+  the other 15 places the checkers dispute, 18 of the key's names left undrawn. A
+  fixture of 120 names, which the three agree with, pins every form that binds a name,
+  each written by hand; three drew a class before they were closed (`with f as (Foo)`,
+  `case Bar.Inner:`, a class beside a star import of its name). Python scopes names
+  unlike Java and TypeScript, and `LanguageSpec` settings say so: a method does not see
+  its class body (`nested_types_in_bodies`), a class-level value does
+  (`initializers_in_class_scope`); the module's variables and `global` names hide a class
+  in every class of the file; an import in a method names its class after it, in its
+  function; a name the module binds twice (a class and an import of it, two class
+  statements) is no one class, also where it is imported (`rebinding_hides`); `import
+  a.b` binds `a`, a submodule is reached only when the file imports it, and a star import
+  brings in what `__all__` lists (else no `_` name, and in a body nothing through an
+  `__all__` that cannot be read); a branch of a `sys.platform` or `sys.version_info` test
+  is not read. Turned off one at a time, the rules keep these wrong names out of Django:
+  a member's variables 1 (at a cost of 6 right ones), the module's variables 3,
+  rebinding 6, `__all__` 8, submodules 6, suffix matching 2 (at no cost); the others only
+  the fixture's; each also fails a test. Reading an import in a method draws 118 more of
+  Django's names, going through `from p import mod` 711, none wrong. One declared
+  relation changes with them: Django's `LimitedStream` and `FakePayload` extend
+  `io.IOBase`, not `django.contrib.gis.geos.prototypes.io.IOBase` (a suffix match of an
+  import no longer drops a package). httpx gains 152 body dependencies and Django 3203;
+  the e2e focus diagrams grow from 11 to 16 types (`Client`) and from 30 to 56
+  (`Field`). Django extracts in about 2.5 s instead of 1.0 s. jsoup's, petclinic's,
+  Netty's, TypeORM's and nest's `ir.json` are byte for byte the same; the C#, Kotlin and
+  C++ e2e projects were not run again.
 - **A TypeScript namespace's own type comes before an import of its name** (after 0.5.0).
   In `import { Foo } from "./foo"; namespace N2 { class Foo {} export class A { f: Foo |
   null = null } }`, A's Foo is N2's, as the compiler says, but the extractor checked the

@@ -279,10 +279,13 @@ is that type. Aliases of aliases are followed.
   (`nspkg.sub.mod.X` for `mod.X`) is left unresolved with that id as candidate rather
   than treated as external.
   Absolute imports are matched by unique suffix, so `from shop.order import X` works with
-  a `src/` layout, and package re-exports in `__init__.py` are followed — named ones first,
+  a `src/` layout, but a match never drops a package of the sources: `import jinja2` in
+  `django/template/backends/` is the outside package, not that directory's `jinja2.py`.
+  Package re-exports in `__init__.py` are followed — named ones first,
   then `from .sub import *`, each by its exact module path (`forms.Form` is
-  `django.forms.forms.Form`, never another `Form`). Classes of the `builtins` module
-  (`dict`, `LookupError`) are builtins.
+  `django.forms.forms.Form`, never another `Form`). A star import brings in what the
+  module's `__all__` lists (a list or tuple of strings, `+=` too), else every name not
+  starting with `_`. Classes of the `builtins` module (`dict`, `LookupError`) are builtins.
 - Fields: class-level assignments (unannotated or `ClassVar` = static), dataclass-style
   annotations, and `self.x = ...` directly inside `__init__` (not other methods, not nested
   functions). `self.x = param` takes the annotation of that `__init__` parameter.
@@ -307,9 +310,49 @@ is that type. Aliases of aliases are followed.
 - Decorators on a class and its methods: a decorator that is a project class
   (`@classproperty`) and the project classes passed in its arguments (`@admin.register(User)`)
   are dependencies of the class (`via` `@Name`); other names draw nothing.
-- Not handled: `__all__` (a `*` re-export is taken to expose every name the module
-  defines), attributes created outside `__init__`, untyped values (no association
-  without a type hint), `__getattr__` magic.
+- Names in bodies (`evidence: "body"`; method bodies, the values of assignments directly
+  in a class body, and the functions, lambdas and classes inside them): every name is a
+  value, in an annotation too, so a variable of the name hides a class wherever it stands:
+  `Foo()`, `Foo.create()`, `isinstance(x, Foo)`, `except Foo`, `x: Foo`,
+  `models.Model()`. What hides one: the member's parameters and every name its statements
+  bind, anywhere in it (also after the name, and a comprehension's or a lambda's variable
+  outside them, so a few are lost): assignment and `for` targets, `with`/`except ... as`,
+  `:=`, `nonlocal`, a `case` capture, a function, class or PEP 695 type parameter it
+  declares. An import in the member (`from x import Foo`) names x's Foo after it, in the
+  function it stands in and those inside it; elsewhere in the member, before it, or where
+  two imports of the name may run, it hides the name, as `import a.b` hides `a`. The
+  module's variables (assignments, `for` and
+  `with` targets, functions and `type X = ...` at its top, under `if`/`try` too: `try:
+  from x import Foo` / `except ImportError: Foo = None`) and every name a `global`
+  statement names hide it in every class of the file. In a class-level value, the class's
+  own names do (fields, methods, nested classes: `value = Foo` after `Foo = 1`; its
+  nested class there is missed). A method does not see its class body: not its
+  attributes, nor its nested classes by their simple names (`Outer.Inner()` is drawn, a
+  bare `Inner()` is the module's). A name the module binds twice at its top (two class
+  statements, a class and an import of its name, a class and a star import that brings
+  in another one of that name) is no one class, there or where another file imports it.
+  A dotted value goes through what the file imports (`models.Model()` after `from
+  django.db import models`, `p.foo.Foo()` after `import p.foo`), never a variable, and
+  reaches a submodule only when the file imports it (`models.base.ModelBase()` draws
+  nothing after `from django.db import models` alone). In a body nothing comes through a
+  star import whose `__all__` cannot be read (`__all__ = a_all + b_all`). No name in a
+  branch of a `sys.platform` or `sys.version_info` test is read, and a class declared in
+  one draws nothing, in its file or where another imports it. Checked against mypy, pyright and ty together
+  (`bench/py_oracle`): the key is where all three name the same declaration, and a place
+  where they differ (18 in Django, none in httpx) is to draw nothing. httpx: 186 names,
+  0 mismatches; Django: 4,065 names, 3 drawn where they differ: ty alone takes `elif
+  db_field.name in self.raw_id_fields:` for never true, since the class sets
+  `raw_id_fields = ()`, and gives no definition in it. The key is the name as static
+  analysis sees it: monkeypatching, a name another module rebinds later, and code only
+  another platform runs are in none of the three. Known limits: a plain name that starts
+  lower-case is not read (a class named so is missed); a class beside a star import of
+  an outside module (`from tkinter import *`) is taken to be the module's own; a nested
+  class reached through a subclass (`Sub.Listener()`) draws only `Sub`; names in string
+  annotations and type comments are not read.
+- Not handled: `__all__` written as anything but a list or tuple of strings
+  (`a_all + b_all`, `__all__.extend(...)`; a star import is then taken to bring in every
+  name not starting with `_`, except in a body), attributes created outside `__init__`,
+  untyped values (no association without a type hint), `__getattr__` magic.
 
 ## C++
 

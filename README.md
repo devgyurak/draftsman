@@ -27,8 +27,8 @@ number. Draftsman is a skill that splits the work the same way: a parser measure
 the agent only decides what to show, and a renderer draws it.
 
 - **Facts from a parser** — classes, members, inheritance, field associations with
-  multiplicity, and dependencies from signatures, annotations and (Java, TypeScript) the
-  type names method bodies write, each with a source location.
+  multiplicity, and dependencies from signatures, annotations and (Java, TypeScript,
+  Python) the type names method bodies write, each with a source location.
 - **Edited, not invented** — the agent can hide, group and annotate. A relation the parser
   did not find can only be added as an *inferred* edge with a rationale, drawn dotted.
 - **Readable at any size** — focus on one class and its neighbours *N* hops away; hide
@@ -189,16 +189,20 @@ checked), an SVG and an HTML viewer — on real projects, tests and generated co
 | Kotlin | [Ktor](docs/e2e/kotlin/ktor.md) | 1578 | 2137 | 6897 | 586 (49 ambiguous, 537 outside) | 0 |
 | TypeScript | [nest](docs/e2e/typescript/nest.md) `packages/` | 730 | 738 | 2307 + 1117 body | 0 | 0 |
 | TypeScript | [TypeORM](docs/e2e/typescript/typeorm.md) `packages/typeorm/src` | 496 | 694 | 3968 + 2076 body | 1 (1 unexplained) | 0 |
-| Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 | 0 | 0 |
-| Python | [Django](docs/e2e/python/django.md) `django/` | 879 | 1964 | 1865 | 0 | 0 |
+| Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 + 152 body | 0 | 0 |
+| Python | [Django](docs/e2e/python/django.md) `django/` | 879 | 1964 | 1865 + 3203 body | 0 | 0 |
 | C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 | 2 (2 unexplained) | 9 spans in 8 files (5 in function bodies; `extern "C"`, `__has_include`, a gMock macro, a pointer-to-member field) |
 | C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2066 | 9983 | 309 (1 ambiguous, 4 outside, 304 unexplained; system and library headers, POCO's `#define` types) | 333 spans in 121 files (`#if` branches, pointers to members, explicit instantiations, `typeid`) |
 
-Java's and TypeScript's relations are the declared ones, then those read from names in
-method bodies (`new Foo()`, `Foo.bar()`), which match what the compiler resolves at every
-place on these five projects: javac for Java (`bench/javac_oracle`; jsoup without its 22
-in `org.jsoup.examples`, which the benchmark leaves out), the TypeScript compiler for
-TypeScript (`bench/tsc_oracle`).
+Java's, TypeScript's and Python's relations are the declared ones, then those read from
+names in method bodies (`new Foo()`, `Foo.bar()`), which match what the compiler resolves
+at every place on the five Java and TypeScript projects: javac for Java
+(`bench/javac_oracle`; jsoup without its 22 in `org.jsoup.examples`, which the benchmark
+leaves out), the TypeScript compiler for TypeScript (`bench/tsc_oracle`). Python has no
+compiler, so the answer is where mypy, pyright and ty name the same declaration
+(`bench/py_oracle`): every name drawn in httpx matches it, and all but 3 of Django's 4065,
+which are drawn where ty alone sees no definition (it takes their branch for never
+taken).
 
 Unresolved references are split by reason: *ambiguous* (a project type shares the name; it is
 listed, not picked), *outside* (only something outside the sources could provide it: a
@@ -210,7 +214,7 @@ the exact commands, and what every unresolved name and diagnostic is.
 
 - **It doesn't guess relations.** Anything not in `ir.json` is rejected unless it is an
   inferred edge between known or unresolved names — and those are drawn dotted.
-- **It reads only the type names in method bodies, and only in Java and TypeScript.**
+- **It reads only the type names in method bodies, and only in Java, TypeScript and Python.**
   `new Foo()`, `Foo.bar()`, casts and local variable types become dependencies marked as
   read from a body; what a call on a value reaches (`order.total()`) does not, and the
   other languages' bodies are not read yet ([#5](https://github.com/devgyurak/draftsman/issues/5)). It is

@@ -25,7 +25,7 @@
 **제도사(draftsman)**는 측량된 수치를 받아, 숫자 하나 바꾸지 않고 도면으로 옮깁니다. Draftsman은 일을 그렇게
 나누는 스킬입니다. 파서가 코드를 재고, 에이전트는 무엇을 보여줄지만 정하며, 렌더러가 그립니다.
 
-- **파서가 잰 사실** — 클래스, 멤버, 상속, 다중성이 붙은 필드 연관, 시그니처와 어노테이션, (Java와 TypeScript는) 메서드 본문에 적힌 타입 이름에서 나온 의존. 모두 소스 위치가 붙습니다.
+- **파서가 잰 사실** — 클래스, 멤버, 상속, 다중성이 붙은 필드 연관, 시그니처와 어노테이션, (Java, TypeScript, Python은) 메서드 본문에 적힌 타입 이름에서 나온 의존. 모두 소스 위치가 붙습니다.
 - **편집할 뿐 지어내지 않음** — 에이전트는 숨기고, 묶고, 해설을 달 수 있습니다. 파서가 찾지 못한 관계는 근거를 단
   *추정* 엣지로만 넣을 수 있고, 점선으로 그려집니다.
 - **어떤 크기에서도 읽히는 도면** — 한 클래스와 그 주변 *N*홉에 초점을 맞추고, getter·DTO·프레임워크 잡음은 패턴으로
@@ -177,15 +177,18 @@ scripts/validate.sh diagram.mmd
 | Kotlin | [Ktor](docs/e2e/kotlin/ktor.md) | 1578 | 2137 | 6897 | 586 (49 ambiguous, 537 outside) | 0 |
 | TypeScript | [nest](docs/e2e/typescript/nest.md) `packages/` | 730 | 738 | 2307 + 1117 body | 0 | 0 |
 | TypeScript | [TypeORM](docs/e2e/typescript/typeorm.md) `packages/typeorm/src` | 496 | 694 | 3968 + 2076 body | 1 (1 unexplained) | 0 |
-| Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 | 0 | 0 |
-| Python | [Django](docs/e2e/python/django.md) `django/` | 879 | 1964 | 1865 | 0 | 0 |
+| Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 + 152 body | 0 | 0 |
+| Python | [Django](docs/e2e/python/django.md) `django/` | 879 | 1964 | 1865 + 3203 body | 0 | 0 |
 | C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 | 2 (2 unexplained) | 8개 파일에 9구간 (5구간은 함수 본문; `extern "C"`, `__has_include`, gMock 매크로, 멤버 함수 포인터 필드 하나) |
 | C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2066 | 9983 | 309 (1 ambiguous, 4 outside, 304 unexplained; 시스템·라이브러리 헤더, POCO의 `#define` 타입) | 121개 파일에 333구간 (`#if` 분기, 멤버 포인터, 명시적 인스턴스화, `typeid`) |
 
-Java와 TypeScript의 관계 수는 선언에서 나온 관계와, 그 뒤에 메서드 본문에 적힌 이름(`new Foo()`, `Foo.bar()`)에서
-나온 관계입니다. 본문 관계는 이 다섯 프로젝트에서 모든 자리가 컴파일러의 해석과 일치합니다. Java는 javac와
-대조했고(`bench/javac_oracle`. jsoup은 벤치마크가 빼는 `org.jsoup.examples`의 22개를 제외), TypeScript는
-TypeScript 컴파일러와 대조했습니다(`bench/tsc_oracle`).
+Java, TypeScript, Python의 관계 수는 선언에서 나온 관계와, 그 뒤에 메서드 본문에 적힌 이름(`new Foo()`,
+`Foo.bar()`)에서 나온 관계입니다. Java와 TypeScript의 다섯 프로젝트에서 본문 관계는 모든 자리가 컴파일러의 해석과
+일치합니다. Java는 javac와 대조했고(`bench/javac_oracle`. jsoup은 벤치마크가 빼는 `org.jsoup.examples`의 22개를
+제외), TypeScript는 TypeScript 컴파일러와 대조했습니다(`bench/tsc_oracle`). Python에는 컴파일러가 없어 mypy,
+pyright, ty 셋이 같은 선언을 가리키는 자리를 답으로 삼습니다(`bench/py_oracle`). httpx는 그린 이름이 모두 일치하고,
+Django는 4065개 중 3개를 빼고 일치합니다. 그 3개는 ty만 정의를 내놓지 않는 자리입니다(ty는 그 분기를 실행되지 않는
+분기로 봅니다).
 
 미해결 참조는 이유별로 나눴습니다. *ambiguous*는 같은 이름의 프로젝트 타입이 있어 후보로만 적고 고르지 않은 것,
 *outside*는 소스 밖에 있는 것(와일드카드·기본 import, 외부 상위 타입의 중첩 타입)으로만 설명되는 것,
@@ -196,7 +199,7 @@ TypeScript 컴파일러와 대조했습니다(`bench/tsc_oracle`).
 
 - **관계를 추측하지 않습니다.** `ir.json`에 없는 것은 거부합니다. 예외는 알려진 이름이나 미해결 이름 사이의 추정
   엣지뿐이고, 그것도 점선으로 그립니다.
-- **메서드 본문은 타입 이름만, Java와 TypeScript에서만 읽습니다.** `new Foo()`, `Foo.bar()`, 캐스트, 지역 변수 타입은 본문에서
+- **메서드 본문은 타입 이름만, Java, TypeScript, Python에서만 읽습니다.** `new Foo()`, `Foo.bar()`, 캐스트, 지역 변수 타입은 본문에서
   읽은 의존으로 표시됩니다. 값에 대한 호출이 닿는 곳(`order.total()`)은 읽지 않고, 다른 언어의 본문은 아직 읽지
   않습니다([#5](https://github.com/devgyurak/draftsman/issues/5)). 호출 그래프나 시퀀스 다이어그램 도구가 아닙니다.
 - **컴포지션과 집합을 구분하지 않습니다** — 문법으로는 알 수 없습니다. 예외는 C++ 소유권입니다(값과
