@@ -11,10 +11,11 @@ marker at the end of the line. The format is the Java fixture's
 
 The answer is a type's id as ir.json writes it (module path + namespaces + name), `var`
 (a variable, a parameter, a function, a constant), `tparam`, `alias` (a type alias),
-`local` (a class declared in a body), or `-` (a declaration, a member after a type as in
-`Kind.A`, or a namespace before one as in `Shop.Item`). The position is `t` where only a
-type can stand (`: Foo`, `as Foo`, `satisfies Foo`, `implements Foo`, type arguments) or
-`r` where a value stands, which a variable may be (`new Foo()`, `Foo.m()`, `Kind.A`,
+`local` (a class declared in a body), or `-` (a declaration, a label in a type as in
+`[Foo: string]`, a member after a type as in `Kind.A`, or a namespace before one as in
+`Shop.Item`). The position is `t` where only a type can stand (`: Foo`, `as Foo`,
+`satisfies Foo`, `implements Foo`, type arguments, `import("./bar").Bar`) or `r` where a
+value stands, which a variable may be (`new Foo()`, `Foo.m()`, `Kind.A`,
 `x instanceof Foo`, `typeof Foo`, `<Foo />`, `Foo` as an argument or in `{ Foo }`).
 
 `bench/tsc_oracle/oracle.py selftest` checks the compiler against these markers, with

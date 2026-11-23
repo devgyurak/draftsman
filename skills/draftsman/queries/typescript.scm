@@ -137,6 +137,10 @@
 (shorthand_property_identifier) @body.ref.receiver
 ; a decorator's arguments are no body (queries/tsx.scm adds JSX's closing tags)
 (decorator) @body.blind
+; a label in a type is no name: `[Foo: string]`, `{ [Key: string]: number }`
+(tuple_type [(required_parameter name: (identifier) @body.unread)
+             (optional_parameter name: (identifier) @body.unread)])
+(index_signature name: (identifier) @body.unread)
 
 ; what may hide one: variables, functions, local types and type parameters declared in
 ; the member

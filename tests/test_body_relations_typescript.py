@@ -197,3 +197,18 @@ export namespace NS {
 export class C { m() { return Foo.make(); } }
 """})
     assert _body(ir) == [("a.C", "foo.Foo", "m", 7), ("a.NS.A", "foo.Foo", "m", 4)]
+
+
+def test_a_label_in_a_type_is_no_name(tmp_path):
+    ir = extract_source(tmp_path, {
+        "foo.ts": "export class Foo { }\nexport class Bar { }\n",
+        "a.ts": """import { Foo, Bar } from "./foo";
+export class A {
+  m() {
+    const a: [Foo: string, Bar?: number] | null = null;
+    const b: { [Foo: string]: Bar } | null = null;
+  }
+}
+"""})
+    assert _body(ir) == [("a.A", "foo.Bar", "m", 5)]
+
