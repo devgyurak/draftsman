@@ -129,6 +129,9 @@
 (keyword_argument name: (identifier) @body.unread)
 ; `case Kind.Inner:`, `case p.Foo():`: a part after the first is no name of the scope
 (dotted_name (identifier) . (identifier) @body.unread)
+; nor is an attribute's name: of a dotted name it is a part (recorded with the whole), of a
+; value it is no name at all (`super().Foo`, `xs[0].Foo`, `Foo().Inner`)
+(attribute attribute: (identifier) @body.unread)
 [(import_statement) (import_from_statement) (future_import_statement)
  (global_statement) (nonlocal_statement)] @body.blind
 
