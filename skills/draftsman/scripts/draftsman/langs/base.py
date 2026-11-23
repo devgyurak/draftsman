@@ -184,6 +184,9 @@ class LanguageSpec:
     # directory above it is a package (its __init__ is a source); only directories that
     # are none (`src/`) may be dropped
     suffix_skips_no_package: bool = False
+    # Whether an import inside a function or a class binds its names there only, not in the
+    # file (Python's `def helper(): from gui import Button`)
+    local_imports: bool = False
 
     # ------------------------------------------------------------- files
 

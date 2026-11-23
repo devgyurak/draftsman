@@ -399,6 +399,7 @@ class Extractor:
         other.sort(key=lambda c: min(n.start_byte for nodes in c.values() for n in nodes))
 
         imports_by_node: dict[int, Import] = {}   # by the nodes of its captures
+        type_ids = {_root(caps, "type.")[1].id for caps in type_matches}
         listed: Optional[set[str]] = None   # the names the file lists as its exports
         readable = True
         for caps in other:
@@ -416,12 +417,13 @@ class Extractor:
             elif (n := _first(caps, "typevar")) is not None:
                 scope.type_params.add(_text(n, src))
             elif any(k.startswith("import") for k in caps):
-                if not spec.is_import(next(n for k, ns in caps.items() if k.startswith("import")
-                                           for n in ns)):
+                node = next(n for k, ns in caps.items() if k.startswith("import") for n in ns)
+                if not spec.is_import(node):
                     continue
                 imp = self._import(caps, src, mod_path)
                 if imp is not None:
-                    scope.imports.append(imp)
+                    if not (spec.local_imports and self._enclosed(node, type_ids)):
+                        scope.imports.append(imp)
                     for nodes in caps.values():   # for an import in a member (@body.import)
                         for n in nodes:
                             imports_by_node[n.id] = imp
@@ -872,6 +874,15 @@ class Extractor:
                 ".".join(_text(n, src) for n in parts), position,
                 [(_line(n), _utf16_col(n, src)) for n in parts], via, ref_scope, rm,
                 ref_names, list(around)))
+
+    def _enclosed(self, node: ts.Node, type_ids: set[int]) -> bool:
+        """Whether ``node`` stands in a function or a type's body."""
+        cur = node.parent
+        while cur is not None:
+            if cur.id in type_ids or self.spec.is_opaque(cur):
+                return True
+            cur = cur.parent
+        return False
 
     def _dotted(self, node: ts.Node) -> bool:
         """Whether a receiver is a dotted name: every node of it one of

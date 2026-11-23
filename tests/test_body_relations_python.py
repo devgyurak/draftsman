@@ -75,7 +75,8 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     assert sorted(missed) == [
         ("p/bindings.py", 43, "p.foo.Foo"), ("p/classbody.py", 48, "p.bar.Bar"),
         ("p/forms.py", 28, "p.foo.Foo"), ("p/hide.py", 34, "p.foo.Foo"),
-        ("p/hide.py", 56, "p.foo.Foo"), ("p/local.py", 22, "p.foo.Foo"),
+        ("p/hide.py", 56, "p.foo.Foo"), ("p/leak.py", 30, "p.bar.Bar"),
+        ("p/local.py", 22, "p.foo.Foo"),
         ("p/local.py", 47, "p.bar.Bar"),
         ("p/scopes.py", 11, "p.scopes.Outer.Inner"), ("p/scopes.py", 12, "p.bar.Inner"),
         ("p/scopes.py", 18, "p.scopes.Outer"), ("p/scopes.py", 34, "p.scopes.Kind"),

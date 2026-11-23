@@ -56,6 +56,7 @@ class PythonSpec(LanguageSpec):
     module_imports_bind_heads = True
     submodules_need_import = True
     suffix_skips_no_package = True
+    local_imports = True
 
     def package_root(self, root):
         # the way Python names modules: a root inside packages (django/db/models with

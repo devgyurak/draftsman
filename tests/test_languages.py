@@ -300,6 +300,22 @@ def test_python_builtin_wins_unless_the_project_class_is_imported(tmp_path):
     assert not ir.unresolved
 
 
+def test_python_import_in_a_function_or_a_class_is_not_the_files(tmp_path):
+    """An import in a function binds its names in the function, one in a class body in
+    the class body: neither is a name of the module (`class C(Bar)` beside
+    `def helper(): from app.bar import Bar`)."""
+    from conftest import extract_source
+    ir = extract_source(tmp_path, {
+        "app/__init__.py": "",
+        "app/bar.py": "class Bar: ...\nclass Foo: ...\n",
+        "app/c.py": ("def helper():\n    from app.bar import Bar\n    return Bar\n\n"
+                     "class Holder:\n    from app.bar import Foo\n\n"
+                     "class C(Bar):\n    x: Foo\n\n    def m(self, a: Foo) -> Bar: ...\n"),
+    })
+    assert not [r for r in ir.relations if r.from_ == "app.c.C"]
+    assert {u.raw_type for u in ir.unresolved} == {"Bar", "Foo"}
+
+
 def test_python_namespace_package_import_is_flagged_not_dropped(tmp_path):
     """PEP 420: no __init__.py, so the root's package prefix is unknown. An import that
     ends with a project id stays unresolved with that id as a candidate, not external."""
