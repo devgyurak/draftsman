@@ -1,7 +1,20 @@
 using System.Collections.Generic;
+using Shop.Rev.Odd;
+
+namespace Shop.Rev.Odd
+{
+    // a type named as one of C#'s contextual keywords
+    public class var { public static int Count; }
+}
 
 namespace Shop.Rev.Ctx
 {
+    public class Names
+    {
+        // with a type named var in scope, `var` names it
+        public object A() => var.Count;   //> var=Shop.Rev.Odd.var/r
+    }
+
     // `F(Order < b, Customer > d)` is two comparisons, not a declaration; after `out` it is one
     public class Comparisons
     {

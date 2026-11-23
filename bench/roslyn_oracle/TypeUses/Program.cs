@@ -200,6 +200,9 @@ sealed class Reader(SemanticModel model, HashSet<string> sources, HashSet<string
         }
     }
 
+    bool NamesItsType(SimpleNameSyntax name) =>
+        Bound(model.GetSymbolInfo(name)) is ITypeSymbol t && t.Name == name.Identifier.ValueText;
+
     void Chain(SimpleNameSyntax name)
     {
         var top = Top(name);
@@ -212,7 +215,10 @@ sealed class Reader(SemanticModel model, HashSet<string> sources, HashSet<string
             || name.Parent is MemberBindingExpressionSyntax or NameColonSyntax or NameEqualsSyntax
             || name is IdentifierNameSyntax { IsVar: true } or IdentifierNameSyntax { IsNint: true }
                 or IdentifierNameSyntax { IsNuint: true } or IdentifierNameSyntax { IsUnmanaged: true }
-                or IdentifierNameSyntax { IsNotNull: true })
+                or IdentifierNameSyntax { IsNotNull: true }
+                // the keyword's meaning (`var x = ...` is the type inferred), not a type of the
+                // name (`class var`, then `var.Count`)
+                && !NamesItsType(name))
             return;
         // `is A.B` is a type when A.B is one; else the name is read as an expression
         // (`x is Status.Closed`), where a variable comes first
