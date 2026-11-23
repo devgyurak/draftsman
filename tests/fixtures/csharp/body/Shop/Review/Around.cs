@@ -9,6 +9,13 @@ namespace Shop.Rev.Around
     }
 }
 
+namespace Environment
+{
+    public class SpecialFolder
+    {
+    }
+}
+
 // a namespace outside the sources around the code: its types come before the file's
 // usings, and so do those of each namespace it is in
 namespace System.Mine
@@ -17,6 +24,8 @@ namespace System.Mine
     {
         public object A() => Random.Shared;   //> Random=System.Random/r
         public object B() => new Random();   //> Random=System.Random/t
+        // System's Environment is nearer than the global namespace Environment
+        public object C() => typeof(Environment.SpecialFolder);   //> Environment=System.Environment/t SpecialFolder=System.Environment.SpecialFolder/t
     }
 }
 

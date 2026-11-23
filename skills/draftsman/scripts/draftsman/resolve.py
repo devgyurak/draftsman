@@ -86,6 +86,7 @@ class Resolver:
         self._tail_cache: dict[str, Optional[str]] = {}
         self._field_cache: dict[tuple[str, str], bool] = {}
         self._ancestors_cache: dict[tuple[str, bool], list[str]] = {}
+        self._namespace_cache: dict[str, bool] = {}
         # namespaces a using of the sources imports (_outside_around)
         self.imported_namespaces = {imp.path for s in scopes for imp in s.imports
                                     if imp.wildcard and not imp.static}
@@ -425,6 +426,48 @@ class Resolver:
                 return None
         return self._found(target)
 
+    def _in_types(self, name: str, rtype: RawType, inherit: bool, nested: bool,
+                  spec) -> Optional[Resolution]:
+        """``name`` among the nested types of the type and its enclosing types, inherited
+        ones too, or None."""
+        sep = spec.separator
+        cur: Optional[RawType] = rtype
+        while cur is not None:
+            hidden = cur.hidden_types.get(name)
+            if hidden == "tparam":
+                return Resolution(TPARAM)
+            if hidden:   # a nested type ir.json does not record (a C# delegate)
+                return Resolution(EXTERNAL, cur.qualified_name + sep + name)
+            inherited = spec.inherited_member_types and (inherit or cur is not rtype)
+            found = spec.nested_types_in_scope and nested and self._member_type(
+                cur, name, sep, inherited, set())
+            if found:
+                return self._found(found)
+            if spec.base_names_in_scope and cur.name == name and cur.kind != "alias":
+                return Resolution(PROJECT, cur.qualified_name)   # a class's own name first
+            if inherited and spec.base_names_in_scope:
+                base = self._base_named(cur, name, sep)
+                if base is not None:   # `CodeGenerator::Properties` in a CodeGenerator subclass
+                    return base
+            if inherited:   # `Entry` in a HashMap subclass is Map.Entry, not the package's
+                outside = self._inherited_external(
+                    self._external_ancestors(cur, starred=True), name, spec)
+                if outside:
+                    return Resolution(EXTERNAL, outside)
+            cur = self.index.get(cur.outer) if cur.outer else None
+        return None
+
+    def _namespace_exists(self, ns: str, spec) -> bool:
+        """Whether ``ns`` is a namespace: one of the sources or one they are in (`App` of
+        `App.Models`), or one the language's table knows."""
+        found = self._namespace_cache.get(ns)
+        if found is None:
+            prefix = ns + spec.separator
+            found = ns in self.namespaces or any(n.startswith(prefix) for n in self.namespaces) \
+                or spec.outside_namespace_exists(ns)
+            self._namespace_cache[ns] = found
+        return found
+
     def _outside_around(self, ns: str, spec) -> bool:
         """Whether the namespace ``ns`` around the code is taken for one outside the sources
         the table does not know (LanguageSpec.enclosing_outside_hides): no type of the
@@ -432,6 +475,36 @@ class Resolver:
         return bool(ns) and spec.enclosing_outside_hides and ns in self.imported_namespaces \
             and ns not in self.type_namespaces and ns not in self.build_types \
             and spec.outside_namespace(ns) is None
+
+    def _qualified_head(self, head: str, rtype: RawType, member: Optional[RawMember],
+                        inherit: bool, nested: bool, scope: FileScope, chain: list[str],
+                        spec, strict: bool):
+        """What the first part of a qualified name is, looked up as a simple name from the
+        innermost scope out (LanguageSpec.qualified_heads_in_scope): "type" when a type of
+        the name comes first, the namespace when one does (`App.Models` for `Models` in
+        `namespace App.Web`), "outside" past a namespace _outside_around takes for one
+        outside the sources, None when nothing in the namespaces around it has the name."""
+        sep = spec.separator
+        if head in self._type_params(rtype, member) \
+                or self._in_types(head, rtype, inherit, nested, spec) is not None:
+            return "type"
+        for ns in chain:
+            cand = ns + sep + head if ns else head
+            if self._sees(rtype, cand) and (cand in self.index or cand in self.inline_names
+                                            or cand in self.aliases) \
+                    or head in self.build_types.get(ns, ()) \
+                    or ns and head in (spec.outside_namespace(ns) or ()):
+                return "type"
+            if self._namespace_exists(cand, spec):
+                return cand
+            if strict and self._outside_around(ns, spec):
+                return "outside"
+            if any(imp.block == ns and not imp.wildcard and imp.local_name == head
+                   for imp in scope.imports):
+                return None   # an alias the namespace block declares
+            if self._block_import(head, ns, scope, spec, strict) is not None:
+                return "type"
+        return None
 
     # ------------------------------------------------------------ resolve
 
@@ -453,19 +526,31 @@ class Resolver:
             return Resolution(TPARAM)
 
         if sep in name:
-            if name in self.index:
+            first_is = None
+            if spec.qualified_heads_in_scope:
+                head, rest = name.split(sep, 1)
+                first_is = self._qualified_head(head, rtype, member, inherit, nested, scope,
+                                                chain, spec, strict)
+                if first_is == "outside":
+                    return Resolution(UNRESOLVED, outside=True)
+                if first_is not in (None, "type", head):
+                    name = first_is + sep + rest   # `Models.Order` is App.Models.Order
+            if first_is == "type":
+                pass   # what the type the head names has (`Lib.Order`: Shop.Lib's Order)
+            elif name in self.index:
                 return Resolution(PROJECT, name)
-            if name in self.inline_names:
+            elif name in self.inline_names:
                 return Resolution(PROJECT, self.inline_names[name])
-            if name in self.aliases:   # n::Legacy_t
+            elif name in self.aliases:   # n::Legacy_t
                 return Resolution(ALIAS, name)
-            for ns in chain:  # partially qualified: pay::Receipt inside namespace shop
-                if ns and ns + sep + name in self.index:
-                    return Resolution(PROJECT, ns + sep + name)
-                if ns and ns + sep + name in self.inline_names:
-                    return Resolution(PROJECT, self.inline_names[ns + sep + name])
-                if ns and ns + sep + name in self.aliases:
-                    return Resolution(ALIAS, ns + sep + name)
+            else:
+                for ns in chain:  # partially qualified: pay::Receipt inside namespace shop
+                    if ns and ns + sep + name in self.index:
+                        return Resolution(PROJECT, ns + sep + name)
+                    if ns and ns + sep + name in self.inline_names:
+                        return Resolution(PROJECT, self.inline_names[ns + sep + name])
+                    if ns and ns + sep + name in self.aliases:
+                        return Resolution(ALIAS, ns + sep + name)
             head, rest = name.split(sep, 1)
             for imp in scope.imports:  # module alias: pay.Receipt, models.OrderLine
                 if not imp.wildcard and imp.module and imp.ambiguous and imp.local_name == head:
@@ -522,31 +607,9 @@ class Resolver:
             return Resolution(UNRESOLVED, hint=first.hint, candidates=first.candidates,
                               outside=first.outside)
 
-        # nested types of this type and its enclosing types, including inherited ones
-        cur: Optional[RawType] = rtype
-        while cur is not None:
-            hidden = cur.hidden_types.get(name)
-            if hidden == "tparam":
-                return Resolution(TPARAM)
-            if hidden:   # a nested type ir.json does not record (a C# delegate)
-                return Resolution(EXTERNAL, cur.qualified_name + sep + name)
-            inherited = spec.inherited_member_types and (inherit or cur is not rtype)
-            found = spec.nested_types_in_scope and nested and self._member_type(
-                cur, name, sep, inherited, set())
-            if found:
-                return self._found(found)
-            if spec.base_names_in_scope and cur.name == name and cur.kind != "alias":
-                return Resolution(PROJECT, cur.qualified_name)   # a class's own name first
-            if inherited and spec.base_names_in_scope:
-                base = self._base_named(cur, name, sep)
-                if base is not None:   # `CodeGenerator::Properties` in a CodeGenerator subclass
-                    return base
-            if inherited:   # `Entry` in a HashMap subclass is Map.Entry, not the package's
-                outside = self._inherited_external(
-                    self._external_ancestors(cur, starred=True), name, spec)
-                if outside:
-                    return Resolution(EXTERNAL, outside)
-            cur = self.index.get(cur.outer) if cur.outer else None
+        found = self._in_types(name, rtype, inherit, nested, spec)
+        if found is not None:
+            return found
 
         def in_namespaces() -> Optional[Resolution]:
             for ns in chain:
@@ -742,12 +805,18 @@ class Resolver:
                 # a type of the default package is no package head, and only the default
                 # package sees that type, where it is resolved already
                 return None
-            # a package: the first prefix that is a project type (`io.netty.Foo.X`)
-            n = next((k for k in range(2, len(parts) + 1)
-                      if sep.join(parts[:k]) in self.index), 0)
+            # a package: the first prefix that is a project type (`io.netty.Foo.X`); in C#
+            # as a qualified name is resolved (`Models.Order` in `namespace App.Web`)
+            if spec.qualified_heads_in_scope:
+                n, target = next(((k, r.target) for k in range(2, len(parts) + 1)
+                                  if (r := self._in_body(sep.join(parts[:k]), rtype, ref, 0))
+                                  .status == PROJECT), (0, None))
+            else:
+                n = next((k for k in range(2, len(parts) + 1)
+                          if sep.join(parts[:k]) in self.index), 0)
+                target = sep.join(parts[:n])
             if not n:
                 return None
-            target = sep.join(parts[:n])
         else:
             # a module or namespace the scope binds the head to (`ns.Foo.m()`): the first
             # prefix it resolves to a project type

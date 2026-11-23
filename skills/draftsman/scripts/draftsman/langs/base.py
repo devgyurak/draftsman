@@ -206,6 +206,11 @@ class LanguageSpec:
     # Whether an import in a namespace block belongs to that namespace (C#'s `namespace A {
     # using B; }`): looked at after A's types and before the namespaces around A
     block_imports: bool = False
+    # Whether the first part of a qualified name is looked up as a simple name is, a type or
+    # a namespace from the innermost scope out (C#: `Models.Order` in `namespace App.Web` is
+    # App.Models.Order when App.Models exists, and `Lib.Order` in `namespace Shop.Sub` is
+    # the class Shop.Lib's nested Order before a namespace Lib)
+    qualified_heads_in_scope: bool = False
     # Whether a namespace around the code that no type of the sources is declared in, and
     # that a using of the sources imports (C#'s `namespace CommunityToolkit.Mvvm.Input.Mine`
     # with `using CommunityToolkit.Mvvm.Input;` somewhere), is taken for one outside the
@@ -272,6 +277,11 @@ class LanguageSpec:
     def outside_namespace(self, namespace: str) -> Optional[frozenset[str]]:
         """The types a namespace outside the sources declares, when the table knows it."""
         return None
+
+    def outside_namespace_exists(self, namespace: str) -> bool:
+        """Whether the table knows a namespace of that name outside the sources, also one
+        that only holds other namespaces (C#'s `Microsoft.Extensions`)."""
+        return False
 
     def internal_type(self, modifiers: list[str], nested: bool) -> bool:
         """Whether a type declared with these modifiers is seen only in its own build project

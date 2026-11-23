@@ -185,6 +185,16 @@ def _framework_namespaces() -> dict[str, frozenset]:
 
 
 @lru_cache(maxsize=None)
+def _framework_namespace_parents() -> frozenset:
+    """The table's namespaces and every namespace they are in (`Microsoft.Extensions`)."""
+    out = set()
+    for ns in _framework()["namespaces"]:
+        parts = ns.split(".")
+        out.update(".".join(parts[:i]) for i in range(1, len(parts) + 1) if ns)
+    return frozenset(out)
+
+
+@lru_cache(maxsize=None)
 def _framework_types() -> frozenset:
     return frozenset(f"{ns}.{n}" if ns else n
                      for ns, names in _framework()["namespaces"].items() for n in names)
@@ -513,6 +523,9 @@ class CSharpSpec(LanguageSpec):
     def outside_namespace(self, namespace):
         return _framework_namespaces().get(namespace)
 
+    def outside_namespace_exists(self, namespace):
+        return namespace in _framework_namespace_parents()
+
     def inherited_field(self, super_id, name, static=False):
         # a field, property or event a .NET or ASP.NET Core class (or one it extends)
         # declares; with ``static``, a static one (what `using static` brings in)
@@ -601,6 +614,7 @@ class CSharpSpec(LanguageSpec):
         "internal": "internal",
     }
     parent_namespace_lookup = True
+    qualified_heads_in_scope = True
     enclosing_outside_hides = True
     block_imports = True
     body_aliases = True

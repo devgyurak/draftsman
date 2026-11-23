@@ -86,7 +86,10 @@ def test_body_relations_go_where_the_hand_written_answers_say():
            ("Shop/Order.cs", 28, "Shop.Status"), ("Shop/Order.cs", 42, "Shop.Money"),
            ("Shop/Repo.cs", 11, "Shop.Repo")]
     parts = [("Shop/Positions.cs", 27, "Shop.Order"), ("Shop/Positions.cs", 43, "Shop.Order"),
-             ("Shop/Positions.cs", 44, "Shop.Util"), ("Shop/ColorColor.cs", 12, "Shop.Order")]
+             ("Shop/Positions.cs", 44, "Shop.Util"), ("Shop/ColorColor.cs", 12, "Shop.Order"),
+             ("Shop/Review/Qualified.cs", 44, "Shop.Rev.Qual.Lib"),
+             ("Shop/Review/Qualified.cs", 45, "Shop.Rev.Qual.Lib"),
+             ("Shop/Review/Qualified.cs", 46, "Shop.Rev.Qual.Lib")]
     top_level = [("Program.cs", 4, "Shop.Order"), ("Program.cs", 5, "Shop.Customer"),
                  ("Program.cs", 5, "Shop.Order")]
     global_ = [("Shop/Positions.cs", 28, "Shop.Order"), ("Shop/Positions.cs", 47, "Shop.Status")]
@@ -406,7 +409,7 @@ def test_a_namespace_around_that_a_using_imports_and_no_source_declares_in_hides
         "Package.cs": """using Shop;
 namespace CommunityToolkit.Mvvm.Input.Mine
 {
-    public class P { object A() => typeof(RelayCommand); object B() => new Order(); object C() => Order.Count; }
+    public class P { object A() => typeof(RelayCommand); object B() => new Order(); object C() => Order.Count; object D() => new Shop.Order(); }
 }
 namespace Other.Mine
 {
