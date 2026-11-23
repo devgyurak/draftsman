@@ -15,7 +15,11 @@ namespace Shop.Payments
         private StripeClient client;
         private Receipt.Money fee;
 
-        public Task<Receipt> ChargeAsync(Order order) => Task.FromResult<Receipt>(null);
+        public Task<Receipt> ChargeAsync(Order order)
+        {
+            fee ??= new Receipt.Money(0, "usd");   // a name in a body
+            return Task.FromResult<Receipt>(null);
+        }
         public void Dispose() { }
     }
 
