@@ -170,7 +170,7 @@ scripts/validate.sh diagram.mmd
 | Java | [spring-petclinic](docs/e2e/java/spring-petclinic.md) | 30 | 25 | 74 + 27 body | 0 | 0 |
 | Java | [jsoup](docs/e2e/java/jsoup.md) | 105 | 230 | 1310 + 1724 body | 0 | 0 |
 | Java | [Netty](docs/e2e/java/netty.md) | 2076 | 2752 | 17812 + 13818 body | 3 (2 outside, 1 unexplained) | 0 |
-| C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 366 + 207 body | 194 (1 ambiguous, 193 outside) | 0 |
+| C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 366 + 206 body | 194 (1 ambiguous, 193 outside) | 0 |
 | C# | [eShop](docs/e2e/csharp/eshop.md) `src/` | 497 | 506 | 960 + 442 body | 513 (1 ambiguous, 508 outside, 4 unexplained) | 0 |
 | C# | [Serilog](docs/e2e/csharp/serilog.md) `src/Serilog` | 113 | 119 | 566 + 363 body | 23 (23 outside) | 0 |
 | Kotlin | [nowinandroid](docs/e2e/kotlin/nowinandroid.md) | 226 | 237 | 416 | 4 (3 outside, 1 unexplained) | 0 |

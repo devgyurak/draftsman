@@ -79,8 +79,12 @@ is that type. Aliases of aliases are followed.
   before the file's usings. The first part of a qualified name is looked up as a simple
   name is, from the innermost scope out: `Models.Order` in `namespace App.Web` is
   `App.Models.Order` when the namespace `App.Models` exists, and `Lib.Order` where a class
-  `Lib` is nearer than the namespace `Lib` is that class's nested `Order`. `using X;` is a
-  wildcard import, `using A = B;` an alias.
+  `Lib` is nearer than the namespace `Lib` is that class's nested `Order` (a `Lib<T>` is
+  passed over: the arity written must fit). At each level a namespace's members, its
+  namespaces among them, come before its usings: `Models.Order.Count` is the global
+  namespace `Models`'s, not the class `Models` a file-level `using App.Entities;` brings
+  in. `using X;` is a wildcard import, `using A = B;` an alias, whose target is looked up
+  where the alias is declared (at the top of the file: from the global namespace).
   `global::A.B` is `A.B`. Primary constructors (C# 12, `class Order(IRepo<Order> repo)`)
   are a public constructor whose parameters are dependencies; records keep their
   parameters as properties. `params Q[] qs` is a parameter. Tuples (`(Person a, Point b)`)
@@ -106,7 +110,7 @@ is that type. Aliases of aliases are followed.
   using` in any file is an import of every file of the same project, and of no other.
 - Conditional compilation: every file is read with the **first branch** of each `#if`
   whose condition is not false whatever the symbols (`#if false ... #else` reads the
-  `#else`); the other branches and the directive lines are blanked before parsing (same
+  `#else`; `!`, `&&`, `||`, `==` and `!=` of `true` and `false` are worked out); the other branches and the directive lines are blanked before parsing (same
   length, so line numbers are exact). tree-sitter cannot parse `#if` inside a base list,
   a parameter list, an expression or around a second method header, and one
   deterministic configuration avoids reading both. The limit: `#if !FEATURE` keeps the
@@ -159,11 +163,12 @@ is that type. Aliases of aliases are followed.
   may declare any name the block's project namespaces do not; an alias the file declares
   of one project type (`using O = Shop.Order;`) names that type, unless a namespace around
   declares a type of the name; `<Using Include Alias>` and `<Using Static="true">` items of
-  the project file are global usings. A namespace around the code that no type of the
-  sources (or of the build) is declared in and that a using of the sources imports
-  (`namespace CommunityToolkit.Mvvm.Input.Mine` with `using CommunityToolkit.Mvvm.Input;`
-  somewhere) is taken for a package's, whose types may hide any name found further out:
-  such a name draws nothing. A Razor component (`X.razor`) is a type of its
+  the project file are global usings. A namespace around the code that is a package's
+  the project references (the `<PackageReference Include>` id, in the project or its
+  `Directory.Build.props`, or a namespace below it, case aside: `namespace
+  CommunityToolkit.Mvvm.Input.Mine` with CommunityToolkit.Mvvm) and that the table does
+  not know may hold any type, which hides a name found further out: such a name draws
+  nothing, also where the sources declare types in that namespace. A Razor component (`X.razor`) is a type of its
   `@namespace`, else the nearest `_Imports.razor`'s plus the folders below it, else the
   root namespace plus folders. A `file` type is seen in its file only; a type `internal`
   in another project (or nested in one) only where that project's `InternalsVisibleTo`
@@ -184,13 +189,17 @@ is that type. Aliases of aliases are followed.
   enums and services, in its `csharp_namespace`) hides a type of the name a `using`
   brings in, also for declared relations. Checked against Roslyn (`bench/roslyn_oracle`,
   each file's compilations joined; a place they resolve differently is no answer): 0
-  mismatches on eShopOnWeb, eShop and Serilog.
+  mismatches on eShopOnWeb, eShop and Serilog, and on the reviews' sets of sources written
+  by hand but for two known limits (`bench/roslyn_oracle/review`, `oracle.py review`).
 - Known limits of bodies: an `#if` the parser reads takes its first branch, so a symbol no
   build defines (`#if NEVER_DEFINED`) and `#if !DEBUG` (the key builds Debug) draw where
   no build compiles. Lost: under a base class outside .NET and ASP.NET, every name where a
   variable may stand (7 on eShop's MAUI app); behind a namespace the table does not know
-  in a nearer using (2 on eShop); found further out than a namespace around taken for a
-  package's (the rule above), also an alias's target there; a name of the table's ASP.NET
+  in a nearer using (2 on eShop); found further out than a package's namespace around the
+  code (the rule above; 1 on eShopOnWeb, in `namespace Ardalis.GuardClauses`), also an
+  alias's target there; a qualified name whose first part another project's internal
+  type or a project the file's does not reference takes (`Models.Order` where `App.Models`
+  is such a class or namespace), or that starts with `global::`; a name of the table's ASP.NET
   namespaces around the code where the project does not reference ASP.NET (the table is
   one for every project); a name through a namespace alias or an alias of a generic
   (`M.Order` with `using M = Shop.Models;`); a `file` type's name, and in another file a name it
@@ -202,9 +211,8 @@ is that type. Aliases of aliases are followed.
   `using static` brings a field of (C# looks at the namespaces around first), a type of
   another arity further out (`Lib.Box` beyond `Box<T>`), and a name a switch arm's
   pattern variable shares elsewhere in the member. Drawn where it may be wrong: a
-  package's namespace around the code that no using imports, or that the sources declare
-  a type in (`namespace CommunityToolkit.Mvvm.ComponentModel { using Shop; class Q { ...
-  typeof(ObservableObject) ... } }` draws Shop's), is taken for the project's.
+  namespace around the code of a package the project does not reference itself (one that
+  comes through another package or the SDK) is taken for the project's.
 - Not handled: extension methods (they stay members of their static class, which is
   correct but not linked to the extended type), the .NET 8 rule that drops `System.Net.Http` for .NET Framework targets.
   Declared relations ignore project references and the arity written (`Repo<int>` may

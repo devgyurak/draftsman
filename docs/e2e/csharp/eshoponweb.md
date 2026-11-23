@@ -8,7 +8,7 @@ A reference ASP.NET Core application: MVC, Razor Pages, Blazor admin, a public A
 | Commit | `4da8212117` (2025-01-13) |
 | Extracted | `src/` (tests are under `tests/`) |
 
-Measured on 2026-11-23 with Draftsman after 0.6.0 (at `1dab025`).
+Measured on 2026-11-23 with Draftsman after 0.6.0 (at `d80f3f3`).
 
 ## Run
 
@@ -39,16 +39,16 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 209 files, 208 types, relations: association 96, dependency 209, extends 34, implements 27, body dependency 207, 194 unresolved (1 ambiguous, 193 outside the sources), 0 diagnostics
+draftsman: 209 files, 208 types, relations: association 96, dependency 209, extends 34, implements 27, body dependency 206, 194 unresolved (1 ambiguous, 193 outside the sources), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 209 | 208 | 96 | 209 | 34 | 27 | 207 | 194 (1 ambiguous, 193 outside) | 0 |
+| 209 | 208 | 96 | 209 | 34 | 27 | 206 | 194 (1 ambiguous, 193 outside) | 0 |
 
 Types by kind: 185 classes, 5 abstract classes, 16 interfaces, 1 record, 1 enum.
 
-The Mermaid and SVG renders of the view draw 7 types and 7 relations (`BasketService` and its neighbours one hop away, `BasketWithItemsSpecification` and `ConfigureCoreServices` only through body relations), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 208 types, as 204 boxes with 4 nested types folded into their outer types, and 372 relations (113 from bodies, shown around the class in focus) and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 7 types and 7 relations (`BasketService` and its neighbours one hop away, `BasketWithItemsSpecification` and `ConfigureCoreServices` only through body relations), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 208 types, as 204 boxes with 4 nested types folded into their outer types, and 371 relations (112 from bodies, shown around the class in focus) and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
@@ -64,5 +64,5 @@ The Mermaid and SVG renders of the view draw 7 types and 7 relations (`BasketSer
 - SDK implicit usings and `global using`s are imports of every file of their `.csproj`.
 - A record, `0..1` associations from nullable types, and generic repositories (`IRepository<T>`, the most connected type).
 - The only external supertypes are `System.Attribute`, `System.Exception` and `System.IDisposable`; framework base classes are unresolved, see above.
-- Bodies: 207 dependencies from names in method bodies (`new CatalogItem(...)`, `new BasketWithItemsSpecification(...)`, `IRepository<Basket>` in a local's type), between 181 pairs of types; no declaration relates 115 of those pairs in that direction. All 252 places they are drawn from match what Roslyn resolves there (`bench/roslyn_oracle`: the 10 projects of `eShopOnWeb.sln` compiled with the .NET 8 SDK as C# 12, Debug, 0 compile errors, 793 names read in bodies).
+- Bodies: 206 dependencies from names in method bodies (`new CatalogItem(...)`, `new BasketWithItemsSpecification(...)`, `IRepository<Basket>` in a local's type), between 180 pairs of types; no declaration relates 114 of those pairs in that direction. All 251 places they are drawn from match what Roslyn resolves there (`bench/roslyn_oracle`: the 10 projects of `eShopOnWeb.sln` compiled with the .NET 8 SDK as C# 12, Debug, 0 compile errors, 793 names read in bodies).
 - Attributes: `[DbContext(typeof(X))]` on EF migrations, the project's `[Endpoint]` (`EndpointAttribute`) and `[Authorize(Roles = Constants.Roles.ADMINISTRATORS)]`; ASP.NET's `[Route]` is not the project's static class `Route`.
