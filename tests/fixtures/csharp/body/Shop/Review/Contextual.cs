@@ -29,4 +29,15 @@ namespace Shop.Rev.Ctx
         public void B() => G(out List<Order> x);   //> List=System.Collections.Generic.List/t Order=Shop.Order/t
         public void C() => G(x: out List<Order> y);   //> List=System.Collections.Generic.List/t Order=Shop.Order/t
     }
+
+    // the same comparisons in a collection expression and an indexer's arguments; a
+    // deconstruction's tuple (also a foreach's) declares
+    public class Elements
+    {
+        public int Order, b, Customer, d;   //> Order=- Customer=-
+        public bool this[bool x, bool y] => x;
+        public bool[] A() => [Order < b, Customer > d];   //> Order=- Customer=-
+        public bool B() => this[Order < b, Customer > d];   //> Order=- Customer=-
+        public void C(List<(Shop.Order, int)> pairs) { foreach ((Shop.Order o, int n) in pairs) { } }   //> List=- Shop=- Order=- Shop=- Order=Shop.Order/t
+    }
 }

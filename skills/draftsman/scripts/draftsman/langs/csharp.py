@@ -767,6 +767,26 @@ class CSharpSpec(LanguageSpec):
             return {cls.group(1).rsplit(".", 1)[-1]: names} if cls and names else {}
         return {}
 
+    def declaration_read(self, decl_node):
+        # C# allows a declaration expression only as an `out` (`ref`, `in`) argument and in
+        # a deconstruction's tuple, on the left of `=` or of a `foreach` (nested tuples too);
+        # elsewhere tree-sitter's `Order<b, Customer> d` is two comparisons
+        arg = decl_node.parent
+        if arg is None or arg.type != "argument":
+            return False
+        if any(c.type in ("out", "ref", "in") for c in arg.children if not c.is_named):
+            return True
+        tup = arg.parent
+        while tup is not None and tup.type == "tuple_expression":
+            up = tup.parent
+            if up is not None and up.type in ("assignment_expression", "foreach_statement"):
+                left = up.child_by_field_name("left")
+                return left is not None and left.id == tup.id
+            if up is None or up.type != "argument" or up.parent is None:
+                return False
+            tup = up.parent
+        return False
+
     def implicit_variables(self, node):
         # `value` in a set, init, add or remove accessor; `field` (C# 14) in a property's
         # accessor, the property's backing field

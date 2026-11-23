@@ -784,6 +784,15 @@ class Extractor:
                     declared.append((n, "globals"))
                 elif cap == "body.unread":
                     unread.add(n.id)
+                elif cap == "body.declared_type":
+                    # a declaration's type where the language reads no declaration (C#'s
+                    # `F(Order < b, Customer > d)`, two comparisons): none of its names
+                    if not self.spec.declaration_read(n.parent):
+                        stack = [n]
+                        while stack:
+                            cur = stack.pop()
+                            unread.add(cur.id)
+                            stack.extend(cur.children)
                 elif cap == "body.blind":
                     blind.add(n.id)
                 elif cap == "body.guarded":

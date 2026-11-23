@@ -301,6 +301,12 @@ class LanguageSpec:
         InternalsVisibleTo)."""
         return False
 
+    def declaration_read(self, decl_node: "ts.Node") -> bool:
+        """Whether a declaration captured `@body.declared_type` is read as one where it
+        stands (C#: an `out` argument, a deconstruction's tuple), or is what the language
+        reads otherwise there, which names no type."""
+        return True
+
     def implicit_variables(self, node: "ts.Node") -> frozenset[str]:
         """Variables the language binds around a name in a body without a declaration in
         the source (C#'s `value` in a setter, `field` in a property's accessor)."""
