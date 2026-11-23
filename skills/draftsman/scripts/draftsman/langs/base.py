@@ -72,6 +72,13 @@ class FileScope:
     # a type or alias seen only inside the namespace block that declares it -> that
     # block's first and last line (TypeScript's member a block does not export)
     block_local: dict[str, tuple[int, int]] = field(default_factory=dict)
+    # the names a wildcard import of the file brings in, when it lists them (Python's
+    # `__all__`); None when it lists none, or when the listing cannot be read (exports_unread)
+    exports: Optional[set[str]] = None
+    exports_unread: bool = False
+    # top-level names the file binds more than once, one of them by a class statement
+    # (LanguageSpec.rebinding_hides): no one class, also where another file imports it
+    rebound: set[str] = field(default_factory=set)
     # names the file may declare where the parser could not see it: simple name ->
     # namespace around it -> places (an argument of a blanked macro, a class head inside
     # a syntax error)
@@ -152,6 +159,30 @@ class LanguageSpec:
     # Whether a type's own nested types are in scope inside it by simple name. Not in TS:
     # the types of a namespace merged with a class are `Foo.Inner` in the class's methods
     nested_types_in_scope: bool = True
+    # The same in the bodies of its members. Not in Python, where a class body is a scope
+    # of its own statements but not of the functions defined in it (a method writes
+    # `Outer.Inner`), though its annotations see it
+    nested_types_in_bodies: bool = True
+    # Whether a field's initializer runs in the class body as a scope, where the names the
+    # class binds (its fields, methods and nested types) hide a type of the same name
+    # (Python's `value = Foo` after `Foo = 1` in the class body)
+    initializers_in_class_scope: bool = False
+    # Whether a name a module binds more than once at its top (two class statements, a
+    # class and an import) draws nothing in a body, as a variable would: which binding a
+    # body sees depends on what ran (Python's `try: from x import Foo` / `except: class Foo`)
+    rebinding_hides: bool = False
+    # Whether `import a.b` binds the head `a`, so that `a.b.Foo()` in a body goes through it
+    # (Python)
+    module_imports_bind_heads: bool = False
+    # Whether a dotted receiver reaches a submodule as an attribute of its package
+    # (`models.base.ModelBase()`) only when the file imports that submodule: in Python the
+    # attribute exists once something imported it, which is no certainty
+    submodules_need_import: bool = False
+    # Whether a suffix match of an import path (import_suffix_match) must not drop a
+    # package: Python's `import jinja2` is no `django.template.backends.jinja2`, since every
+    # directory above it is a package (its __init__ is a source); only directories that
+    # are none (`src/`) may be dropped
+    suffix_skips_no_package: bool = False
 
     # ------------------------------------------------------------- files
 
@@ -191,6 +222,11 @@ class LanguageSpec:
         """The name a member is listed under (Kotlin calls every constructor `constructor`),
         or None for no member: a name no declaration can have, read inside a syntax error."""
         return name
+
+    def star_exports(self, name: str, scope: FileScope, certain: bool = False) -> bool:
+        """Whether a wildcard import of the module of ``scope`` brings in its ``name``
+        (FileScope.exports); ``certain``: only if that is known, as in a body."""
+        return True
 
     def body_name(self, member_name: str) -> str:
         """The name a member, as listed, is in scope by in a body (TypeScript's enum

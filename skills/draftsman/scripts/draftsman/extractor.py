@@ -8,6 +8,7 @@ language-specific lives in the query file and the LanguageSpec.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -166,6 +167,22 @@ def _comment_spans(node: ts.Node) -> list[tuple[int, int]]:
         elif n.child_count:
             stack.extend(n.children)
     return sorted(spans)
+
+
+def _inside(node: ts.Node, ids: set[int]) -> bool:
+    """Whether one of the nodes ``ids`` is at or above ``node``."""
+    while node is not None:
+        if node.id in ids:
+            return True
+        node = node.parent
+    return False
+
+
+def _string(node: ts.Node, src: bytes) -> Optional[str]:
+    """The text of a string literal without interpolations (`"Foo"`), else None."""
+    if node.type != "string" or any(c.type == "interpolation" for c in node.children):
+        return None
+    return "".join(_text(c, src) for c in node.children if c.type == "string_content")
 
 
 def _line(node: ts.Node) -> int:
@@ -381,10 +398,20 @@ class Extractor:
         # parameters must be appended in source order
         other.sort(key=lambda c: min(n.start_byte for nodes in c.values() for n in nodes))
 
+        listed: Optional[set[str]] = None   # the names the file lists as its exports
+        readable = True
         for caps in other:
             if (n := _first(caps, "package")) is not None:
                 if scope.namespace is None:
                     scope.namespace = _text(n, src)
+            elif (n := _first(caps, "exports")) is not None:
+                # a list or tuple of plain strings; anything else cannot be read
+                names = [_string(c, src) for c in n.named_children if "comment" not in c.type] \
+                    if n.type in ("list", "tuple") else [None]
+                if None in names:
+                    readable = False
+                else:
+                    listed = (listed or set()) | set(names)
             elif (n := _first(caps, "typevar")) is not None:
                 scope.type_params.add(_text(n, src))
             elif any(k.startswith("import") for k in caps):
@@ -394,6 +421,9 @@ class Extractor:
                 imp = self._import(caps, src, mod_path)
                 if imp is not None:
                     scope.imports.append(imp)
+
+        scope.exports = listed if readable else None
+        scope.exports_unread = not readable
 
         # --- types: register every declaration node, then compute names
         type_nodes: dict[int, dict] = {}
@@ -609,6 +639,7 @@ class Extractor:
         refs, declared = [], []
         unread: set[int] = set()   # type nodes that are no name of the scope
         blind: set[int] = set()    # class bodies whose inherited members are not known
+        guarded: set[int] = set()  # blocks only some checkers read (a platform's branch)
         for caps in matches:
             if (n := _first(caps, "body.init")) is not None:
                 # only a named type's own: a block in an anonymous class is in a body already
@@ -639,11 +670,18 @@ class Extractor:
                     declared.append((n, "variables"))
                 elif cap == "body.type":
                     declared.append((n, "types"))
+                elif cap == "body.import":
+                    declared.append((n, "imports"))
+                elif cap == "body.global":
+                    declared.append((n, "globals"))
                 elif cap == "body.unread":
                     unread.add(n.id)
                 elif cap == "body.blind":
                     blind.add(n.id)
-        if not refs:
+                elif cap == "body.guarded":
+                    blind.add(n.id)
+                    guarded.add(n.id)
+        if not refs and not (declared and self.spec.rebinding_hides):
             return
         names: dict[int, BodyNames] = {}   # by the node of the member or initializer
 
@@ -718,19 +756,38 @@ class Extractor:
         # variables a namespace block declares, by the namespace's path in the file: every
         # block of one namespace shares them, so as not to miss an exported one
         in_namespace: dict[tuple[str, ...], set[str]] = {}
+        bound: dict[tuple[str, ...], Counter] = {}
+        top_classes: set[str] = set()   # the class statements at the top of the file
         for node, kind in declared:
-            if (a := anchor_of(node.parent)) is not None:
+            if kind == "globals":   # Python's `global Foo`: the module's, wherever it stands
+                in_namespace.setdefault((), set()).add(_text(node, src))
+            elif (a := anchor_of(node.parent)) is not None:
                 # a member inside a member is the outer one's: TypeScript's parameter
                 # property `constructor(private x)` is a parameter in the body
                 while (outer := anchor_of(a.parent)) is not None:
                     a = outer
                 key = place(a, node.start_byte)[0]
+                kind = "variables" if kind == "imports" else kind
                 getattr(names.setdefault(key, BodyNames()), kind).add(_text(node, src))
-            elif kind == "variables" and (path := namespace_path(
-                    # a function's name is the scope's around it
+            elif (kind == "variables" or self.spec.rebinding_hides) and (path := namespace_path(
+                    # a function's or a class's name is the scope's around it
                     node.parent.parent if node.parent.child_by_field_name("name") == node
-                    else node.parent)):
-                in_namespace.setdefault(path, set()).add(_text(node, src))
+                    else node.parent)) is not None:
+                if kind == "variables":
+                    in_namespace.setdefault(path, set()).add(_text(node, src))
+                else:   # a class statement or an import of the namespace's top
+                    bound.setdefault(path, Counter())[_text(node, src)] += 1
+                    if kind == "types" and not path:
+                        top_classes.add(_text(node, src))
+                        if _inside(node, guarded):   # no one class for every checker
+                            in_namespace.setdefault((), set()).add(_text(node, src))
+        # a name bound twice there (two class statements, a class and an import) is no
+        # one type (LanguageSpec.rebinding_hides), here and where it is imported
+        for path, counts in bound.items():
+            in_namespace.setdefault(path, set()).update(n for n, k in counts.items() if k > 1)
+        scope.rebound = {n for n in top_classes if n in in_namespace.get((), ())}
+        if not refs:
+            return
         seeded: set[int] = set()   # members given the variables of the namespaces around
         # `T` in `<T extends Foo>` is declared there; `Inner` in `o.new Inner()` is o's
         not_refs = {n.id for n, _ in declared} | unread
@@ -750,8 +807,14 @@ class Extractor:
             member_names = names.setdefault(key, BodyNames())
             if key not in seeded:
                 seeded.add(key)
-                if in_namespace and (path := namespace_path(owner.parent)):
-                    for k in range(1, len(path) + 1):
+                # the namespaces around the outermost type: a nested type's bodies see them
+                top, cur = owner, owner.parent
+                while cur is not None:
+                    if cur.id in types_by_node:
+                        top = cur
+                    cur = cur.parent
+                if in_namespace and (path := namespace_path(top.parent)) is not None:
+                    for k in range(len(path) + 1):
                         member_names.variables |= in_namespace.get(path[:k], set())
             parts = self._parts(node)
             types_by_node[owner.id].body_refs.append(RawBodyRef(

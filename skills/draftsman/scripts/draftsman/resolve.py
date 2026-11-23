@@ -72,7 +72,7 @@ class Resolver:
         self._targets = set(self.index) | self.aliases
         self._supers_cache: dict[str, list[Resolution]] = {}
         self._resolving_supers: set[str] = set()
-        self._suffix_cache: dict[str, Optional[str]] = {}
+        self._suffix_cache: dict[tuple[str, bool], Optional[str]] = {}
         self._tail_cache: dict[str, Optional[str]] = {}
         self._field_cache: dict[tuple[str, str], bool] = {}
         self._ancestors_cache: dict[tuple[str, bool], list[str]] = {}
@@ -88,33 +88,54 @@ class Resolver:
             cur = self.index.get(cur.outer) if cur.outer else None
         return names
 
-    def _by_suffix(self, path: str, pool) -> Optional[str]:
-        """The unique entry of ``pool`` that ends with ``path`` on a segment boundary."""
+    def _by_suffix(self, path: str, pool, spec=None) -> Optional[str]:
+        """The unique entry of ``pool`` that ends with ``path`` on a segment boundary; with
+        LanguageSpec.suffix_skips_no_package, not one whose dropped part is a module or a
+        package of the sources (whose __init__ is one)."""
         hits = [p for p in pool if p == path or p.endswith("." + path) or p.endswith("/" + path)]
+        if spec is not None and spec.suffix_skips_no_package:
+            hits = [p for p in hits if p == path
+                    or p[:-len(path) - 1] not in self.scopes_by_ns]
         return hits[0] if len(hits) == 1 else None
 
-    def lookup(self, path: str, spec, depth: int = 0) -> Optional[str]:
-        """Project type or alias id for a fully written path, following re-exports."""
+    def _exports(self, module: str, name: str, spec, certain: bool = False) -> bool:
+        """Whether a wildcard import of the project module ``module`` brings in ``name``."""
+        scopes = self.scopes_by_ns.get(module) or self.scopes_by_ns.get(
+            self._by_suffix(module, self.scopes_by_ns, spec) or "", [])
+        return all(spec.star_exports(name, s, certain) for s in scopes)
+
+    def _rebound(self, target: str) -> bool:
+        """Whether the module of a project type binds its name (or its outermost type's)
+        more than once at its top (FileScope.rebound)."""
+        t = self.index[target]
+        while t.outer and t.outer in self.index:
+            t = self.index[t.outer]
+        return t.name in t.scope.rebound
+
+    def lookup(self, path: str, spec, depth: int = 0, certain: bool = False) -> Optional[str]:
+        """Project type or alias id for a fully written path, following re-exports;
+        ``certain``: only through wildcard imports known to bring the name in."""
         if path in self._targets:
             return path
         if not spec.import_suffix_match:
             return None
         # only top-level answers are cached: a nested call can stop at the depth limit,
         # and caching that None would make results depend on file order
-        if depth == 0 and path in self._suffix_cache:
-            return self._suffix_cache[path]
-        found = self._by_suffix(path, self._targets)
+        if depth == 0 and (path, certain) in self._suffix_cache:
+            return self._suffix_cache[(path, certain)]
+        found = self._by_suffix(path, self._targets, spec)
         if found is None and depth < 4:
             # `from pkg import Name` where pkg/__init__ re-exports Name
             sep = spec.separator
             if sep in path:
                 mod, name = path.rsplit(sep, 1)
-                ns = mod if mod in self.scopes_by_ns else self._by_suffix(mod, self.scopes_by_ns)
+                ns = mod if mod in self.scopes_by_ns else self._by_suffix(mod, self.scopes_by_ns,
+                                                                           spec)
                 scopes = self.scopes_by_ns.get(ns, []) if ns else []
                 for scope in scopes:
                     for imp in scope.imports:
                         if not imp.wildcard and not imp.module and imp.local_name == name:
-                            found = self.lookup(imp.path, spec, depth + 1)
+                            found = self.lookup(imp.path, spec, depth + 1, certain)
                             if found:
                                 break
                     if found:
@@ -123,14 +144,15 @@ class Resolver:
                 # the same simple name can live in several packages (Field)
                 for scope in scopes if not found else []:
                     for imp in scope.imports:
-                        if imp.wildcard and not imp.external:
-                            found = self.lookup(imp.path + sep + name, spec, depth + 1)
+                        if imp.wildcard and not imp.external and \
+                                self._exports(imp.path, name, spec, certain):
+                            found = self.lookup(imp.path + sep + name, spec, depth + 1, certain)
                             if found:
                                 break
                     if found:
                         break
         if depth == 0:
-            self._suffix_cache[path] = found
+            self._suffix_cache[(path, certain)] = found
         return found
 
     def _reexported_from(self, path: str, spec, depth: int = 0) -> Optional[str]:
@@ -140,7 +162,7 @@ class Resolver:
         if depth >= 4 or sep not in path:
             return None
         mod, name = path.rsplit(sep, 1)
-        ns = mod if mod in self.scopes_by_ns else self._by_suffix(mod, self.scopes_by_ns)
+        ns = mod if mod in self.scopes_by_ns else self._by_suffix(mod, self.scopes_by_ns, spec)
         for scope in self.scopes_by_ns.get(ns, []) if ns else []:
             for imp in scope.imports:
                 if imp.wildcard or imp.module or imp.local_name != name:
@@ -387,9 +409,12 @@ class Resolver:
 
     def resolve(self, name: str, rtype: RawType, member: Optional[RawMember] = None,
                 inherit: bool = True, scope: Optional[FileScope] = None,
-                arity: Optional[int] = None, strict: bool = False) -> Resolution:
+                arity: Optional[int] = None, strict: bool = False,
+                nested: bool = True) -> Resolution:
         """What ``name`` written in ``rtype`` stands for. ``strict``: a name more than one
-        wildcard import provides is unresolved, not the first one's."""
+        wildcard import provides is unresolved, not the first one's. ``nested``: whether
+        the nested types of ``rtype`` and the types around it are in scope (in a body,
+        LanguageSpec.nested_types_in_bodies)."""
         spec = LANGUAGES[rtype.language]
         sep = spec.separator
         scope = scope or (member.scope if member and member.scope else None) or rtype.scope
@@ -418,13 +443,15 @@ class Resolver:
                 if not imp.wildcard and imp.module and imp.ambiguous and imp.local_name == head:
                     return self._ambiguous_package(imp, rest, spec)
                 if not imp.wildcard and imp.local_name == head:
-                    found = None if imp.external else self.lookup(imp.path + sep + rest, spec)
+                    found = None if imp.external else self.lookup(imp.path + sep + rest, spec,
+                                                                  certain=strict)
                     if found:
                         return self._found(found)
                     if imp.module:
                         return (Resolution(EXTERNAL, imp.path + sep + rest) if imp.external
                                 else self._not_found(imp.path + sep + rest, spec))
-            first = self.resolve(head, rtype, member, inherit, scope, strict=strict)
+            first = self.resolve(head, rtype, member, inherit, scope, strict=strict,
+                                 nested=nested)
             if first.status == PROJECT:
                 found = self._nested_path(first.target, rest, sep, inherit, spec)
                 if found:
@@ -471,8 +498,8 @@ class Resolver:
         cur: Optional[RawType] = rtype
         while cur is not None:
             inherited = spec.inherited_member_types and (inherit or cur is not rtype)
-            found = spec.nested_types_in_scope and self._member_type(cur, name, sep, inherited,
-                                                                     set())
+            found = spec.nested_types_in_scope and nested and self._member_type(
+                cur, name, sep, inherited, set())
             if found:
                 return self._found(found)
             if spec.base_names_in_scope and cur.name == name and cur.kind != "alias":
@@ -508,7 +535,7 @@ class Resolver:
                 if imp.ambiguous:
                     return self._ambiguous_package(imp, imp.path.rsplit(sep, 1)[-1], spec)
                 if not imp.external:
-                    found = self.lookup(imp.path, spec)
+                    found = self.lookup(imp.path, spec, certain=strict)
                     if found:
                         return self._found(found)
                     outside = self._reexported_from(imp.path, spec)
@@ -531,7 +558,8 @@ class Resolver:
         provided: list[str] = []
         for imp in scope.imports:
             if imp.wildcard:
-                found = None if imp.external else self.lookup(imp.path + sep + name, spec)
+                found = None if imp.external or not self._exports(imp.path, name, spec, strict) \
+                    else self.lookup(imp.path + sep + name, spec, certain=strict)
                 if found and not strict:
                     return self._found(found)
                 if found:
@@ -641,6 +669,8 @@ class Resolver:
         if parts[0] in ref.names.types or self._is_variable(parts[0], rtype, ref):
             return None
         res = self._in_body(parts[0], rtype, ref, 0)
+        if res.status == EXTERNAL and res.target in self.scopes_by_ns:
+            res = Resolution(UNRESOLVED)   # Python's `from p import mod`: a module, no type
         if res.status == PROJECT:
             target, n = res.target, 1
         elif res.status != UNRESOLVED or len(parts) == 1:
@@ -667,6 +697,9 @@ class Resolver:
             if found is None:
                 return None
             n, target = found
+            if n > 2 and spec.submodules_need_import and not self._imports_module(
+                    parts[:n - 1], ref.scope, spec):
+                return None   # `models.base.ModelBase`: a submodule the file did not import
         if self.index[target].kind in spec.type_only_kinds:
             return None   # the value of the name is another declaration's
         while n < len(parts) and not self._has_field(self.index[target], parts[n]):
@@ -682,10 +715,29 @@ class Resolver:
         spec = LANGUAGES[rtype.language]
         if any(imp.local_name == head for imp in ref.scope.imports if not imp.wildcard):
             return True
+        if spec.module_imports_bind_heads and any(
+                imp.module and imp.path.split(spec.separator, 1)[0] == head
+                for imp in ref.scope.imports):
+            return True
         chain = self._namespace_chain(rtype.namespace, spec.separator,
                                       spec.parent_namespace_lookup, ref.scope.namespace)
         return any((ns + spec.separator + head if ns else head) in self.namespaces
                    for ns in chain)
+
+    def _imports_module(self, parts: list[str], scope: FileScope, spec) -> bool:
+        """Whether the file imports the module a dotted name's parts reach (`models.base`
+        after `from django.db import models`), or one inside it."""
+        sep = spec.separator
+        heads = [imp.path for imp in scope.imports if not imp.wildcard
+                 and imp.local_name == parts[0]]
+        if spec.module_imports_bind_heads:
+            heads.append(parts[0])
+        for head in heads:
+            module = sep.join([head, *parts[1:]])
+            if any(imp.path == module or imp.path.startswith(module + sep)
+                   for imp in scope.imports):
+                return True
+        return False
 
     def _around(self, rtype: RawType, ref: RawBodyRef, depth: int):
         """For each anonymous or local class around ``ref`` from ``depth`` levels out,
@@ -722,7 +774,11 @@ class Resolver:
             found = self._inherited_external(outside, head, spec)
             if found:   # `State` in `new Thread() { ... }`
                 return Resolution(EXTERNAL, found + sep + rest if rest else found)
-        return self.resolve(name, rtype, ref.member, scope=ref.scope, strict=True)
+        res = self.resolve(name, rtype, ref.member, scope=ref.scope, strict=True,
+                           nested=spec.nested_types_in_bodies)
+        if res.status == PROJECT and spec.rebinding_hides and self._rebound(res.target):
+            return Resolution(UNRESOLVED)   # `try: from x import Foo` / `except: class Foo`
+        return res
 
     def _is_variable(self, name: str, rtype: RawType, ref: RawBodyRef) -> bool:
         """Whether a variable of the name may be in scope where ``ref`` is written: one the
@@ -732,6 +788,11 @@ class Resolver:
         if name in ref.names.variables:
             return True
         spec = LANGUAGES[rtype.language]
+        if spec.initializers_in_class_scope and ref.member is not None \
+                and ref.member.member.kind in ("field", "enum_constant") and (
+                    any(rm.member.name == name for rm in rtype.members)
+                    or self._member_type(rtype, name, spec.separator, False, set())):
+            return True   # in the class body: its own names first (`value = Foo`)
         if not spec.fields_in_scope:
             # an enum's constants are names in its own bodies (`B = A` in an enum)
             return any(rm.member.kind == "enum_constant" and spec.body_name(rm.member.name) == name
