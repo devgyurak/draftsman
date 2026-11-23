@@ -122,6 +122,20 @@ Notes for anyone with `view.json` files written against a development build:
   Django's and httpx's `ir.json` are byte for byte the same (none of these forms occurs
   there in a way that changes a relation: still 4065 and 186 names, 3 and 0 mismatches,
   the same keys), and so are jsoup's, petclinic's, Netty's, TypeORM's and nest's.
+- **A Python name a module binds to two classes, or as a variable, is no class where it
+  is taken** (#5, after 0.5.0). A third set of hand-written sources found 3 and 4 wrong
+  names, now 0: `from .a import Foo` and `from .b import Foo` in `dup/__init__.py` (or two
+  star imports that both bring in `Both`, a name and a star import, a class and a star
+  import), and another file's `from q.dup import Foo`, `dup.Foo()` or `from q.one import
+  *` drew a's class, where it is b's at run time and mypy, pyright and ty answer a, b and
+  both. A name the module binds as a variable (`if x: FooError = None` after importing it)
+  was drawn the same way; `FileScope.variables` keeps the module's variables for that. One
+  class reached by two paths is still drawn. Declared relations (`class X(Foo)`) still
+  take the first import's class, as for every rule of names in bodies. The fixture grows
+  to 218 names; each rule fails a test when turned off. Turned off on Django and httpx,
+  neither rule changes a name: their `ir.json` are byte for byte the same (4065 and 186
+  names, 3 and 0 mismatches), and so are jsoup's, petclinic's, Netty's, TypeORM's and
+  nest's.
 - **Three more Python forms drawn where the checkers disagree, and a BOM in the key** (#5,
   after 0.5.0). A second set of hand-written sources found 6, 2 and 1 wrong names, now 0;
   the earlier sets stay at 0. A star import from outside the sources hid the names of its

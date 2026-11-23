@@ -343,7 +343,13 @@ is that type. Aliases of aliases are followed.
   names are not known, no name of the file is drawn, nor where another file takes the
   name from it: by importing the name (`from q.outside import Button`, re-exported too),
   through the module (`outside.Button()`), or by a star import of a project module that
-  brings such a star in (`from q.gui import *`, one step away or more).
+  brings such a star in (`from q.gui import *`, one step away or more). The same goes
+  for a name a module binds to two classes (`from .a import Foo` and `from .b import Foo`
+  in `dup/__init__.py`, two star imports that bring in two, a name and a star import, a
+  class and a star import) or as a variable (`if x: Foo = None`): another file's `from
+  q.dup import Foo`, `dup.Foo()` or `from q.dup import *` draws nothing; one class
+  reached by two paths is one class. Declarations do not follow these rules yet: `class
+  X(Foo)` there is drawn to the first import's class.
   A dotted value goes through what the file imports (`models.Model()` after `from
   django.db import models`, `p.foo.Foo()` after `import p.foo`), never a variable, and
   reaches a submodule only through the name a module import binds, or one its package's
