@@ -468,3 +468,26 @@ def test_a_records_base_arguments_are_its_primary_constructors_body(tmp_path):
                     "public class Base { public Base(int n) { } } "
                     "public class Derived(int x) : Base(Order.Count + x); }\n"})
     assert _body(ir) == [("Shop.Derived", "Shop.Order", "Derived", 1), ("Shop.Sub", "Shop.Order", "Sub", 1)]
+
+
+def test_a_directive_is_told_from_text_that_looks_like_one():
+    # a `#if` line inside a multi-line string or comment is text; a string, a char or a
+    # comment that ends on its line leaves the next line's directive one, as does a
+    # directive line's own text (`#region "Quoted`)
+    from draftsman.langs.csharp import _lines
+
+    def kept(src: str) -> list[str]:
+        return [line.decode().strip() for line, keep, _, _ in _lines(src.encode())
+                if keep and line.strip()]
+
+    after = "\n#if false\nA();\n#else\nB();\n#endif\n"
+    for text in ["var c = '\"';", 'var s = "a\\"b";', 'var s = "a\\\\";', 'var s = "http://x/*y";',
+                 'var s = @"c:\\";', 'var s = $"{(a ? "x" : "y")}";', 'var s = """x""";',
+                 'var s = """"x"""";', "// it's \"here /*", "#region Don't touch",
+                 "var c = '\\\\';", "var c = '\\'';", '#region "Quoted', '#error "not supported']:
+        assert "B();" in kept(text + after) and "A();" not in kept(text + after), text
+    for text in ['var s = @"a""b', "/* it's", 'var s = $@"a{b}""c', 'var s = """']:
+        close = {"/": "*/", "v": '";'}[text[0]] if '"""' not in text else '""";'
+        assert "C();" in kept(f"{text}\n#if false\n{close}\nC();\n"), text
+    assert kept("#if NEVER\nA();\n#else\nB();\n#endif\n") == ["A();"]
+    assert kept("#if false\nthis isn't \"code\n#else\nB();\n#endif\n") == ["B();"]

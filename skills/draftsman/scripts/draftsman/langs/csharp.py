@@ -56,29 +56,43 @@ _TYPE_DECLARATIONS = frozenset({"class_declaration", "struct_declaration", "reco
 def _in_text(src: bytes) -> set[int]:
     """The (0-based) lines that begin inside a string or a comment several lines long (a
     verbatim `@"..."`, a raw string between three quotes or more, a `/* ... */`): a `#if`
-    there is no directive."""
+    there is no directive. A directive line's own text is not read (`#region "Quoted`),
+    and a regular string or a char ends at its line's end."""
     out: set[int] = set()
-    i, n, line = 0, len(src), 0
+    i, n, line, start = 0, len(src), 0, True   # start: only blanks so far on the line
+
+    def through(end: int) -> None:
+        nonlocal i, line
+        first = line
+        line += src.count(b"\n", i, end)
+        out.update(range(first + 1, line + 1))
+        i = end
+
     while i < n:
         c = src[i]
         if c == 0x0A:   # \n
-            line += 1
+            line, start = line + 1, True
             i += 1
-        elif src.startswith(b"//", i):
+            continue
+        if c in (0x20, 0x09, 0x0D):
+            i += 1
+            continue
+        if start and c == 0x23:   # a directive: its line is no code
+            j = src.find(b"\n", i)
+            i = n if j < 0 else j
+            continue
+        start = False
+        if src.startswith(b"//", i):
             j = src.find(b"\n", i)
             i = n if j < 0 else j
         elif src.startswith(b"/*", i):
             j = src.find(b"*/", i + 2)
-            end = n if j < 0 else j + 2
-            first = line
-            line += src.count(b"\n", i, end)
-            out.update(range(first + 1, line + 1))
-            i = end
-        elif c == 0x27:   # a char literal: '"', '\''
+            through(n if j < 0 else j + 2)
+        elif c == 0x27:   # a char literal: '"', '\'', '\\'
             j = i + 1
             while j < n and src[j] not in (0x27, 0x0A):
                 j += 2 if src[j] == 0x5C else 1
-            i = j + 1
+            i = j + 1 if j < n and src[j] == 0x27 else j
         elif c in (0x24, 0x40, 0x22):   # $ @ "
             j = i
             while j < n and src[j] in (0x24, 0x40):
@@ -92,7 +106,7 @@ def _in_text(src: bytes) -> set[int]:
                 quotes += 1
             if quotes >= 3:   # raw: ends at as many quotes
                 k = src.find(b'"' * quotes, j + quotes)
-                end = n if k < 0 else k + quotes
+                through(n if k < 0 else k + quotes)
             elif b"@" in prefix:   # verbatim: "" is a quote
                 k = j + 1
                 while k < n:
@@ -102,16 +116,12 @@ def _in_text(src: bytes) -> set[int]:
                             continue
                         break
                     k += 1
-                end = min(n, k + 1)
-            else:   # regular: one line, \ escapes
+                through(min(n, k + 1))
+            else:   # regular: \ escapes, and it ends at the line's end
                 k = j + 1
                 while k < n and src[k] not in (0x22, 0x0A):
                     k += 2 if src[k] == 0x5C else 1
-                end = min(n, k + 1)
-            first = line
-            line += src.count(b"\n", i, end)
-            out.update(range(first + 1, line + 1))
-            i = end
+                i = k + 1 if k < n and src[k] == 0x22 else k
         else:
             i += 1
     return out
