@@ -199,6 +199,7 @@ SCOPE_RULES = {
         **_ALL,
         "java": ("StripeGateway", "dependency", "Money", "body"),   # `new Receipt.Money(...)`
         "typescript": ("StripeGateway", "dependency", "Money", "body"),   # `: Receipt.Money`
+        "python": ("StripeGateway", "dependency", "Money", "body"),   # `Receipt.Money(0, "usd")`
     },
     "package re-export by wildcard": {
         **_ALL,
