@@ -85,6 +85,7 @@ class FileScope:
     rebound: set[str] = field(default_factory=set)
     # LanguageSpec.left_out_types: types a build may declare that the parser never saw
     left_out_types: set[str] = field(default_factory=set)
+    implicit_types: list[str] = field(default_factory=list)          # LanguageSpec.implicit_types
     # names a statement at its top binds as a variable (`if x: Foo = None`, `del Foo`,
     # `global Foo` in a function): no class, also where another file takes them from it
     variables: set[str] = field(default_factory=set)
@@ -215,6 +216,11 @@ class LanguageSpec:
         """Simple names of the types declared in the code preprocess blanks (C#'s `#elif`
         and `#else` branches): a body name of one of them may be that type in a build."""
         return set()
+
+    def implicit_types(self, root_node: "ts.Node") -> list[str]:
+        """Ids of the types a file declares without a declaration (C#'s `Program` of
+        top-level statements): one per build project that has such a file."""
+        return []
 
     def init_via(self, node: "ts.Node", src: bytes) -> Optional[str]:
         """The `via` of a body no listed member holds (`@body.init` without `.name`), or

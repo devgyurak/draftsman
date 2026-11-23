@@ -1045,6 +1045,15 @@ class _Builder:
         self.body_uses: list[tuple[str, int, int, str, str]] = []
         # types some build declares that the parser never saw (LanguageSpec.left_out_types)
         self.left_out: set[str] = set().union(*(f.scope.left_out_types for f in files))
+        # type id -> the build projects declaring a type of it: parts of a type in two
+        # projects are two types (two projects' `partial class Program`), and so is one
+        # a project declares implicitly (LanguageSpec.implicit_types)
+        self.projects: dict[str, set] = {}
+        for f in files:
+            for t in f.types:
+                self.projects.setdefault(t.qualified_name, set()).add(f.scope.project)
+            for t in f.scope.implicit_types:
+                self.projects.setdefault(t, set()).add(f.scope.project)
         self._alias_cache: dict[str, tuple[list, list]] = {}
 
     def _add(self, t: RawType) -> None:
@@ -1252,6 +1261,8 @@ class _Builder:
             if self.types[target].conditional or any(
                     p in self.left_out for p in ref.text.split(sep)[:n]):
                 continue
+            if len(self.projects.get(target, ())) > 1:
+                continue   # one id, a type in each of several projects
             line, col = ref.places[n - 1]
             self.body_uses.append((ref.scope.file, line, col, rtype.qualified_name, target))
             self.relations.append(Relation(rtype.qualified_name, target, "dependency",

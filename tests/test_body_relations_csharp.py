@@ -154,3 +154,21 @@ public class Twin
 """})
     assert _body(ir) == [("Shop.Twin", "Shop.Clock", "K", 16)]
 
+
+def test_one_id_declared_by_two_projects_draws_nothing(tmp_path):
+    # two projects' `partial class Program` are two types; top-level statements declare
+    # one more, in their project
+    sdk = '<Project Sdk="Microsoft.NET.Sdk"></Project>'
+    ir = extract_source(tmp_path, {
+        "A/A.csproj": sdk, "A/Program.cs": "public partial class Program { }\n",
+        "A/Use.cs": "namespace A; public class Use { object M() => typeof(Program); }\n",
+        "B/B.csproj": sdk, "B/Program.cs": "System.Console.WriteLine();\n",
+        "B/Use.cs": "namespace B; public class Use { object M() => typeof(Program); }\n",
+        "C/C.csproj": sdk, "C/Program.cs": "public partial class Program { }\n",
+        "C/Use.cs": "namespace C; public class Use { object M() => typeof(Program); }\n"})
+    assert _body(ir) == []
+    alone = extract_source(tmp_path / "alone", {
+        "A/A.csproj": sdk, "A/Program.cs": "public partial class Program { }\n",
+        "A/Use.cs": "namespace A; public class Use { object M() => typeof(Program); }\n"})
+    assert _body(alone) == [("A.Use", "Program", "M", 1)]
+

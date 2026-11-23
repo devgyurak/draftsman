@@ -275,6 +275,10 @@ class CSharpSpec(LanguageSpec):
         # configuration, and it parses wherever the directives sit
         return b"\n".join(line if kept else _blank(line) for line, kept, _ in _lines(src))
 
+    def implicit_types(self, root_node):
+        # top-level statements are the body of an implicit `Program` of the project
+        return ["Program"] if any(c.type == "global_statement" for c in root_node.children) else []
+
     def conditional_ranges(self, src):
         # what the first branch of an #if keeps
         out, at = [], 0
