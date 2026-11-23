@@ -8,7 +8,7 @@ external type end up in ``IR.unresolved`` for Claude to judge.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
 
@@ -1269,10 +1269,14 @@ class _Builder:
             # a type of where the parser saw none: no one type for every build
             sep = LANGUAGES[rtype.language].separator
             if self.types[target].conditional or any(
-                    p in self.left_out for p in ref.text.split(sep)[:n]):
+                    p in self.left_out or p in ref.scope.left_out_names
+                    for p in ref.text.split(sep)[:n]):
                 continue
             if len(self.projects.get(target, ())) > 1:
                 continue   # one id, a type in each of several projects
+            if any(imp.conditional for imp in ref.scope.imports) and target != self._without(
+                    ref, rtype, n):
+                continue   # through an import some build leaves out
             if not self._visible(target, ref.scope.project, LANGUAGES[rtype.language]):
                 continue   # declared in a project the file's project does not reference
             if ref.arities and ref.arities[n - 1] is not None \
@@ -1283,6 +1287,16 @@ class _Builder:
             self.relations.append(Relation(rtype.qualified_name, target, "dependency",
                                            Location(ref.scope.file, line), via=ref.via,
                                            evidence="body"))
+
+    def _without(self, ref: RawBodyRef, rtype: RawType, n: int) -> Optional[str]:
+        """What ``ref`` resolves to (its first ``n`` parts) without the file's conditional
+        imports."""
+        bare = replace(ref, scope=replace(ref.scope, imports=[
+            i for i in ref.scope.imports if not i.conditional]))
+        if ref.position == "type":
+            return self.resolver.body_type(ref.text, rtype, bare)
+        got = self.resolver.body_receiver(bare, rtype)
+        return got[0] if got and got[1] == n else None
 
     def _visible(self, target: str, project: Optional[str], spec) -> bool:
         """Whether a type is declared in a project every project of a file sees

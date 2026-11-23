@@ -43,6 +43,16 @@ _TYPE_DECL = re.compile(rb"\b(?:class|struct|interface|record|enum)[ \t]+(?:clas
                         rb"([A-Za-z_][A-Za-z0-9_]*)")
 
 
+_MEMBER_DECL = re.compile(rb"\b(?:using[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*"
+                          rb"(?:;|=(?![=>])|\{[ \t\r\n]*(?:get|set|init)\b|=>)")
+
+
+def _blanked(src: bytes) -> bytes:
+    """The code preprocess blanks: #elif and #else branches."""
+    return b"\n".join(line for line, kept, _ in _lines(src) if not kept
+                      and not _CONDITIONAL.match(line))
+
+
 def _lines(src: bytes):
     """(line, kept, inside an #if) for each line: a directive line is not kept, nor a line
     of an #elif or #else branch (only each #if's first branch is read)."""
@@ -541,8 +551,12 @@ class CSharpSpec(LanguageSpec):
         return out
 
     def left_out_types(self, src):
-        blanked = b"\n".join(line for line, kept, _ in _lines(src) if not kept)
-        return {m.decode() for m in _TYPE_DECL.findall(blanked)}
+        return {m.decode() for m in _TYPE_DECL.findall(_blanked(src))}
+
+    def left_out_names(self, src):
+        # members (any name before `;`, `=`, `{ get` or `=>`, locals too: those only hide)
+        # and aliases
+        return {m.decode() for m in _MEMBER_DECL.findall(_blanked(src))}
 
     def is_package_head(self, head, known):
         # namespaces are capitalised too: only what the file or the project uses as one

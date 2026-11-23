@@ -46,6 +46,9 @@ class Import:
     # the namespace block it stands in (LanguageSpec.block_imports): it is looked at with
     # that namespace's types, before the namespaces around it
     block: Optional[str] = None
+    # in code a build may leave out (LanguageSpec.conditional_ranges): not every build
+    # resolves a name through it
+    conditional: bool = False
 
     @property
     def local_name(self) -> str:
@@ -85,6 +88,7 @@ class FileScope:
     rebound: set[str] = field(default_factory=set)
     # LanguageSpec.left_out_types: types a build may declare that the parser never saw
     left_out_types: set[str] = field(default_factory=set)
+    left_out_names: set[str] = field(default_factory=set)   # LanguageSpec.left_out_names
     implicit_types: list[str] = field(default_factory=list)          # LanguageSpec.implicit_types
     build_types: dict[str, set[str]] = field(default_factory=dict)   # LanguageSpec.build_types
     # names a statement at its top binds as a variable (`if x: Foo = None`, `del Foo`,
@@ -216,6 +220,11 @@ class LanguageSpec:
     def left_out_types(self, src: bytes) -> set[str]:
         """Simple names of the types declared in the code preprocess blanks (C#'s `#elif`
         and `#else` branches): a body name of one of them may be that type in a build."""
+        return set()
+
+    def left_out_names(self, src: bytes) -> set[str]:
+        """Other names declared there, which hide a type in this file's bodies in a build
+        (C#'s fields and aliases)."""
         return set()
 
     def platform_ranges(self, src: bytes, path: Path, root: Path) -> list[tuple[int, int]]:

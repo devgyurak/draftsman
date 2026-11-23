@@ -348,6 +348,7 @@ class Extractor:
         self._packages = self._workspaces[root]
         scope = FileScope(file=rel, namespace=spec.file_namespace(mod_path), project=project,
                           left_out_types=spec.left_out_types(original),
+                          left_out_names=spec.left_out_names(original),
                           implicit_types=spec.implicit_types(tree.root_node),
                           build_types=spec.build_types(path, root))
         raw = RawFile(path=rel, scope=scope)
@@ -436,6 +437,8 @@ class Extractor:
                 if not spec.is_import(node):
                     continue
                 imp = self._import(caps, src, mod_path)
+                if imp is not None and any(a <= node.start_byte < b for a, b in conditional):
+                    imp.conditional = True
                 if imp is not None and spec.block_imports:
                     parts, cur = [], node.parent
                     while cur is not None:
