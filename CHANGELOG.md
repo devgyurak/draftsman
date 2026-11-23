@@ -122,6 +122,18 @@ Notes for anyone with `view.json` files written against a development build:
   Django's and httpx's `ir.json` are byte for byte the same (none of these forms occurs
   there in a way that changes a relation: still 4065 and 186 names, 3 and 0 mismatches,
   the same keys), and so are jsoup's, petclinic's, Netty's, TypeORM's and nest's.
+- **A Python name a module imports from outside and from the project is no class where it
+  is taken** (#5, after 0.5.0). A fourth set of hand-written sources found 4 and 2 wrong
+  names, now 0: `from q.w import Button` and `from tkinter import Button` in one module
+  (in either order, the outside one under `try:` too) made another file's `from
+  q.out_last import Button` and `out_last.Button()` q.w's class, where it is tkinter's at
+  run time and the checkers disagree. An import that names no project class (a package
+  outside the sources, a function) now counts among a module's bindings of the name, and
+  so does a module import (`import tkinter as Button`); the module's own class and a
+  project star import beside an outside import are caught the same way, and an outside
+  import of another name changes nothing. The fixture grows to 226 names; each part fails
+  a test when turned off. Turned off on Django and httpx, the rule changes no name: every
+  e2e `ir.json` is byte for byte the same.
 - **A Python name a module binds to two classes, or as a variable, is no class where it
   is taken** (#5, after 0.5.0). A third set of hand-written sources found 3 and 4 wrong
   names, now 0: `from .a import Foo` and `from .b import Foo` in `dup/__init__.py` (or two

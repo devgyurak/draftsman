@@ -346,7 +346,9 @@ is that type. Aliases of aliases are followed.
   brings such a star in (`from q.gui import *`, one step away or more). The same goes
   for a name a module binds to two classes (`from .a import Foo` and `from .b import Foo`
   in `dup/__init__.py`, two star imports that bring in two, a name and a star import, a
-  class and a star import) or as a variable (`if x: Foo = None`): another file's `from
+  class and a star import, a project class and something outside the sources: `from
+  tkinter import Button` beside `from q.w import Button`, in either order or under `try:`,
+  `import tkinter as Button`) or as a variable (`if x: Foo = None`): another file's `from
   q.dup import Foo`, `dup.Foo()` or `from q.dup import *` draws nothing; one class
   reached by two paths is one class. Declarations do not follow these rules yet: `class
   X(Foo)` there is drawn to the first import's class.
