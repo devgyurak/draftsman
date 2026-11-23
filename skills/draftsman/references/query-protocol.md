@@ -71,11 +71,13 @@ reference, innermost first.
 
 How a recorded name resolves follows the language's scoping, set in its `LanguageSpec`:
 `fields_in_scope` (whether a field hides a receiver; not in TypeScript, where a field is
-`this.x`; an enum's own constants hide one in its bodies either way), `nested_types_in_scope` (whether a type sees its own nested types by simple
-name), `type_only_kinds` (kinds that are no value, so a receiver of their name draws
-nothing: TypeScript interfaces) and `receiver_package_heads` (whether a dotted receiver
-whose head is no type is a package, as in Java, or goes through what the file imports, as
-TypeScript's `ns.Foo.m()`).
+`this.x`; an enum's own constants hide one in its bodies either way),
+`nested_types_in_scope` (whether a type sees its own nested types by simple name),
+`namespaces_before_imports` (whether the namespaces around a type come before the file's
+single-name imports: TypeScript), `type_only_kinds` (kinds that are no value, so a
+receiver of their name draws nothing: TypeScript interfaces) and `receiver_package_heads`
+(whether a dotted receiver whose head is no type is a package, as in Java, or goes
+through what the file imports, as TypeScript's `ns.Foo.m()`).
 
 ## Ownership
 

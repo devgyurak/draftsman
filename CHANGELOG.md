@@ -61,6 +61,15 @@ Notes for anyone with `view.json` files written against a development build:
   connected types and the viewer's cycles stay on declarations. Netty extracts in about
   4.0 s instead of 2.4 s. The other languages read no bodies yet (#5); Django's and
   TypeORM's `ir.json` are byte for byte the same, the other e2e projects were not run again.
+- **A TypeScript namespace's own type comes before an import of its name** (after
+  0.5.0). In `import { Foo } from "./foo"; namespace N2 { class Foo {} export class A {
+  f: Foo | null = null } }`, A's Foo is N2's, as the compiler says, but the extractor
+  checked the file's imports first, as Java does, and drew `foo.Foo`, in declared and
+  body relations alike; an `import Foo = Lib.Foo` alias in the namespace lost the same way.
+  A `LanguageSpec` setting, `namespaces_before_imports`, puts the namespaces around a type
+  first in TypeScript. The fixture gains the case, now 79 names; nest's and TypeORM's
+  `ir.json` are byte for byte the same (0 mismatches with the compiler), and so are
+  jsoup's, Netty's, petclinic's and Django's.
 - **Labels in TypeScript types are no names; an enum member written as a string hides
   one** (#5). A tuple member's label and an index signature's parameter (`[Foo: string]`,
   `{ [Kind: string]: number }`) were read as values and drew the class the file imports,
