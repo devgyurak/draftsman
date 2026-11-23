@@ -213,8 +213,14 @@ def selftest(_args) -> int:
         if r.get("kind") == "disputed":
             print(f"disputed: {r['file']}:{r['line']}:{r['col'] + 1} {r['use']}: mypy "
                   f"{r['mypy']}, pyright {r['pyright']}, ty {r['ty']}")
+    # one record per place: two would leave the answer to the order they come in
+    twice = [k for k, n in Counter((r["file"], r["line"], r["col"]) for r in recs
+                                   if "use" in r).items() if n > 1]
+    for file, line, col in twice:
+        print(f"{file}:{line}:{col + 1}: recorded twice")
     # mypy's errors are no compile errors of the fixture: its type errors are no concern
-    return answer_key.selftest([r for r in recs if "mypy_error" not in r], expected(FIXTURE))
+    return answer_key.selftest([r for r in recs if "mypy_error" not in r],
+                               expected(FIXTURE)) or (1 if twice else 0)
 
 
 def sources(repo: str, checkout: Path) -> list[tuple[Path, str]]:

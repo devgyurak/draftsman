@@ -26,7 +26,7 @@ and the value of an assignment directly in a class body, with everything inside 
 (functions, lambdas, classes). Decorators, parameters and return types of the method
 itself are not read. Of a dotted name (`mod.Foo.Inner()`) each part that is a class is
 recorded, "maximal" when no class part follows; modules are passed through. A name in a
-binding (`Foo = ...`, `for Foo in`, `except E as Foo`) is no use. Every position is
+binding (`Foo = ...`, `Foo += 1`, `for Foo in`, `except E as Foo`) is no use. Every position is
 "receiver": a variable of the name hides a class in an annotation as anywhere else.
 Names in string annotations and type comments are not recorded. Lines are 1-based,
 columns 0-based in UTF-16 code units.
@@ -46,10 +46,10 @@ import sys
 from mypy import build
 from mypy.modulefinder import BuildSource
 from mypy.nodes import (
-    AssertTypeExpr, AssignmentExpr, AssignmentStmt, Block, CallExpr, CastExpr, ClassDef, Decorator,
-    DictionaryComprehension, ForStmt, FuncDef, GeneratorExpr, IfStmt, ListExpr, MemberExpr,
-    MypyFile, NameExpr, OverloadedFuncDef, StarExpr, TryStmt, TupleExpr, TypeInfo,
-    TypeVarExpr, WhileStmt, WithStmt,
+    AssertTypeExpr, AssignmentExpr, AssignmentStmt, Block, CallExpr, CastExpr, ClassDef,
+    Decorator, DictionaryComprehension, ForStmt, FuncDef, GeneratorExpr, IfStmt, ListExpr,
+    MemberExpr, MypyFile, NameExpr, OperatorAssignmentStmt, OverloadedFuncDef, StarExpr,
+    TryStmt, TupleExpr, TypeInfo, TypeVarExpr, WhileStmt, WithStmt,
 )
 from mypy.options import Options
 from mypy.patterns import AsPattern, StarredPattern
@@ -108,6 +108,11 @@ class Source:
             if c < len(text):
                 nbytes += len(text[c].encode())
         return None
+
+    def type_comment(self, f: FuncDef) -> bool:
+        """Whether a function's types are written in a `# type:` comment."""
+        return any("# type:" in self.lines[i - 1]
+                   for i in range(f.line, max(f.line, f.body.line) + 1) if i <= len(self.lines))
 
     def utf16(self, line: int, c: int) -> int:
         return len(self.lines[line - 1][:c].encode("utf-16-le")) // 2
@@ -288,8 +293,12 @@ class Uses(TraverserVisitor):
         for lv in s.lvalues:
             self.targets(lv)
         s.rvalue.accept(self)
-        if s.unanalyzed_type is not None and s.type is not None:
+        if s.new_syntax and s.type is not None:   # `x: Foo = ...`, not `# type: Foo`
             self.types(s.type)
+
+    def visit_operator_assignment_stmt(self, s: OperatorAssignmentStmt) -> None:
+        self.targets(s.lvalue)
+        s.rvalue.accept(self)
 
     def visit_for_stmt(self, s: ForStmt) -> None:
         self.targets(s.index)
@@ -346,7 +355,7 @@ class Uses(TraverserVisitor):
         for arg in f.arguments:
             if arg.initializer is not None:
                 arg.initializer.accept(self)
-        if f.unanalyzed_type is not None and f.type is not None:
+        if f.unanalyzed_type is not None and f.type is not None and not self.src.type_comment(f):
             self.types(f.type)
         f.body.accept(self)
 
