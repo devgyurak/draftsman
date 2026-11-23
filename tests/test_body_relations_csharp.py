@@ -398,22 +398,37 @@ namespace Shop.C { using System.IO; public class Use { object M() => new Task();
     assert _body(ir) == [("Shop.C.Use", "Shop.Task", "M", 3)]
 
 
-def test_a_namespace_around_that_a_using_imports_and_no_source_declares_in_hides_names(tmp_path):
-    # CommunityToolkit.Mvvm.Input is imported by a using and holds no type of the sources:
-    # a package's, whose types may hide whatever is found further out (Shop's, through the
-    # file's using); a namespace no using imports is taken for the project's
+def test_a_package_namespace_around_the_code_hides_names_found_further_out(tmp_path):
+    # the project references CommunityToolkit.Mvvm: a namespace that is its id or below it
+    # (case aside) is the package's, also where the sources declare a type in it, and its
+    # types may hide whatever is found further out (Shop's, through the file's using); a
+    # namespace of the sources a using imports (App) is no package's
     ir = extract_source(tmp_path, {
-        "Types.cs": "namespace Shop { public class RelayCommand { } "
-                    "public class Order { public static int Count = 0; } }\n",
-        "Use.cs": "using CommunityToolkit.Mvvm.Input;\nnamespace Shop.Uses { public class U { } }\n",
+        "P.csproj": """<Project Sdk="Microsoft.NET.Sdk"><ItemGroup>
+<PackageReference Include="communitytoolkit.mvvm" Version="8.4.0" />
+</ItemGroup></Project>
+""",
+        "Types.cs": "namespace Shop { public class RelayCommand { } public class ObservableObject { } "
+                    "public class Order { public static int Count = 0; } }\n"
+                    "namespace App.Models { public class Item { } }\n",
+        "Use.cs": "using App;\nnamespace Shop.Uses { public class U { } }\n",
         "Package.cs": """using Shop;
 namespace CommunityToolkit.Mvvm.Input.Mine
 {
     public class P { object A() => typeof(RelayCommand); object B() => new Order(); object C() => Order.Count; object D() => new Shop.Order(); }
 }
+namespace CommunityToolkit.Mvvm.ComponentModel
+{
+    public class Q { object A() => typeof(ObservableObject); }
+}
 namespace Other.Mine
 {
     public class P { object A() => typeof(RelayCommand); }
 }
+namespace App.Web
+{
+    public class W { object A() => new App.Models.Item(); object B() => new Models.Item(); }
+}
 """})
-    assert _body(ir) == [("Other.Mine.P", "Shop.RelayCommand", "A", 8)]
+    assert _body(ir) == [("App.Web.W", "App.Models.Item", "A", 16), ("App.Web.W", "App.Models.Item", "B", 16),
+                         ("Other.Mine.P", "Shop.RelayCommand", "A", 12)]

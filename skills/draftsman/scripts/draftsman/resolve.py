@@ -87,9 +87,7 @@ class Resolver:
         self._field_cache: dict[tuple[str, str], bool] = {}
         self._ancestors_cache: dict[tuple[str, bool], list[str]] = {}
         self._namespace_cache: dict[str, bool] = {}
-        # namespaces a using of the sources imports (_outside_around)
-        self.imported_namespaces = {imp.path for s in scopes for imp in s.imports
-                                    if imp.wildcard and not imp.static}
+        self._package_cache: dict[tuple[str, Optional[str]], bool] = {}
 
     # ------------------------------------------------------------ helpers
 
@@ -468,13 +466,18 @@ class Resolver:
             self._namespace_cache[ns] = found
         return found
 
-    def _outside_around(self, ns: str, spec) -> bool:
+    def _outside_around(self, ns: str, spec, scope: FileScope) -> bool:
         """Whether the namespace ``ns`` around the code is taken for one outside the sources
-        the table does not know (LanguageSpec.enclosing_outside_hides): no type of the
-        sources or the build is declared in it, and a using of the sources imports it."""
-        return bool(ns) and spec.enclosing_outside_hides and ns in self.imported_namespaces \
-            and ns not in self.type_namespaces and ns not in self.build_types \
-            and spec.outside_namespace(ns) is None
+        the table does not know (LanguageSpec.enclosing_outside_hides): a package's the
+        file's build project references (LanguageSpec.package_namespace)."""
+        if not ns or not spec.enclosing_outside_hides:
+            return False
+        key = (ns, scope.project)
+        found = self._package_cache.get(key)
+        if found is None:
+            found = spec.outside_namespace(ns) is None and spec.package_namespace(ns, scope.project)
+            self._package_cache[key] = found
+        return found
 
     def _qualified_head(self, head: str, rtype: RawType, member: Optional[RawMember],
                         inherit: bool, nested: bool, scope: FileScope, chain: list[str],
@@ -497,7 +500,7 @@ class Resolver:
                 return "type"
             if self._namespace_exists(cand, spec):
                 return cand
-            if strict and self._outside_around(ns, spec):
+            if strict and self._outside_around(ns, spec, scope):
                 return "outside"
             if any(imp.block == ns and not imp.wildcard and imp.local_name == head
                    for imp in scope.imports):
@@ -627,7 +630,7 @@ class Resolver:
                 if ns and name in (spec.outside_namespace(ns) or ()):
                     # `Host` in `namespace Microsoft.Extensions.Hosting`, before the usings
                     return Resolution(EXTERNAL, cand)
-                if strict and self._outside_around(ns, spec) and not spec.is_builtin(name):
+                if strict and self._outside_around(ns, spec, scope) and not spec.is_builtin(name):
                     return Resolution(UNRESOLVED, outside=True, hint=(
                         f"may be a type of {ns}, a namespace outside the sources around it"))
                 if (found := self._block_import(name, ns, scope, spec, strict)) is not None:

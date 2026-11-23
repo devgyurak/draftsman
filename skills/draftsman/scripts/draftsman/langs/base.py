@@ -211,9 +211,9 @@ class LanguageSpec:
     # App.Models.Order when App.Models exists, and `Lib.Order` in `namespace Shop.Sub` is
     # the class Shop.Lib's nested Order before a namespace Lib)
     qualified_heads_in_scope: bool = False
-    # Whether a namespace around the code that no type of the sources is declared in, and
-    # that a using of the sources imports (C#'s `namespace CommunityToolkit.Mvvm.Input.Mine`
-    # with `using CommunityToolkit.Mvvm.Input;` somewhere), is taken for one outside the
+    # Whether a namespace around the code that is a package's (LanguageSpec.package_namespace:
+    # C#'s `namespace CommunityToolkit.Mvvm.Input.Mine` in a project that references
+    # CommunityToolkit.Mvvm) and the table does not know is taken for one outside the
     # sources: its types may hide any name found further out, which a body then draws
     # nothing from
     enclosing_outside_hides: bool = False
@@ -277,6 +277,11 @@ class LanguageSpec:
     def outside_namespace(self, namespace: str) -> Optional[frozenset[str]]:
         """The types a namespace outside the sources declares, when the table knows it."""
         return None
+
+    def package_namespace(self, namespace: str, project: Optional[str]) -> bool:
+        """Whether a namespace is a package's the build project (FileScope.project)
+        references: C#'s is the package's id or below it (`CommunityToolkit.Mvvm.Input`)."""
+        return False
 
     def outside_namespace_exists(self, namespace: str) -> bool:
         """Whether the table knows a namespace of that name outside the sources, also one

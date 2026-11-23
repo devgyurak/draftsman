@@ -376,6 +376,19 @@ def _build_props(directory: Path) -> Optional[Path]:
 
 
 @lru_cache(maxsize=None)
+def _package_ids(project: Path) -> frozenset:
+    """The packages a project references by `<PackageReference Include>`, in it or in the
+    nearest Directory.Build.props, lower-cased."""
+    out = set()
+    for p in (project, _build_props(project.parent)):
+        doc = _msbuild(p) if p else None
+        if doc is not None:
+            out |= {el.get("Include").strip().lower() for el in doc.iter()
+                    if _local(el.tag) == "PackageReference" and el.get("Include")}
+    return frozenset(out)
+
+
+@lru_cache(maxsize=None)
 def _linked_files(root: Path) -> dict[Path, tuple[Path, ...]]:
     """Files a .csproj below ``root`` compiles from outside its own directory
     (`<Compile Include="..\\Shared\\X.cs" Link="..."/>`) -> those projects."""
@@ -530,6 +543,14 @@ class CSharpSpec(LanguageSpec):
 
     def outside_namespace(self, namespace):
         return _framework_namespaces().get(namespace)
+
+    def package_namespace(self, namespace, project):
+        # a package's root namespace is its id (`CommunityToolkit.Mvvm`); a file several
+        # projects compile is in each one's
+        ns = namespace.lower()
+        return any(ns == i or ns.startswith(i + ".")
+                   for p in (project or "").split(";") if p.endswith(".csproj")
+                   for i in _package_ids(Path(p)))
 
     def outside_namespace_exists(self, namespace):
         return namespace in _framework_namespace_parents()
