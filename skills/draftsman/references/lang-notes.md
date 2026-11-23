@@ -338,7 +338,9 @@ is that type. Aliases of aliases are followed.
   attributes, nor its nested classes by their simple names (`Outer.Inner()` is drawn, a
   bare `Inner()` is the module's). A name the module binds twice at its top (two class
   statements, a class and an import of its name, a class and a star import that brings
-  in another one of that name) is no one class, there or where another file imports it;
+  in another one of that name) is no one class, there or where another file imports it,
+  and so is a nested class its class body binds twice (`if x: class Cond` / `else: class
+  Cond`, two `class Twin` statements, a class and a variable): `Foo.Cond()` draws Foo;
   beside a star import of a module outside the sources (`from tkinter import *`), whose
   names are not known, no name of the file is drawn, nor where another file takes the
   name from it: by importing the name (`from q.outside import Button`, re-exported too),

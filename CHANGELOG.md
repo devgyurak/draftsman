@@ -122,6 +122,15 @@ Notes for anyone with `view.json` files written against a development build:
   Django's and httpx's `ir.json` are byte for byte the same (none of these forms occurs
   there in a way that changes a relation: still 4065 and 186 names, 3 and 0 mismatches,
   the same keys), and so are jsoup's, petclinic's, Netty's, TypeORM's and nest's.
+- **A nested Python class its class body binds twice is no one class** (#5, after
+  0.5.0). `if x: class Cond` / `else: class Cond` in Foo made `Foo.Cond()` a relation to
+  Foo.Cond, where ty answers both statements and `object.__init__` (the call of their
+  union) and the checkers disagree. The rule for a name the module binds twice now holds
+  in a class body: two class statements of one name, or a class and a variable, and
+  `Foo.Cond()` draws Foo alone. Two `class Twin` statements one after the other are
+  hidden too, as at the top of a module, though the checkers agree there. Fixture: 232
+  names; Django and httpx unchanged (each `ir.json` byte for byte the same, also the
+  other e2e projects').
 - **A Python name a module imports from outside and from the project is no class where it
   is taken** (#5, after 0.5.0). A fourth set of hand-written sources found 4 and 2 wrong
   names, now 0: `from q.w import Button` and `from tkinter import Button` in one module

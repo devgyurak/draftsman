@@ -8,7 +8,7 @@ A web framework: ORM, forms, templates, admin, many contrib apps. Most of the co
 | Commit | `d3954c9813` (2026-11-16) |
 | Extracted | the `django/` package without the contrib apps' generated `migrations/` (tests are under `tests/`) |
 
-Measured on 2026-11-23 with Draftsman after 0.5.0 (at `0933197`; the same at `462574b`).
+Measured on 2026-11-23 with Draftsman after 0.5.0 (at `0933197`; the same at `12e7df6`).
 
 ## Run
 
