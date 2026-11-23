@@ -164,8 +164,9 @@ class LanguageSpec:
     # `Outer.Inner`), though its annotations see it
     nested_types_in_bodies: bool = True
     # Whether a field's initializer runs in the class body as a scope, where the names the
-    # class binds (its fields, methods and nested types) hide a type of the same name
-    # (Python's `value = Foo` after `Foo = 1` in the class body)
+    # class binds (its fields, methods and nested types, and any name its statements bind:
+    # `if x: Foo = 1`, `from m import Bar as Foo`) hide a type of the same name (Python's
+    # `value = Foo` after `Foo = 1` in the class body)
     initializers_in_class_scope: bool = False
     # Whether a name a module binds more than once at its top (two class statements, a
     # class and an import) draws nothing in a body, as a variable would: which binding a

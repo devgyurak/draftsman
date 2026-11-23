@@ -763,6 +763,18 @@ class Extractor:
         in_namespace: dict[tuple[str, ...], set[str]] = {}
         bound: dict[tuple[str, ...], Counter] = {}
         top_classes: set[str] = set()   # the class statements at the top of the file
+        # class -> what the statements of its body bind outside its members
+        # (LanguageSpec.initializers_in_class_scope)
+        in_class: dict[int, set[str]] = {}
+
+        def class_around(cur: Optional[ts.Node]) -> Optional[ts.Node]:
+            """The type whose body ``cur`` stands in, with no function between."""
+            while cur is not None and not self.spec.is_opaque(cur):
+                if cur.id in types_by_node:
+                    return cur
+                cur = cur.parent
+            return None
+
         # member -> (name, the function it is imported in, where, the import)
         local_imports: dict[int, list[tuple[str, int, int, Import]]] = {}
         scopes: dict[int, FileScope] = {}   # the file's, with an import of a member first
@@ -789,6 +801,9 @@ class Extractor:
                         continue
                     kind = "variables"
                 getattr(names.setdefault(key, BodyNames()), kind).add(_text(node, src))
+            elif self.spec.initializers_in_class_scope and kind in ("variables", "imports") \
+                    and (cls := class_around(node.parent)) is not None:
+                in_class.setdefault(cls.id, set()).add(_text(node, src))
             elif (kind == "variables" or self.spec.rebinding_hides) and (path := namespace_path(
                     # a function's or a class's name is the scope's around it
                     node.parent.parent if node.parent.child_by_field_name("name") == node
@@ -836,6 +851,10 @@ class Extractor:
                 if in_namespace and (path := namespace_path(top.parent)) is not None:
                     for k in range(len(path) + 1):
                         member_names.variables |= in_namespace.get(path[:k], set())
+                # a field's initializer, in the class body: what the body binds
+                if in_class and rm is not None and rm.member.kind in ("field", "enum_constant") \
+                        and (cls := class_around(a.parent)) is not None:
+                    member_names.variables |= in_class.get(cls.id, set())
             parts = self._parts(node)
             ref_scope, ref_names = scope, member_names
             head = _text(parts[0], src)
