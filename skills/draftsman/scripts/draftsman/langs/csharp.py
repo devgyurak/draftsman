@@ -49,28 +49,47 @@ _MEMBER_DECL = re.compile(rb"\b(?:using[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*"
 
 
 def _blanked(src: bytes) -> bytes:
-    """The code preprocess blanks: #elif and #else branches."""
-    return b"\n".join(line for line, kept, _ in _lines(src) if not kept
+    """The code preprocess blanks that some build compiles: #elif and #else branches, not
+    a branch no build takes (`#if false`, the #else of `#if true`)."""
+    return b"\n".join(line for line, kept, _, dead in _lines(src) if not kept and not dead
                       and not _CONDITIONAL.match(line))
 
 
 def _lines(src: bytes):
-    """(line, kept, inside an #if) for each line: a directive line is not kept, nor a line
-    of an #elif or #else branch (only each #if's first branch is read)."""
-    stack, active = [], True
+    """(line, kept, a build may leave it out, no build compiles it) for each line. Of each
+    #if one branch is read: the first whose condition is not false whatever the symbols
+    (`#if false ... #else` reads the #else). A directive line is not kept."""
+    # per #if: [active, inside, dead around it, a branch read, an earlier condition that
+    # depends on a symbol, one true whatever the symbols]
+    stack: list[list] = []
+    active, inside, dead = True, False, False
     for line in src.split(b"\n"):
         m = _CONDITIONAL.match(line)
-        if m:
-            kw = m.group(1)
-            if kw == b"if":
-                stack.append(active)
-            elif kw in (b"elif", b"else"):
-                active = False if stack else active
-            elif stack:   # endif
-                active = stack.pop()
-            yield line, False, bool(stack)
-        else:
-            yield line, active, bool(stack)
+        if not m:
+            yield line, active, inside, dead
+            continue
+        kw = m.group(1)
+        if kw == b"if":
+            stack.append([active, inside, dead, False, False, False])
+        if kw == b"endif":
+            if stack:
+                active, inside, dead = stack.pop()[:3]
+            yield line, False, inside, dead
+            continue
+        if not stack:   # an #elif or #else without its #if
+            yield line, False, inside, dead
+            continue
+        frame = stack[-1]
+        value = True if kw == b"else" else _without_platforms(
+            line[m.end():].decode("utf8", "replace"), False)
+        read = not frame[3] and value is not False
+        active = frame[0] and read
+        inside = frame[1] or value is None or frame[4]
+        dead = frame[2] or value is False or frame[5]
+        frame[3] = frame[3] or read
+        frame[4] = frame[4] or value is None
+        frame[5] = frame[5] or value is True
+        yield line, False, frame[1], frame[2]
 
 
 # the symbols a platform's target framework defines (`net11.0-ios`: IOS, and
@@ -588,10 +607,11 @@ class CSharpSpec(LanguageSpec):
     unknown_bases_hide = True
 
     def preprocess(self, src):
-        # keep the first branch of every #if, blank the #elif/#else branches and the
-        # directive lines (same length, so line numbers stay exact). One deterministic
-        # configuration, and it parses wherever the directives sit
-        return b"\n".join(line if kept else _blank(line) for line, kept, _ in _lines(src))
+        # keep one branch of every #if (the first, unless its condition is false whatever
+        # the symbols: `#if false ... #else`), blank the others and the directive lines
+        # (same length, so line numbers stay exact). One deterministic configuration, and
+        # it parses wherever the directives sit
+        return b"\n".join(line if kept else _blank(line) for line, kept, _, _ in _lines(src))
 
     def unbuilt_ranges(self, src, path, root):
         # the first branch of an #if that is false whatever the symbols (`#if false`); in a
@@ -696,7 +716,7 @@ class CSharpSpec(LanguageSpec):
     def conditional_ranges(self, src):
         # what the first branch of an #if keeps
         out, at = [], 0
-        for line, kept, inside in _lines(src):
+        for line, kept, inside, _ in _lines(src):
             if kept and inside:
                 out.append((at, at + len(line)))
             at += len(line) + 1
