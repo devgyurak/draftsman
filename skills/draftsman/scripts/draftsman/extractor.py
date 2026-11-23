@@ -422,11 +422,13 @@ class Extractor:
         type_ids = {_root(caps, "type.")[1].id for caps in type_matches}
         class_imports: dict[int, list[Import]] = {}   # LanguageSpec.local_imports
         listed: Optional[set[str]] = None   # the names the file lists as its exports
+        package_at: Optional[int] = None    # where a file-wide namespace is declared
         readable = True
         for caps in other:
             if (n := _first(caps, "package")) is not None:
                 if scope.namespace is None:
                     scope.namespace = _text(n, src)
+                    package_at = n.start_byte
             elif (n := _first(caps, "exports")) is not None:
                 # a list or tuple of plain strings; anything else cannot be read
                 names = [_string(c, src) for c in n.named_children if "comment" not in c.type] \
@@ -452,6 +454,8 @@ class Extractor:
                         cur = cur.parent
                     if parts:
                         imp.block = spec.separator.join(p for p in [scope.namespace, *parts] if p)
+                    elif package_at is not None and node.start_byte > package_at:
+                        imp.block = scope.namespace   # after C#'s `namespace A;`: A's
                 if imp is not None:
                     around = self._enclosing(node, type_ids) if spec.local_imports else None
                     if around is None:
@@ -636,9 +640,17 @@ class Extractor:
                         imports_by_node, spec.platform_ranges(original, path, root))
 
         # what the build imports into every file (implicit usings), after the file's own
-        for ns, origin in build_imports:
-            scope.imports.append(Import(ns, wildcard=True, sep=spec.separator, project_wide=True,
-                                        origin=origin))
+        # (a C# <Using Alias> is looked at after the namespaces around, as a file's alias at
+        # its top is: its block is the global namespace's)
+        for ns, origin, *kind in build_imports:
+            kind = kind[0] if kind else ""
+            if kind.startswith("alias="):
+                scope.imports.append(Import(ns, alias=kind[len("alias="):], sep=spec.separator,
+                                            project_wide=True, origin=origin, block=""))
+            else:
+                scope.imports.append(Import(ns, wildcard=True, sep=spec.separator,
+                                            project_wide=True, origin=origin,
+                                            static=kind == "static"))
 
         # an import in a class body names a class in that class's own declarations (its
         # fields' and methods' annotations), not in its methods' bodies nor its nested classes

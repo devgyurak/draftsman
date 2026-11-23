@@ -503,10 +503,13 @@ def test_csharp_build_imports(tmp_path):
 
     ex = Extractor(spec_for_path("x.cs"))
     web = ex.extract(tmp_path / "Web/App/Service.cs", "Web/App/Service.cs", tmp_path).scope
-    paths = [i.path for i in web.imports]
+    paths = [i.path for i in web.imports if i.wildcard]
     assert {"System", "System.Linq", "Microsoft.Extensions.Logging", "System.Net.Http.Json",
             "Acme.Extra"} <= set(paths)
     assert "System.IO" not in paths and "Acme.Results" not in paths     # removed; alias
+    # the alias names its type, at the global namespace's level (after the namespaces around)
+    assert [(i.path, i.local_name, i.block) for i in web.imports if not i.wildcard] == [
+        ("Acme.Results", "Results", "")]
     lib = ex.extract(tmp_path / "Lib/Other.cs", "Lib/Other.cs", tmp_path).scope
     assert [i.path for i in lib.imports] == ["System", "System.Collections.Generic", "System.IO",
                                              "System.Linq", "System.Net.Http", "System.Threading",

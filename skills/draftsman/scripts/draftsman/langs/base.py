@@ -259,6 +259,10 @@ class LanguageSpec:
         (C#'s .NET and ASP.NET Core); a base class it does not know may pass on anything."""
         return False
 
+    def outside_namespace(self, namespace: str) -> Optional[frozenset[str]]:
+        """The types a namespace outside the sources declares, when the table knows it."""
+        return None
+
     def implicit_types(self, root_node: "ts.Node") -> list[str]:
         """Ids of the types a file declares without a declaration (C#'s `Program` of
         top-level statements): one per build project that has such a file."""

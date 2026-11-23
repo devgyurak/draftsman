@@ -584,7 +584,15 @@ class Resolver:
         shared_wildcards: list[Import] = []   # declared in the project too, but not this name
         provided: list[str] = []
         for imp in scope.imports:
-            if imp.wildcard and imp.block is None:
+            if imp.wildcard and imp.block is not None:
+                # looked at with its namespace's types (_block_import); one from outside the
+                # sources still explains a name left unresolved
+                if imp.external or (imp.path not in self.namespaces and imp.path not in self.index):
+                    external_wildcards.append(imp)
+                elif imp.path not in self.index:
+                    shared_wildcards.append(imp)
+                continue
+            if imp.wildcard:
                 found = None if imp.external or not self._exports(imp.path, name, spec, strict) \
                     else self.lookup(imp.path + sep + name, spec, certain=strict)
                 if found and not strict:
@@ -957,9 +965,31 @@ class Resolver:
             found for imp in block if imp.wildcard and not imp.external
             and self._exports(imp.path, name, spec, strict)
             and (found := self.lookup(imp.path + sep + name, spec, certain=strict))))
-        if len(hits) > 1:
+        # a namespace outside the sources: what the language's table says it declares
+        # (`using System.Threading.Tasks;` in a block is nearer than a project's Task
+        # around it); one the table does not know may have any name, which code that
+        # compiles does not also find in a project namespace of the block (a declaration
+        # goes on looking, as before: ``strict``)
+        outside, unknown = [], None
+        for imp in block:
+            if imp.wildcard and imp.path not in self.namespaces and imp.path not in self.index \
+                    and not spec.is_builtin(name):
+                known = spec.outside_namespace(imp.path)
+                if known is None:
+                    unknown = unknown or imp
+                elif name in known:
+                    outside.append(imp.path + sep + name)
+            elif imp.wildcard and imp.static and imp.path not in self.index \
+                    and (nested := spec.inherited_type(imp.path, name)):
+                outside.append(nested)
+        if outside and not hits:
+            return Resolution(EXTERNAL, outside[0])
+        if unknown is not None and strict and not hits:
+            return Resolution(UNRESOLVED, hint=f"may come from wildcard import "
+                                               f"{unknown.path}{sep}*")
+        if len(hits) + len(outside) > 1:
             return Resolution(UNRESOLVED, candidates=hits,
-                              hint=f"{len(hits)} wildcard imports provide the name")
+                              hint=f"{len(hits) + len(outside)} wildcard imports provide the name")
         return self._found(hits[0]) if hits else None
 
     def _module_scopes(self, module: str, spec) -> list[FileScope]:

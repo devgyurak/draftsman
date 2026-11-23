@@ -297,6 +297,26 @@ def test_a_type_of_a_project_the_file_does_not_reference_draws_nothing(tmp_path)
     assert _body(ir) == [("C.Use", "Lib.Order", "M", 1)]
 
 
+def test_a_using_item_of_the_project_file_is_a_using_of_every_file(tmp_path):
+    # <Using Alias> names a type before the usings' (Roslyn: Lib2.Order for `Ord`, though
+    # `using Shop;` brings in an Ord); <Using Static> brings in a type's nested types
+    ir = extract_source(tmp_path, {
+        "P.csproj": """<Project Sdk="Microsoft.NET.Sdk"><ItemGroup>
+  <Using Include="Lib2.Order" Alias="Ord" />
+  <Using Include="Lib2.Defaults" Static="true" />
+</ItemGroup></Project>""",
+        "Lib.cs": """namespace Lib2 { public class Order { } public static class Defaults { public class Inner { } } }
+namespace Shop { public class Ord { } }
+""",
+        "Use.cs": """using Shop;
+namespace Other
+{
+    public class Use { object A() => new Ord(); object B() => new Inner(); }
+}
+"""})
+    assert _body(ir) == [("Other.Use", "Lib2.Defaults.Inner", "B", 4), ("Other.Use", "Lib2.Order", "A", 4)]
+
+
 def test_a_member_of_an_outside_base_class_hides_a_type(tmp_path):
     # ControllerBase.User and Request (the .NET table); a base no table knows may have any
     # member: nothing is drawn under it where a variable may stand; an interface passes
@@ -315,3 +335,15 @@ namespace Shop.Web
 """})
     assert _body(ir) == [("Shop.Web.Other", "Shop.User", "B", 6), ("Shop.Web.Plain", "Shop.User", "A", 7),
                          ("Shop.Web.Users", "Shop.User", "B", 5)]
+
+
+def test_a_using_of_an_unknown_namespace_in_a_block_may_bring_in_any_name(tmp_path):
+    # `using Some.Package;` in the block comes before Shop around it: Task may be its;
+    # System.Threading.Tasks is known to have Task, System.IO known not to
+    ir = extract_source(tmp_path, {
+        "Types.cs": "namespace Shop { public class Task { } public class Order { } }\n",
+        "Use.cs": """namespace Shop.A { using Some.Package; public class Use { object M() => new Task(); } }
+namespace Shop.B { using System.Threading.Tasks; public class Use { object M() => new Task(); } }
+namespace Shop.C { using System.IO; public class Use { object M() => new Task(); } }
+"""})
+    assert _body(ir) == [("Shop.C.Use", "Shop.Task", "M", 3)]

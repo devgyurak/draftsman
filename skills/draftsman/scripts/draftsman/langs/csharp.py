@@ -313,6 +313,7 @@ def _project_usings(project: Path) -> tuple[tuple[str, str], ...]:
             sdk = _SDK_IMPORTS.get(sdk, "")
     props: dict[str, str] = {}
     includes: list[str] = []
+    special: list[tuple[str, str]] = []   # <Using Alias>, <Using Static>
     removes: set[str] = set()
     # Directory.Build.props is evaluated first; the project file overrides it
     docs = [d for d in (_msbuild(p) for p in [_build_props(project.parent)] if p) if d is not None]
@@ -322,7 +323,11 @@ def _project_usings(project: Path) -> tuple[tuple[str, str], ...]:
             if tag in ("ImplicitUsings", "UseWPF", "UseWindowsForms", "UseVSTest") and el.text:
                 props[tag] = el.text.strip().lower()
             elif tag == "Using":
-                if el.get("Include") and not el.get("Alias") and el.get("Static", "").lower() != "true":
+                if el.get("Include") and el.get("Alias"):
+                    special.append((el.get("Include").strip(), f"alias={el.get('Alias').strip()}"))
+                elif el.get("Include") and el.get("Static", "").lower() == "true":
+                    special.append((el.get("Include").strip(), "static"))
+                elif el.get("Include"):
                     includes.append(el.get("Include").strip())
                 if el.get("Remove"):
                     removes.add(el.get("Remove").strip())
@@ -343,7 +348,8 @@ def _project_usings(project: Path) -> tuple[tuple[str, str], ...]:
     out = {n: label for n in dict.fromkeys(implicit)}
     for n in includes:
         out.setdefault(n, "<Using> items")
-    return tuple((n, origin) for n, origin in out.items() if n not in removes)
+    return tuple((n, origin) for n, origin in out.items() if n not in removes) + tuple(
+        (n, "<Using> items", kind) for n, kind in special)
 
 # type keywords: visible everywhere
 _BUILTINS = {
@@ -410,6 +416,9 @@ class CSharpSpec(LanguageSpec):
 
     def outside_known(self, type_id):
         return type_id in _framework()["types"] or type_id in _framework_types()
+
+    def outside_namespace(self, namespace):
+        return _framework_namespaces().get(namespace)
 
     def inherited_field(self, super_id, name, static=False):
         # a field, property or event a .NET or ASP.NET Core class (or one it extends)
@@ -635,10 +644,10 @@ class CSharpSpec(LanguageSpec):
         if len(projects) == 1:
             return str(projects[0]), list(_project_usings(projects[0]))   # [(namespace, origin)]
         # compiled into several projects: only what every one of them imports is certain
-        each = [dict(_project_usings(p)) for p in projects]
-        common = [ns for ns in each[0] if all(ns in e for e in each[1:])]
+        each = [{(u[0], *u[2:]): u[1] for u in _project_usings(p)} for p in projects]
+        common = [key for key in each[0] if all(key in e for e in each[1:])]
         origin = f"usings common to the {len(projects)} projects that compile it"
-        return ";".join(sorted(map(str, projects))), [(ns, origin) for ns in common]
+        return ";".join(sorted(map(str, projects))), [(k[0], origin, *k[1:]) for k in common]
 
     def library_type(self, name, imported, arity=None, external_supers=None):
         spaces = []
