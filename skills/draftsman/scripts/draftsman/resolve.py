@@ -519,8 +519,9 @@ class Resolver:
             if any(imp.block == ns and not imp.wildcard and imp.local_name == head
                    for imp in scope.imports):
                 return None   # an alias the namespace block declares
-            if self._block_import(head, ns, scope, spec, strict) is not None:
-                return "type"
+            found = self._block_import(head, ns, scope, spec, strict)
+            if found is not None and fits(found):
+                return "type"   # not a `Lib<T>` the block's using brings in for `Lib.Order`
         return None
 
     # ------------------------------------------------------------ resolve

@@ -54,6 +54,19 @@ namespace Shop.Rev.Gen.Sub
     }
 }
 
+namespace Shop.Rev.Gen2
+{
+    using Shop.Rev.Gen;
+
+    // the block's using brings in Lib<T>, which a first part without type arguments passes
+    // over for the namespace Lib
+    public class ViaUsing
+    {
+        public object A() => new Lib.Order();   //> Lib=- Order=Lib.Order/t
+        public object B() => Lib.Order.Count;   //> Lib=- Order=Lib.Order/r
+    }
+}
+
 namespace Shop.Rev.Entities
 {
     public class Models
