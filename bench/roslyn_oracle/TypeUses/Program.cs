@@ -41,7 +41,7 @@
 // property, event or range variable: "decl" says which, "owner" whose member, "generated"
 // whether only generated code declares it), "method", "label" or "error"; "alias" when
 // the name is a using alias. "from" is the id of the type around the name (`Program` in
-// top-level statements). Lines are 1-based, columns 0-based in UTF-16 code units.
+// top-level statements, the static class around a C# 14 extension block). Lines are 1-based, columns 0-based in UTF-16 code units.
 
 using System.Text.Json;
 using Microsoft.CodeAnalysis;
@@ -121,7 +121,8 @@ sealed class Reader(SemanticModel model, HashSet<string> sources, HashSet<string
         }
         emit(new { disabled = file, lines = off, comp });
         foreach (var decl in root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
-            if (model.GetDeclaredSymbol(decl) is INamedTypeSymbol t)
+            // not a C# 14 extension block, a type with no name of its own
+            if (model.GetDeclaredSymbol(decl) is INamedTypeSymbol { Name.Length: > 0 } t)
                 emit(new { declared = Id(t), file, parts = Parts(t), comp });
         foreach (var name in root.DescendantNodes().OfType<SimpleNameSyntax>())
             if (InBody(name))
@@ -311,7 +312,7 @@ sealed class Reader(SemanticModel model, HashSet<string> sources, HashSet<string
     string From(int position)
     {
         var s = model.GetEnclosingSymbol(position);
-        while (s != null && s is not INamedTypeSymbol { IsAnonymousType: false })
+        while (s != null && s is not INamedTypeSymbol { IsAnonymousType: false, Name.Length: > 0 })
             s = s.ContainingSymbol;
         return s is INamedTypeSymbol t ? Id(t) : "";
     }
