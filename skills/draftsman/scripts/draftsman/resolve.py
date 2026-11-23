@@ -481,20 +481,34 @@ class Resolver:
 
     def _qualified_head(self, head: str, rtype: RawType, member: Optional[RawMember],
                         inherit: bool, nested: bool, scope: FileScope, chain: list[str],
-                        spec, strict: bool):
+                        spec, strict: bool, head_arity: Optional[int] = None,
+                        in_type: bool = True):
         """What the first part of a qualified name is, looked up as a simple name from the
         innermost scope out (LanguageSpec.qualified_heads_in_scope): "type" when a type of
         the name comes first, the namespace when one does (`App.Models` for `Models` in
         `namespace App.Web`), "outside" past a namespace _outside_around takes for one
-        outside the sources, None when nothing in the namespaces around it has the name."""
+        outside the sources, None when nothing in the namespaces around it has the name.
+        A project type the head's written arity (``head_arity``) does not fit is passed
+        over (`Lib.Order` beside a `Lib<T>`); ``in_type``: written in ``rtype``, whose type
+        parameters and nested types come first."""
         sep = spec.separator
-        if head in self._type_params(rtype, member) \
-                or self._in_types(head, rtype, inherit, nested, spec) is not None:
-            return "type"
+
+        def fits(found: Optional[Resolution]) -> bool:
+            return head_arity is None or found is None or found.status != PROJECT \
+                or head_arity in self.index[found.target].arities
+
+        if in_type:
+            if head in self._type_params(rtype, member):
+                return "type"
+            found = self._in_types(head, rtype, inherit, nested, spec)
+            if found is not None and fits(found):
+                return "type"
         for ns in chain:
             cand = ns + sep + head if ns else head
-            if self._sees(rtype, cand) and (cand in self.index or cand in self.inline_names
-                                            or cand in self.aliases) \
+            if cand in self.index and not fits(Resolution(PROJECT, cand)):
+                pass
+            elif self._sees(rtype, cand) and (cand in self.index or cand in self.inline_names
+                                              or cand in self.aliases) \
                     or head in self.build_types.get(ns, ()) \
                     or ns and head in (spec.outside_namespace(ns) or ()):
                 return "type"
@@ -514,18 +528,23 @@ class Resolver:
     def resolve(self, name: str, rtype: RawType, member: Optional[RawMember] = None,
                 inherit: bool = True, scope: Optional[FileScope] = None,
                 arity: Optional[int] = None, strict: bool = False,
-                nested: bool = True) -> Resolution:
+                nested: bool = True, head_arity: Optional[int] = None,
+                at_namespace: Optional[str] = None) -> Resolution:
         """What ``name`` written in ``rtype`` stands for. ``strict``: a name more than one
         wildcard import provides is unresolved, not the first one's. ``nested``: whether
         the nested types of ``rtype`` and the types around it are in scope (in a body,
-        LanguageSpec.nested_types_in_bodies)."""
+        LanguageSpec.nested_types_in_bodies). ``head_arity``: how many type arguments the
+        first part of a qualified name is written with. ``at_namespace``: written in that
+        namespace outside any type (the target of an alias declared there), not in
+        ``rtype``."""
         spec = LANGUAGES[rtype.language]
         sep = spec.separator
         scope = scope or (member.scope if member and member.scope else None) or rtype.scope
-        chain = self._namespace_chain(rtype.namespace, sep, spec.parent_namespace_lookup,
-                                      scope.namespace)
+        chain = self._namespace_chain(
+            rtype.namespace if at_namespace is None else at_namespace, sep,
+            spec.parent_namespace_lookup, scope.namespace)
 
-        if name in self._type_params(rtype, member):
+        if name in self._type_params(rtype, member) and at_namespace is None:
             return Resolution(TPARAM)
 
         if sep in name:
@@ -533,7 +552,8 @@ class Resolver:
             if spec.qualified_heads_in_scope:
                 head, rest = name.split(sep, 1)
                 first_is = self._qualified_head(head, rtype, member, inherit, nested, scope,
-                                                chain, spec, strict)
+                                                chain, spec, strict, head_arity,
+                                                in_type=at_namespace is None)
                 if first_is == "outside":
                     return Resolution(UNRESOLVED, outside=True)
                 if first_is not in (None, "type", head):
@@ -567,7 +587,7 @@ class Resolver:
                         return (Resolution(EXTERNAL, imp.path + sep + rest) if imp.external
                                 else self._not_found(imp.path + sep + rest, spec))
             first = self.resolve(head, rtype, member, inherit, scope, strict=strict,
-                                 nested=nested)
+                                 nested=nested, at_namespace=at_namespace)
             if first.status == PROJECT:
                 found = self._nested_path(first.target, rest, sep, inherit, spec)
                 if found:
@@ -610,7 +630,8 @@ class Resolver:
             return Resolution(UNRESOLVED, hint=first.hint, candidates=first.candidates,
                               outside=first.outside)
 
-        found = self._in_types(name, rtype, inherit, nested, spec)
+        found = self._in_types(name, rtype, inherit, nested, spec) if at_namespace is None \
+            else None
         if found is not None:
             return found
 
@@ -792,6 +813,10 @@ class Resolver:
             res = self._color_color(parts, rtype, ref, spec)
             if res is None:
                 return None
+        elif (head := self._receiver_head(parts[0], rtype, ref, spec)) is not None:
+            if head == "outside":
+                return None
+            res = Resolution(UNRESOLVED)   # a namespace: the name goes on into it
         else:
             res = self._in_body(parts[0], rtype, ref, 0)
         if res.status == ALIAS and res.target:
@@ -844,6 +869,22 @@ class Resolver:
                 break   # `Foo.Cond` where Foo's body binds Cond twice: Foo alone
             target, n = nested, n + 1
         return target, n
+
+    def _receiver_head(self, head: str, rtype: RawType, ref: RawBodyRef,
+                       spec) -> Optional[str]:
+        """The namespace a receiver's head is, looked up as the first part of a qualified
+        name is (LanguageSpec.qualified_heads_in_scope: the global namespace `Models` comes
+        before a class `Models` the file's `using App.Entities;` brings in), "outside" past
+        a package's namespace, or None where a type may come first (also inside an
+        anonymous or local class, whose inherited types are not looked at here)."""
+        if not spec.qualified_heads_in_scope or ref.classes:
+            return None
+        chain = self._namespace_chain(rtype.namespace, spec.separator,
+                                      spec.parent_namespace_lookup, ref.scope.namespace)
+        found = self._qualified_head(head, rtype, ref.member, True, spec.nested_types_in_bodies,
+                                     ref.scope, chain, spec, True,
+                                     ref.arities[0] if ref.arities else None)
+        return None if found in (None, "type") else found
 
     def _color_color(self, parts: list[str], rtype: RawType, ref: RawBodyRef,
                      spec) -> Optional[Resolution]:
@@ -939,7 +980,11 @@ class Resolver:
                                       spec.parent_namespace_lookup, ref.scope.namespace)
         if any((ns + spec.separator + name if ns else name) in self.index for ns in chain):
             return None
-        res = self.resolve(written.name, rtype, None, scope=entry[1], strict=True)
+        # the target is looked up where the alias is declared (`using O = Lib.Order;` at the
+        # top of the file: from the global namespace, not from `namespace Shop.Sub`)
+        res = self.resolve(written.name, rtype, None, scope=entry[1], strict=True,
+                           at_namespace=alias.rsplit(spec.separator, 1)[0]
+                           if spec.separator in alias else "")
         return res.target if res.status == PROJECT else None
 
     def _binds(self, head: str, rtype: RawType, ref: RawBodyRef) -> bool:
@@ -1028,7 +1073,8 @@ class Resolver:
             if found:   # `State` in `new Thread() { ... }`
                 return Resolution(EXTERNAL, found + sep + rest if rest else found)
         res = self.resolve(name, rtype, ref.member, scope=ref.scope, strict=True,
-                           nested=spec.nested_types_in_bodies)
+                           nested=spec.nested_types_in_bodies,
+                           head_arity=ref.arities[0] if ref.arities and sep in name else None)
         if res.status == PROJECT and spec.rebinding_hides and (
                 self._rebound(res.target) or self._uncertain_path(name, ref.scope, spec)
                 or sep not in name and any(

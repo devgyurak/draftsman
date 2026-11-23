@@ -89,7 +89,8 @@ def test_body_relations_go_where_the_hand_written_answers_say():
              ("Shop/Positions.cs", 44, "Shop.Util"), ("Shop/ColorColor.cs", 12, "Shop.Order"),
              ("Shop/Review/Qualified.cs", 44, "Shop.Rev.Qual.Lib"),
              ("Shop/Review/Qualified.cs", 45, "Shop.Rev.Qual.Lib"),
-             ("Shop/Review/Qualified.cs", 46, "Shop.Rev.Qual.Lib")]
+             ("Shop/Review/Qualified.cs", 46, "Shop.Rev.Qual.Lib"),
+             ("Shop/Review/Heads.cs", 53, "Shop.Rev.Gen.Lib")]
     top_level = [("Program.cs", 4, "Shop.Order"), ("Program.cs", 5, "Shop.Customer"),
                  ("Program.cs", 5, "Shop.Order")]
     global_ = [("Shop/Positions.cs", 28, "Shop.Order"), ("Shop/Positions.cs", 47, "Shop.Status")]
