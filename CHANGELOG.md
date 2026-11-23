@@ -61,6 +61,15 @@ Notes for anyone with `view.json` files written against a development build:
   connected types and the viewer's cycles stay on declarations. Netty extracts in about
   4.0 s instead of 2.4 s. The other languages read no bodies yet (#5); Django's and
   TypeORM's `ir.json` are byte for byte the same, the other e2e projects were not run again.
+- **Three more TypeScript names that hide a class in a body** (#5). Where the compiler
+  reads a variable, the extractor drew the class the file imports: a constructor's
+  parameter property (`constructor(private Foo: any) { Foo.make(); }`; elsewhere it is
+  `this.Foo`), an enum's member in its members' values (`enum E { Foo = 1, B = Foo }`) and
+  a namespace block's variable or function in the bodies of its classes (`namespace NS {
+  const Foo = ...; export class A { m() { Foo.make(); } } }`), which `lang-notes.md` listed
+  as a limit. Each is in the fixture, now 69 names, which the compiler agrees with. None
+  changes a relation in nest or TypeORM: their `ir.json` is byte for byte the same (1432
+  and 3406 names, 0 mismatches), and so are jsoup's, Netty's, petclinic's and Django's.
 - **Names in TypeScript method bodies are relations** (#5). As in Java, a project type a
   body names is a dependency marked `evidence: "body"`: in type position (`: Foo`, `as
   Foo`, `satisfies Foo`, type arguments) or as a value, where a variable may stand too

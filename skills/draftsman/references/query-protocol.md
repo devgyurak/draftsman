@@ -63,12 +63,15 @@ around it; with several declarators (`static A X = .., Y = ..;`), the one writte
 before the name. One in an annotation's arguments is dropped, also inside a body.
 `@body.var` and `@body.type` are collected per member, wherever in it they stand: a name
 the member declares anywhere may hide a type of that name anywhere in it, which drops a
-reference at worst. `@body.class` lists the anonymous and local classes around a
+reference at worst. One in a member inside a member is the outer member's (TypeScript's
+parameter property `constructor(private x)`); a `@body.var` in a namespace block, outside
+any type and function, hides the name in every member of the types in that namespace and
+in the namespaces inside it, in every block of the namespace in the file. `@body.class` lists the anonymous and local classes around a
 reference, innermost first.
 
 How a recorded name resolves follows the language's scoping, set in its `LanguageSpec`:
 `fields_in_scope` (whether a field hides a receiver; not in TypeScript, where a field is
-`this.x`), `nested_types_in_scope` (whether a type sees its own nested types by simple
+`this.x`; an enum's own constants hide one in its bodies either way), `nested_types_in_scope` (whether a type sees its own nested types by simple
 name), `type_only_kinds` (kinds that are no value, so a receiver of their name draws
 nothing: TypeScript interfaces) and `receiver_package_heads` (whether a dotted receiver
 whose head is no type is a package, as in Java, or goes through what the file imports, as

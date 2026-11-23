@@ -247,14 +247,17 @@ is that type. Aliases of aliases are followed.
   `register(Foo)`, `{ Foo }`, a local class's `extends Foo`), which draws nothing when the
   member declares a variable, function or class of the name anywhere (also after the
   name, so a few are lost), and nothing when the name is an interface (the value of
-  `Token` is the `const Token` beside `interface Token`). Fields hide nothing, as a body
-  reaches them through `this`; a class does not see the types of a namespace merged with
-  it by their simple names. A dotted value goes through what the file imports or a
+  `Token` is the `const Token` beside `interface Token`). A constructor's parameter
+  properties (`constructor(private Foo)`) are its parameters; an enum's members are names
+  in its members' values (`B = Foo` after `Foo = 1`); a namespace block's variables and
+  functions are names in the bodies of its classes and of the namespaces inside it, and
+  hide them even where a type of an inner namespace is nearer (that one is missed).
+  Fields hide nothing, as a body reaches them through `this`; a class does not see the
+  types of a namespace merged with it by their simple names. A dotted value goes through what the file imports or a
   namespace around it (`ns.Foo.m()`, `Shop.Item`), never through a variable. Checked
   against the TypeScript compiler (`bench/tsc_oracle`): 0 mismatches on nest and TypeORM.
   Known limits: a value whose name starts lower-case is not read (a class named so is
-  missed); variables of a namespace block around the class (`namespace N { const Foo =
-  1; ... }`) are not known and hide nothing; a type alias draws nothing in a body.
+  missed); a type alias draws nothing in a body.
 
 ## Python
 
