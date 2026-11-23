@@ -725,22 +725,41 @@ class Resolver:
         return any((ns + spec.separator + head if ns else head) in self.namespaces
                    for ns in chain)
 
-    def _imports_module(self, parts: list[str], scope: FileScope, spec) -> bool:
-        """Whether the file imports the module a dotted name's parts reach (`models.base`
-        after `from django.db import models`), or one inside it, as a module: `import
-        p.bar`, not `from p.bar import Bar` or `from p import bar`, after which pyright and
-        ty find no `p.bar`."""
+    def _head_module(self, head: str, scope: FileScope, spec) -> Optional[tuple[str, list[str]]]:
+        """(the module a dotted name's head names, the modules the file's module imports
+        load through it), or None: `from p import sub` and `import p.sub as sub` name p.sub
+        and load nothing through it, `import p.sub.near` names p and loads p.sub.near."""
         sep = spec.separator
-        heads = [imp.path for imp in scope.imports if not imp.wildcard
-                 and imp.local_name == parts[0]]
-        if spec.module_imports_bind_heads:
-            heads.append(parts[0])
-        for head in heads:
-            module = sep.join([head, *parts[1:]])
-            if any(imp.module and (imp.path == module or imp.path.startswith(module + sep))
-                   for imp in scope.imports):
-                return True
-        return False
+        named = {imp.path for imp in scope.imports if not imp.wildcard
+                 and (imp.aliased or not imp.module) and imp.local_name == head}
+        if named:
+            return (named.pop(), []) if len(named) == 1 else None
+        loaded = [imp.path for imp in scope.imports if imp.module and not imp.aliased
+                  and imp.path.split(sep, 1)[0] == head]
+        return (head, loaded) if spec.module_imports_bind_heads and loaded else None
+
+    def _imports_module(self, parts: list[str], scope: FileScope, spec) -> bool:
+        """Whether a dotted name's parts reach a module as attributes, one part after the
+        other (`models.base` after `from django.db import models`): from the module the head
+        names, a part is a submodule that a module import of the file loads through that
+        head (`import p.sub.near` binds `p`, with `p.sub` and `p.sub.near` on it; not the
+        `sub` of `from p import sub`, after which pyright finds no `sub.near`, nor `p` after
+        `import p.sub.near as n`), or one its package imports from by a relative import
+        (`from . import near`, `from .near import Near` in `p/sub/__init__.py`; not `from
+        p.sub.near import Near`, which pyright and ty do not take to bind it there)."""
+        sep = spec.separator
+        got = self._head_module(parts[0], scope, spec)
+        if got is None:
+            return False
+        module, loaded = got
+        for part in parts[1:]:
+            sub = module + sep + part
+            if not (any(p == sub or p.startswith(sub + sep) for p in loaded) or any(
+                    imp.local and (imp.path == sub or imp.path.startswith(sub + sep))
+                    for s in self._module_scopes(module, spec) for imp in s.imports)):
+                return False
+            module = sub
+        return True
 
     def _around(self, rtype: RawType, ref: RawBodyRef, depth: int):
         """For each anonymous or local class around ``ref`` from ``depth`` levels out,
@@ -800,15 +819,10 @@ class Resolver:
         parts = name.split(sep)
         if self._uncertain(scope, parts[0], spec):
             return True
-        named = {imp.path for imp in scope.imports if not imp.wildcard
-                 and not imp.module and imp.local_name == parts[0]}
-        if len(named) == 1:
-            module = named.pop()
-        elif not named and spec.module_imports_bind_heads and any(
-                imp.module and imp.path.split(sep, 1)[0] == parts[0] for imp in scope.imports):
-            module = parts[0]
-        else:
+        got = self._head_module(parts[0], scope, spec)
+        if got is None:
             return False
+        module = got[0]
         for part in parts[1:]:
             scopes = self._module_scopes(module, spec)
             if not scopes:

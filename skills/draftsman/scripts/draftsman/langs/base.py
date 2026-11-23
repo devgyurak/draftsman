@@ -42,6 +42,7 @@ class Import:
     ambiguous: tuple[str, ...] = ()
     sep: str = "."
     static: bool = False   # Java `import static`: members of a type (`a.B.N`, `a.B.*`)
+    aliased: bool = False  # a module import given its own name (Python's `import a.b as c`)
 
     @property
     def local_name(self) -> str:

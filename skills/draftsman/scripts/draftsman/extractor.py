@@ -308,7 +308,7 @@ class Extractor:
             local = alias or text.rsplit(".", 1)[-1].rsplit("/", 1)[-1]
             return Import(target or text, alias=local, module=True,
                           external=target is None and not alts, local=inside, ambiguous=alts,
-                          sep=sep)
+                          sep=sep, aliased=alias is not None)
         if (n := _first(caps, "import.from")) is not None:
             mod_text = _text(n, src).strip("'\"")
             target, inside, alts = self._module_target(mod_text, rel)
