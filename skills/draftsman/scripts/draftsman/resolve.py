@@ -835,9 +835,10 @@ class Resolver:
     def _uncertain(self, scope: FileScope, name: str, spec) -> bool:
         """Whether a file's ``name`` may be another class than the one it resolves to: bound
         by a wildcard import of a module outside the sources (`from tkinter import *`),
-        whose names are not known, bound to two classes at the top of the file (`from .a
+        whose names are not known, bound to two things at the top of the file (`from .a
         import Foo` and `from .b import Foo`, two star imports that bring in two, an import
-        and a class), or bound as a variable there (FileScope.variables); in the file, or
+        and a class, a project class and `from tkinter import Foo` or `import tkinter as
+        Foo`), or bound as a variable there (FileScope.variables); in the file, or
         in a project module the file takes the name from, by
         its name or by a wildcard import that brings it in (`from q.gui import *`, `gui.py`
         importing tkinter's *; `from q.dup import Foo`)."""
@@ -864,8 +865,12 @@ class Resolver:
                 module, _, original = imp.path.rpartition(sep)
                 found = any(self._uncertain(s, original, spec)
                             for s in self._module_scopes(module, spec))
-                if target := self.lookup(imp.path, spec):
-                    targets.add(target)
+                # what is no project class (`from tkinter import Button`, a function) is
+                # still another binding of the name
+                targets.add(self.lookup(imp.path, spec) or "?" + imp.path)
+            elif imp.module and (imp.local_name == name if imp.aliased
+                                 else imp.path.split(sep, 1)[0] == name):
+                targets.add("?" + imp.path)   # `import tkinter as Button`
             # not in a scope made for one name (an import in a function before the file's,
             # a class body's imports before the file's): there the first import wins
             if found or len(targets) > 1 and any(
