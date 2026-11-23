@@ -61,6 +61,15 @@ Notes for anyone with `view.json` files written against a development build:
   connected types and the viewer's cycles stay on declarations. Netty extracts in about
   4.0 s instead of 2.4 s. The other languages read no bodies yet (#5); Django's and
   TypeORM's `ir.json` are byte for byte the same, the other e2e projects were not run again.
+- **Labels in TypeScript types are no names; an enum member written as a string hides
+  one** (#5). A tuple member's label and an index signature's parameter (`[Foo: string]`,
+  `{ [Kind: string]: number }`) were read as values and drew the class the file imports,
+  where the compiler sees no name; `"Foo" = 1` in an enum did not hide `Foo` in `B = Foo`,
+  as `Foo = 1` does. The answer key (`bench/tsc_oracle/type_uses.mjs`) now records the
+  type an import type names (`import("./m").Foo`), which the extractor drew right but
+  `compare` counted as a mismatch. All are in the fixture, now 74 names. Run again on nest
+  and TypeORM, the compiler's records are the same, and so is `ir.json` (1432 and 3406
+  names, 0 mismatches), as are jsoup's, Netty's, petclinic's and Django's.
 - **Three more TypeScript names that hide a class in a body** (#5). Where the compiler
   reads a variable, the extractor drew the class the file imports: a constructor's
   parameter property (`constructor(private Foo: any) { Foo.make(); }`; elsewhere it is
