@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -398,6 +398,7 @@ class Extractor:
         # parameters must be appended in source order
         other.sort(key=lambda c: min(n.start_byte for nodes in c.values() for n in nodes))
 
+        imports_by_node: dict[int, Import] = {}   # by the nodes of its captures
         listed: Optional[set[str]] = None   # the names the file lists as its exports
         readable = True
         for caps in other:
@@ -421,6 +422,9 @@ class Extractor:
                 imp = self._import(caps, src, mod_path)
                 if imp is not None:
                     scope.imports.append(imp)
+                    for nodes in caps.values():   # for an import in a member (@body.import)
+                        for n in nodes:
+                            imports_by_node[n.id] = imp
 
         scope.exports = listed if readable else None
         scope.exports_unread = not readable
@@ -585,7 +589,8 @@ class Extractor:
         for nid in sorted(annotation_refs, key=lambda i: annotation_refs[i]["annotation.ref"][0].start_byte):
             self._annotation_ref(annotation_refs[nid], src, scope, types_by_node,
                                  set(annotation_refs))
-        self._body_refs(bodies, src, scope, types_by_node, members_by_node, namespaces)
+        self._body_refs(bodies, src, scope, types_by_node, members_by_node, namespaces,
+                        imports_by_node)
 
         # what the build imports into every file (implicit usings), after the file's own
         for ns, origin in build_imports:
@@ -631,7 +636,7 @@ class Extractor:
         owner.annotation_refs.append(ann)
 
     def _body_refs(self, matches, src, scope, types_by_node, members_by_node,
-                   namespaces) -> None:
+                   namespaces, imports_by_node) -> None:
         """Names written in bodies, each with what may hide it there (query-protocol.md)."""
         regions: set[int] = set()
         inits: dict[int, str] = {}           # initializer block -> its `via`
@@ -758,6 +763,9 @@ class Extractor:
         in_namespace: dict[tuple[str, ...], set[str]] = {}
         bound: dict[tuple[str, ...], Counter] = {}
         top_classes: set[str] = set()   # the class statements at the top of the file
+        # member -> (name, the function it is imported in, where, the import)
+        local_imports: dict[int, list[tuple[str, int, int, Import]]] = {}
+        scopes: dict[int, FileScope] = {}   # the file's, with an import of a member first
         for node, kind in declared:
             if kind == "globals":   # Python's `global Foo`: the module's, wherever it stands
                 in_namespace.setdefault((), set()).add(_text(node, src))
@@ -767,7 +775,19 @@ class Extractor:
                 while (outer := anchor_of(a.parent)) is not None:
                     a = outer
                 key = place(a, node.start_byte)[0]
-                kind = "variables" if kind == "imports" else kind
+                if kind == "imports":
+                    # one name from a module (`from x import Foo`): read through it after
+                    # it, in the function it stands in; elsewhere in the member it hides
+                    imp = imports_by_node.get(node.id) or imports_by_node.get(node.parent.id)
+                    fn = node.parent
+                    while fn is not None and not self.spec.is_opaque(fn):
+                        fn = fn.parent
+                    if imp is not None and not imp.module and not imp.wildcard \
+                            and fn is not None:
+                        local_imports.setdefault(key, []).append(
+                            (_text(node, src), fn.id, node.start_byte, imp))
+                        continue
+                    kind = "variables"
                 getattr(names.setdefault(key, BodyNames()), kind).add(_text(node, src))
             elif (kind == "variables" or self.spec.rebinding_hides) and (path := namespace_path(
                     # a function's or a class's name is the scope's around it
@@ -817,10 +837,22 @@ class Extractor:
                     for k in range(len(path) + 1):
                         member_names.variables |= in_namespace.get(path[:k], set())
             parts = self._parts(node)
+            ref_scope, ref_names = scope, member_names
+            head = _text(parts[0], src)
+            imported = [imp for name, fn, at, imp in local_imports.get(key, ())
+                        if name == head and at < node.start_byte and _inside(node, {fn})]
+            if len({imp.path for imp in imported}) == 1:
+                imp = imported[0]
+                if id(imp) not in scopes:
+                    scopes[id(imp)] = replace(scope, imports=[imp, *scope.imports])
+                ref_scope = scopes[id(imp)]
+            elif any(name == head for name, *_ in local_imports.get(key, ())):
+                # before the import, outside its function, or two imports of the name
+                ref_names = BodyNames(member_names.variables | {head}, member_names.types)
             types_by_node[owner.id].body_refs.append(RawBodyRef(
                 ".".join(_text(n, src) for n in parts), position,
-                [(_line(n), _utf16_col(n, src)) for n in parts], via, scope, rm,
-                member_names, list(around)))
+                [(_line(n), _utf16_col(n, src)) for n in parts], via, ref_scope, rm,
+                ref_names, list(around)))
 
     def _dotted(self, node: ts.Node) -> bool:
         """Whether a receiver is a dotted name: every node of it one of

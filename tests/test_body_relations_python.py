@@ -66,14 +66,15 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     # every project class is drawn, but the part of a longer name (`Foo` in
     # `foomod.Foo.Inner`, `Outer` in `Outer.Inner`), a class's own name (`Kind.A` in Kind),
     # one the member binds a variable or a type parameter of elsewhere (the member is the
-    # scope: a comprehension's `Foo`, a lambda's parameter, a local import, `def inner[Foo]`),
-    # and one in the class body that its own names hide (`made = Inner()` and the lambda
-    # beside it)
+    # scope: a comprehension's `Foo`, a lambda's parameter, `def inner[Foo]`, an import in a
+    # function inside it, or `import p.bar`, which binds `p`), and one in the class body
+    # that its own names hide (`made = Inner()` and the lambda beside it)
     missed = [(file, line, answer) for (file, line, col), (answer, position) in want.items()
               if answer in builder.types and (file, line, col) not in drawn]
     assert sorted(missed) == [
         ("p/bindings.py", 43, "p.foo.Foo"),
         ("p/forms.py", 28, "p.foo.Foo"), ("p/hide.py", 34, "p.foo.Foo"),
-        ("p/hide.py", 42, "p.bar.Bar"), ("p/hide.py", 56, "p.foo.Foo"),
+        ("p/hide.py", 56, "p.foo.Foo"), ("p/local.py", 22, "p.foo.Foo"),
+        ("p/local.py", 47, "p.bar.Bar"),
         ("p/scopes.py", 11, "p.scopes.Outer.Inner"), ("p/scopes.py", 12, "p.bar.Inner"),
         ("p/scopes.py", 18, "p.scopes.Outer"), ("p/scopes.py", 34, "p.scopes.Kind")]
