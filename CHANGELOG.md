@@ -121,7 +121,7 @@ Notes for anyone with `view.json` files written against a development build:
   compilation resolves at each name; a file several compilations compile (target
   frameworks, `<Compile Include>` links) has an answer only where they all agree, and a
   place none compiles has none. eShopOnWeb: 252 names drawn, Serilog 655 (5 target
-  frameworks), eShop 551 (eShop's MAUI apps compiled for plain `net11.0`), 0 mismatches.
+  frameworks), eShop 560 (eShop's MAUI apps compiled for plain `net11.0`), 0 mismatches.
   The key also answers for any directory with a `.csproj` (`oracle.py key DIR
   --compare`), which four rounds of sources written by hand ran through: they drew a
   wrong type in operator and indexer bodies (their parameters hid nothing), through
@@ -129,12 +129,12 @@ Notes for anyone with `view.json` files written against a development build:
   `using static` in a namespace block, a type of a project the file's project does not
   reference, a `using`, a field or an alias only some build has, and a member generated
   code declares (Razor `@inject`, XAML `x:Name`, `[ObservableProperty]`,
-  `[JsonSerializable]`), all now closed and pinned in a fixture of 204 names compiled for
+  `[JsonSerializable]`), all now closed and pinned in a fixture of 220 names compiled for
   net11.0 and net10.0. The rules turned off one at a time keep these wrong names out of the
   e2e projects: fields and properties 3, 35 and 4 (eShop at a cost of 16 right ones, which
   C#'s Color Color rule, also followed, recovers), a type declared in an `#if` 1 (Serilog,
   at a cost of 8), one id of two projects 2, gRPC's generated types 1, MAUI's platform
-  code 13; the others only the fixture's. eShopOnWeb gains 207 body dependencies, Serilog 363, eShop 439; the
+  code 13; the others only the fixture's. eShopOnWeb gains 207 body dependencies, Serilog 363, eShop 442; the
   e2e focus diagrams grow from 5 to 7 types (`BasketService`), 13 to 22 (`Logger`) and 20
   to 27 (`OrderingContext`). jsoup's, petclinic's, Netty's, nest's, TypeORM's, httpx's and
   Django's `ir.json` are byte for byte the same.
@@ -156,6 +156,23 @@ Notes for anyone with `view.json` files written against a development build:
   a file-scoped namespace, 7 fewer under MAUI's base classes, which the table does not
   know, and 2 fewer behind OpenTelemetry's and Polly's namespaces.
   Lost and documented: a symbol no build defines and `#if !DEBUG` read as compiled.
+- **C# namespaces around the code, and a qualified name's first part** (#5, after 0.6.0).
+  A second review's three sets of sources written by hand drew three wrong forms, now
+  closed. A namespace outside the sources around the code is looked in before the file's
+  usings, as C# does: `Host` in `namespace Microsoft.Extensions.Hosting` and `Random` in
+  `namespace System.Mine` are the framework's (the .NET table's); a namespace around the
+  code that no type of the sources is declared in and that a using imports is taken for a
+  package's, and a name found further out than it draws nothing. A qualified name's first
+  part is looked up as a simple name: `Models.Order` in `namespace App.Web` is
+  `App.Models.Order` where that namespace exists, and a class `Lib` around comes before a
+  namespace `Lib`. The `#else` of `#if false` is read. eShop draws 560 names instead of
+  551, 9 receivers written partly qualified (`Services.Common.Common.X`); nothing was
+  drawn wrong before or after. Declared relations do not change; eShop's unresolved go
+  from 517 to 513 and eShopOnWeb's from 195 to 194 (files declared in a `Microsoft.*`
+  namespace find `IServiceCollection`, `IHostEnvironment`, `IUrlHelper` there). Lost and
+  documented: names past such a package namespace, and a name of the table's ASP.NET
+  namespaces around code whose project does not reference ASP.NET; drawn where it may be
+  wrong: a package's namespace no using imports, or one the sources declare a type in.
 - **More Python forms that drew a wrong class in a body** (#5, 0.6.0). Sources
   written by hand for review, run through the extractor and the three checkers together,
   drew a class where the checkers name something else: 21, 15 and 2 names in three sets,

@@ -101,13 +101,19 @@ else no `_` name; in a body nothing through a listing that cannot be read).
 C# adds `block_imports` (an import in a namespace block is looked at with that
 namespace's types, before the namespaces around it; declared relations too),
 `body_aliases` (a name that is an alias the file declares of one project type names it;
-TypeScript's aliases draw nothing in a body) and `color_color` (a field whose type has its
-name leaves the name a type before a static member or nested type), and hooks that tell a
+TypeScript's aliases draw nothing in a body), `color_color` (a field whose type has its
+name leaves the name a type before a static member or nested type),
+`qualified_heads_in_scope` (the first part of a qualified name is looked up as a simple
+name is, a type or a namespace from the innermost scope out; declared relations too) and
+`enclosing_outside_hides` (a namespace around the code that no type of the sources is
+declared in and a using imports is taken for one outside them: a name found further out
+draws nothing), and hooks that tell a
 body relation what a build does beyond the sources: `body_name_text` (`@Order` is
 `Order`), `arity` (the type arguments a part is written with, which the type must take),
 `conditional_ranges`, `left_out_types` and `left_out_names` (code and names of `#if`
 branches some build leaves out or the parser never reads), `unbuilt_ranges` (code no build
-compiles, or only a platform's, which no answer key here can: C#'s `#if false`, a MAUI
+compiles, or only a platform's, which no answer key here can: C#'s `#if false`, whose
+`#else` the parser reads, a MAUI
 app's platform code), `implicit_types` (a top-level
 `Program`), `project_references` (which build projects a file's project sees),
 `build_types` (types a build generates outside the sources, which hide as declared ones
@@ -117,8 +123,10 @@ indexer body), `subtype_sees` (whether a member of these modifiers is one of a s
 not C#'s private), `file_local` (a type seen in its file only), `internal_type` and
 `internals_visible` (a type of another project seen only by its friends),
 `unknown_bases_hide` with `outside_known` (a base class outside the sources that the
-language's table does not know may have any member), and `outside_namespace` (the types a
-namespace outside the sources declares, None when unknown). Each of them draws less where a build may differ, never more.
+language's table does not know may have any member), `outside_namespace` (the types a
+namespace outside the sources declares, None when unknown; also those of a namespace
+around the code, before the file's imports) and `outside_namespace_exists` (a namespace
+the table knows, also one holding only namespaces). Each of them draws less where a build may differ, never more.
 
 ## Ownership
 

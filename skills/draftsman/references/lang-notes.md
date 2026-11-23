@@ -74,7 +74,13 @@ is that type. Aliases of aliases are followed.
   Properties are kind `property`; positional record parameters are public properties.
 - `partial` declarations are merged by full name; members from other files carry `file`.
 - Namespaces: block and file-scoped. Types of enclosing namespaces are visible
-  (`Shop.Orders` sees `Shop.X`). `using X;` is a wildcard import, `using A = B;` an alias.
+  (`Shop.Orders` sees `Shop.X`), also those the .NET and ASP.NET table gives a namespace
+  outside the sources around the code (`Host` in `namespace Microsoft.Extensions.Hosting`),
+  before the file's usings. The first part of a qualified name is looked up as a simple
+  name is, from the innermost scope out: `Models.Order` in `namespace App.Web` is
+  `App.Models.Order` when the namespace `App.Models` exists, and `Lib.Order` where a class
+  `Lib` is nearer than the namespace `Lib` is that class's nested `Order`. `using X;` is a
+  wildcard import, `using A = B;` an alias.
   `global::A.B` is `A.B`. Primary constructors (C# 12, `class Order(IRepo<Order> repo)`)
   are a public constructor whose parameters are dependencies; records keep their
   parameters as properties. `params Q[] qs` is a parameter. Tuples (`(Person a, Point b)`)
@@ -98,8 +104,9 @@ is that type. Aliases of aliases are followed.
   BlazorWebAssembly) are not verified and get none. `<Using Include>` adds and
   `<Using Remove>` removes a namespace (`Alias`/`Static` items are skipped). A `global
   using` in any file is an import of every file of the same project, and of no other.
-- Conditional compilation: every file is read with the **first branch** of each `#if`;
-  `#elif`/`#else` branches and the directive lines are blanked before parsing (same
+- Conditional compilation: every file is read with the **first branch** of each `#if`
+  whose condition is not false whatever the symbols (`#if false ... #else` reads the
+  `#else`); the other branches and the directive lines are blanked before parsing (same
   length, so line numbers are exact). tree-sitter cannot parse `#if` inside a base list,
   a parameter list, an expression or around a second method header, and one
   deterministic configuration avoids reading both. The limit: `#if !FEATURE` keeps the
@@ -152,7 +159,11 @@ is that type. Aliases of aliases are followed.
   may declare any name the block's project namespaces do not; an alias the file declares
   of one project type (`using O = Shop.Order;`) names that type, unless a namespace around
   declares a type of the name; `<Using Include Alias>` and `<Using Static="true">` items of
-  the project file are global usings. A Razor component (`X.razor`) is a type of its
+  the project file are global usings. A namespace around the code that no type of the
+  sources (or of the build) is declared in and that a using of the sources imports
+  (`namespace CommunityToolkit.Mvvm.Input.Mine` with `using CommunityToolkit.Mvvm.Input;`
+  somewhere) is taken for a package's, whose types may hide any name found further out:
+  such a name draws nothing. A Razor component (`X.razor`) is a type of its
   `@namespace`, else the nearest `_Imports.razor`'s plus the folders below it, else the
   root namespace plus folders. A `file` type is seen in its file only; a type `internal`
   in another project (or nested in one) only where that project's `InternalsVisibleTo`
@@ -168,7 +179,7 @@ is that type. Aliases of aliases are followed.
   statements), a type of a project the file's project does not reference
   (`<ProjectReference>`, followed through), and in a .NET MAUI app code only a platform's
   build compiles (`Platforms/<platform>/`, `#if ANDROID`, `#if IOS || MACCATALYST`); no
-  build compiles `#if false`. A
+  build compiles `#if false` (nor the `#else` of `#if true`), and its names hide nothing. A
   type gRPC generates from the project's `<Protobuf Include>` (each .proto's messages,
   enums and services, in its `csharp_namespace`) hides a type of the name a `using`
   brings in, also for declared relations. Checked against Roslyn (`bench/roslyn_oracle`,
@@ -178,7 +189,11 @@ is that type. Aliases of aliases are followed.
   build defines (`#if NEVER_DEFINED`) and `#if !DEBUG` (the key builds Debug) draw where
   no build compiles. Lost: under a base class outside .NET and ASP.NET, every name where a
   variable may stand (7 on eShop's MAUI app); behind a namespace the table does not know
-  in a nearer using (2 on eShop); a `file` type's name, and in another file a name it
+  in a nearer using (2 on eShop); found further out than a namespace around taken for a
+  package's (the rule above), also an alias's target there; a name of the table's ASP.NET
+  namespaces around the code where the project does not reference ASP.NET (the table is
+  one for every project); a name through a namespace alias or an alias of a generic
+  (`M.Order` with `using M = Shop.Models;`); a `file` type's name, and in another file a name it
   shares; a Color Color name before a member an extension method shares (`Of`); names in
   top-level statements
   (no type the extractor sees holds them), after `global::`, through an alias another
@@ -186,7 +201,10 @@ is that type. Aliases of aliases are followed.
   not kept), a static member beside an instance overload of its name, a name a file's
   `using static` brings a field of (C# looks at the namespaces around first), a type of
   another arity further out (`Lib.Box` beyond `Box<T>`), and a name a switch arm's
-  pattern variable shares elsewhere in the member.
+  pattern variable shares elsewhere in the member. Drawn where it may be wrong: a
+  package's namespace around the code that no using imports, or that the sources declare
+  a type in (`namespace CommunityToolkit.Mvvm.ComponentModel { using Shop; class Q { ...
+  typeof(ObservableObject) ... } }` draws Shop's), is taken for the project's.
 - Not handled: extension methods (they stay members of their static class, which is
   correct but not linked to the extended type), the .NET 8 rule that drops `System.Net.Http` for .NET Framework targets.
   Declared relations ignore project references and the arity written (`Repo<int>` may
