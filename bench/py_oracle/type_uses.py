@@ -222,12 +222,20 @@ class Uses(TraverserVisitor):
     def __init__(self, cid: str, src: Source, rel: str):
         super().__init__()
         self.cid, self.src, self.rel = cid, src, rel
+        self.unreachable = 0   # how many blocks semantic analysis skipped are around
 
     def record(self, name, line, c, kind, target, project, maximal, node, annotation=False):
         emit({"use": name, "file": self.rel, "line": line, "col": self.src.utf16(line, c),
               "pos": "receiver", "kind": kind, "target": target, "project": project,
               "maximal": maximal, "from": self.cid, "mypy": described(node),
-              "annotation": annotation})
+              "annotation": annotation, "unreachable": self.unreachable > 0})
+
+    def visit_block(self, b: Block) -> None:
+        # a block semantic analysis skipped (`if TYPE_CHECKING:`'s else, `if PY2:`): mypy
+        # binds no name in it and says so (oracle.py: where it abstains)
+        self.unreachable += b.is_unreachable
+        super().visit_block(b)
+        self.unreachable -= b.is_unreachable
 
     # ------------------------------------------------------------- values
 

@@ -52,7 +52,7 @@ def test_body_names_stand_where_the_hand_written_answers_say():
                     if answer != "-" and (rel, line, col) not in recorded)
     assert missed == [("p/bindings.py", 47, "var"), *[("p/bindings.py", 64, "var")] * 3,
                       ("p/hide.py", 73, "disputed"),
-                      ("p/platform.py", 18, "disputed")]
+                      ("p/platform.py", 18, "p.foo.Foo")]
 
 
 def test_body_relations_go_where_the_hand_written_answers_say():
@@ -72,7 +72,8 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     # scope: a comprehension's `Foo`, a lambda's parameter, `def inner[Foo]`, an import in a
     # function inside it, or `import p.bar`, which binds `p`), and one in the class body
     # that its own names hide (`made = Inner()` and the lambda beside it, a name an import
-    # in the class body binds), and a nested class its class body binds twice (`Twin`)
+    # in the class body binds), a nested class its class body binds twice (`Twin`), and
+    # one in a branch of a platform test (where mypy on this machine abstains)
     missed = [(file, line, answer) for (file, line, col), (answer, position) in want.items()
               if answer in builder.types and (file, line, col) not in drawn]
     assert sorted(missed) == [
@@ -80,7 +81,7 @@ def test_body_relations_go_where_the_hand_written_answers_say():
         ("p/forms.py", 28, "p.foo.Foo"), ("p/hide.py", 34, "p.foo.Foo"),
         ("p/hide.py", 56, "p.foo.Foo"), ("p/leak.py", 30, "p.bar.Bar"),
         ("p/local.py", 22, "p.foo.Foo"),
-        ("p/local.py", 47, "p.bar.Bar"),
+        ("p/local.py", 47, "p.bar.Bar"), ("p/platform.py", 18, "p.foo.Foo"),
         ("p/scopes.py", 11, "p.scopes.Outer.Inner"), ("p/scopes.py", 12, "p.bar.Inner"),
         ("p/scopes.py", 18, "p.scopes.Outer"), ("p/scopes.py", 34, "p.scopes.Kind"),
         ("p/text.py", 7, "p.foo.Foo"), ("p/text.py", 9, "p.foo.Foo"), ("p/text.py", 9, "p.foo.Foo"),

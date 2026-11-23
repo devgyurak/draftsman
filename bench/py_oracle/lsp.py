@@ -10,7 +10,11 @@ sits in, or one whose configuration file points there. POSITIONS-FILE lists
 PYTHON is the interpreter whose site-packages hold the dependencies. Each position gets one
 record, {"file", "line", "col", "defs": [[PATH, LINE, COL], ...]} with the absolute path
 and the 1-based line and 0-based column a definition starts at, or {"error": ...} when
-the server answered with one or not within the time out.
+the server answered with one or not within the time out. A record also says whether the
+position lies where the server's own diagnostics call the code unreachable
+("unreachable", from a pull of the file's diagnostics), and, where it gave no definition,
+what its hover says the name is ("hover": its first line, `Never` in ty's unreachable
+code).
 """
 
 from __future__ import annotations
@@ -27,6 +31,10 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 TIMEOUT = 300   # seconds for the answers of one file
+UNNECESSARY = 1   # DiagnosticTag.Unnecessary: pyright and ty tag unreachable code so
+# pyright: "Code is structurally unreachable", "Code is not analyzed because condition is
+# statically evaluated as false"; ty: "Code is (always) unreachable"
+UNREACHABLE = ("unreachable", "not analyzed")
 
 
 class Server:
@@ -103,6 +111,12 @@ class Server:
         return got
 
 
+def within(line: int, col: int, rng: dict) -> bool:
+    """Whether a 0-based position lies in an LSP range."""
+    start, end = rng["start"], rng["end"]
+    return (start["line"], start["character"]) <= (line, col) < (end["line"], end["character"])
+
+
 def path_of(uri: str) -> str:
     return unquote(urlparse(uri).path)
 
@@ -125,7 +139,12 @@ def main() -> int:
         "workspaceFolders": [{"uri": uri, "name": root_path.name}],
         "capabilities": {
             "general": {"positionEncodings": ["utf-16"]},
-            "textDocument": {"definition": {"linkSupport": True}},
+            "textDocument": {"definition": {"linkSupport": True},
+                             "hover": {"contentFormat": ["plaintext"]},
+                             "diagnostic": {"dynamicRegistration": False},
+                             # pyright sends its hints of unreachable code only to a client
+                             # that shows Unnecessary
+                             "publishDiagnostics": {"tagSupport": {"valueSet": [UNNECESSARY]}}},
             "workspace": {"configuration": True, "workspaceFolders": True}},
         "initializationOptions": {}})
     if init not in server.wait({init}, 120):
@@ -142,7 +161,12 @@ def main() -> int:
         ids = {server.request("textDocument/definition", {
             "textDocument": {"uri": doc}, "position": {"line": ln - 1, "character": col}}):
                (ln, col) for ln, col in places}
-        got = server.wait(set(ids), TIMEOUT)
+        pull = server.request("textDocument/diagnostic", {"textDocument": {"uri": doc}})
+        got = server.wait({*ids, pull}, TIMEOUT)
+        unreachable = [d["range"] for d in ((got.get(pull) or {}).get("result") or {}).get(
+            "items", []) if UNNECESSARY in (d.get("tags") or [])
+            and any(w in d["message"] for w in UNREACHABLE)]
+        file_recs = []
         for i, (ln, col) in ids.items():
             rec = {"file": rel, "line": ln, "col": col}
             msg = got.get(i)
@@ -161,7 +185,21 @@ def main() -> int:
                     defs.append([path_of(target), rng["start"]["line"] + 1,
                                  rng["start"]["character"]])
                 rec["defs"] = defs
-            records.append(rec)
+            rec["unreachable"] = any(within(ln - 1, col, r) for r in unreachable)
+            file_recs.append(rec)
+        # what a name with no definition is, as the server's hover says
+        hovers = {server.request("textDocument/hover", {
+            "textDocument": {"uri": doc}, "position": {"line": rec["line"] - 1,
+                                                        "character": rec["col"]}}): rec
+                  for rec in file_recs if rec.get("defs") == []}
+        said = server.wait(set(hovers), TIMEOUT)
+        for i, rec in hovers.items():
+            contents = ((said.get(i) or {}).get("result") or {}).get("contents")
+            if isinstance(contents, list):   # MarkedString[]
+                contents = contents[0] if contents else ""
+            value = contents.get("value", "") if isinstance(contents, dict) else str(contents or "")
+            rec["hover"] = value.strip().split("\n", 1)[0]
+        records += file_recs
         server.notify("textDocument/didClose", {"textDocument": {"uri": doc}})
     bye = server.request("shutdown", None)
     server.wait({bye}, 30)

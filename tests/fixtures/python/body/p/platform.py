@@ -15,7 +15,7 @@ if os.name == "nt":
 class Platform:
     def guarded(self):
         if sys.platform == "win32":
-            return Foo()                    #> Foo=disputed/r
+            return Foo()                    #> Foo=p.foo.Foo/r
         return Foo()                        #> Foo=p.foo.Foo/r
 
     def declared(self):

@@ -18,7 +18,12 @@ Each answer is read as a project class (by its id), a class declared in a functi
 and target; where they differ, its kind is "disputed": no relation may be drawn there,
 and their count is how much of a repository static analysis cannot decide. A record also
 carries each checker's answer as compared ("answers") and what each said ("mypy",
-"pyright", "ty"). Agreement is still not the
+"pyright", "ty"). A checker abstains where it gives no definition and marks the place
+unreachable itself ("abstained": mypy in a block its semantic analysis skipped, pyright in
+the range of its hint of unreachable code, ty there too or where its hover says `Never`);
+the others then decide, if two or more are left and give the same, and one left is a
+dispute. A definition given in code marked unreachable is an answer, and no definition
+without the mark is one too. Agreement is still not the
 run-time answer: what all three cannot see (monkeypatching, a module-level name rebound
 by code that runs later) is not in it.
 
@@ -190,15 +195,39 @@ def oracle(root: Path, files: list[tuple[Path, str]], python: str, out: Path,
     for r in uses:
         mine = mypy_answer(r)
         answers = {"mypy": mine}
+        abstained = ["mypy"] if abstains_mypy(r) else []
         for name in checkers[1:]:
             rec = said[name].get((to_path[r["file"]], r["line"], r["col"]),
                                  {"error": "not asked"})
             answers[name], r[name] = server_answer(rec, sources, tokens)
-        r["answers"] = answers
-        if len(set(answers.values())) > 1:
+            if abstains_server(name, rec):
+                abstained.append(name)
+        r["answers"], r["abstained"] = answers, abstained
+        given = {answers[n] for n in answers if n not in abstained}
+        if len(given) != 1 or len(answers) - len(abstained) < 2:
             r["kind"], r["target"], r["project"] = "disputed", None, False
+        elif "mypy" in abstained:   # the others' answer, mypy having none
+            agreed = given.pop()
+            r["kind"], r["target"], r["project"] = (
+                ("type", agreed[2:], True) if agreed.startswith("T:")
+                else (agreed if agreed == "local" else "var", None, False))
     out.write_text("".join(json.dumps(r) + "\n" for r in recs))
     return recs
+
+
+def abstains_mypy(r: dict) -> bool:
+    """Whether mypy abstains at a place: it binds the name to nothing there, in a block its
+    semantic analysis skipped as unreachable (`if TYPE_CHECKING:`'s else, `if PY2:`)."""
+    return r["mypy"] == "-" and r.get("unreachable", False)
+
+
+def abstains_server(name: str, rec: dict) -> bool:
+    """Whether a language server abstains at a place: it gives no definition there, and
+    marks the place unreachable itself (a hint of unreachable code; ty also by a `Never`
+    hover). A definition given in code marked unreachable is an answer, and no
+    definition without the mark is one too (a submodule the file does not import)."""
+    return rec.get("defs") == [] and (
+        rec.get("unreachable", False) or name == "ty" and rec.get("hover") == "Never")
 
 
 def expected(root: Path) -> dict[tuple[str, int, int], tuple[str, str]]:
@@ -239,7 +268,14 @@ def run(args) -> int:
     print(f"{args.repo}: {len(files)} files, {len(errors)} mypy errors in "
           f"{len({r['file'] for r in errors})} files, uses: "
           + ", ".join(f"{k} {v}" for k, v in uses.most_common()))
+    print("abstained: " + abstentions([r for r in recs if "use" in r]))
     return 0
+
+
+def abstentions(uses: list[dict]) -> str:
+    """How many places each checker abstained at (oracle: abstains_*)."""
+    count = Counter(n for r in uses for n in r.get("abstained", ()))
+    return ", ".join(f"{n} {count[n]}" for n in CHECKERS)
 
 
 def scope(args) -> int:
@@ -315,6 +351,8 @@ def checkers(args) -> int:
         print(f"{name}: {len(uses)} positions, {sum(errors.values())} without an answer "
               f"({', '.join(f'{k} {v}' for k, v in errors.most_common(3)) or '-'}), "
               f"{none} answered with no definition")
+    print("abstained (no definition where it marks the code unreachable): "
+          + abstentions(uses))
     for a, b in (("mypy", "pyright"), ("mypy", "ty"), ("pyright", "ty")):
         same = sum(1 for r in uses if r["answers"].get(a) == r["answers"].get(b))
         print(f"{a} = {b}: {same} of {len(uses)}")
