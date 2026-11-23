@@ -77,6 +77,11 @@ SERVERS = {
                 "--stdio"],
     "ty": ["uvx", "--quiet", "ty@0.0.108", "server"],
 }
+# Every platform's code is read, not only this machine's: pyright takes that from a
+# configuration file only (in a workspace of its own, which finds the sources through
+# extraPaths), ty does it by default. mypy reads `if sys.platform == ...` for the platform
+# it runs on; a name only another platform's branch binds is disputed
+PYRIGHT_CONFIG = {"pythonPlatform": "All"}
 CHECKERS = ("mypy", "pyright", "ty")
 
 # as docs/e2e/python/ extracts them: "root" is the path given to extract.py
@@ -164,14 +169,19 @@ def oracle(root: Path, files: list[tuple[Path, str]], python: str, out: Path,
                        cwd=base)
         recs = answer_key.read(raw)
         uses = [r for r in recs if "use" in r]
-        to_base = {rel: str(p.relative_to(base)) for p, _, rel in mods}
+        to_path = {rel: str(p) for p, _, rel in mods}
         places = Path(tmp, "places")
-        places.write_text("".join(f"{to_base[r['file']]}\t{r['line']}\t{r['col']}\n"
+        places.write_text("".join(f"{to_path[r['file']]}\t{r['line']}\t{r['col']}\n"
                                   for r in uses))
+        workspace = Path(tmp, "pyright")
+        workspace.mkdir()
+        (workspace / "pyrightconfig.json").write_text(json.dumps(
+            {**PYRIGHT_CONFIG, "extraPaths": [str(base)]}))
         said = {}
         for name in checkers[1:]:
             got = Path(tmp, f"{name}.jsonl")
-            subprocess.run([sys.executable, "-I", HERE / "lsp.py", got, base, places, python,
+            subprocess.run([sys.executable, "-I", HERE / "lsp.py", got,
+                            workspace if name == "pyright" else base, places, python,
                             "--", *SERVERS[name]], check=True)
             said[name] = {(r["file"], r["line"], r["col"]): r for r in answer_key.read(got)}
     sources = {str(p) for p, _, _ in mods}
@@ -180,7 +190,7 @@ def oracle(root: Path, files: list[tuple[Path, str]], python: str, out: Path,
         mine = mypy_answer(r)
         answers = {"mypy": mine}
         for name in checkers[1:]:
-            rec = said[name].get((to_base[r["file"]], r["line"], r["col"]),
+            rec = said[name].get((to_path[r["file"]], r["line"], r["col"]),
                                  {"error": "not asked"})
             answers[name], r[name] = server_answer(rec, sources, tokens)
         r["answers"] = answers

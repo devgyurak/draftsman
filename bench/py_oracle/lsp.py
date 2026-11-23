@@ -2,10 +2,11 @@
 and ty answer the names mypy recorded (bench/py_oracle/oracle.py). The standard library
 only; the server is a command of its own environment.
 
-    python lsp.py OUT.jsonl ROOT POSITIONS-FILE PYTHON -- SERVER-COMMAND...
+    python lsp.py OUT.jsonl WORKSPACE POSITIONS-FILE PYTHON -- SERVER-COMMAND...
 
-ROOT is the workspace: the directory the top package sits in. POSITIONS-FILE lists
-`FILE<TAB>LINE<TAB>COL` (FILE relative to ROOT, 1-based lines, 0-based UTF-16 columns).
+WORKSPACE is the workspace folder the server is given: the directory the top package
+sits in, or one whose configuration file points there. POSITIONS-FILE lists
+`FILE<TAB>LINE<TAB>COL` (an absolute path, a 1-based line, a 0-based UTF-16 column).
 PYTHON is the interpreter whose site-packages hold the dependencies. Each position gets one
 record, {"file", "line", "col", "defs": [[PATH, LINE, COL], ...]} with the absolute path
 and the 1-based line and 0-based column a definition starts at, or {"error": ...} when
@@ -133,7 +134,7 @@ def main() -> int:
 
     records = []
     for rel, places in sorted(by_file.items()):
-        path = root_path / rel
+        path = Path(rel)
         doc = path.as_uri()
         server.notify("textDocument/didOpen", {"textDocument": {
             "uri": doc, "languageId": "python", "version": 1,
