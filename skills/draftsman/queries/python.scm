@@ -170,6 +170,8 @@
                     (tuple [(identifier) @body.var (list_splat (identifier) @body.var)])
                     (list [(identifier) @body.var (list_splat (identifier) @body.var)])])
 (named_expression name: (identifier) @body.var)
+; `del Foo` binds Foo as much as an assignment does (in a function it is a local)
+(delete_statement [(identifier) @body.var (expression_list (identifier) @body.var)])
 (nonlocal_statement (identifier) @body.var)
 (case_pattern . (dotted_name . (identifier) @body.var .) .)
 ; `case Bar(real=Foo)`, `case Bar() as Foo`, `case [*Foo]`, `case {**Foo}` bind Foo; in

@@ -67,3 +67,8 @@ class Hide:
             nonlocal Foo
             Foo = 2
         return inner, Foo                   #> Foo=var/r
+
+    def deleted(self, flag):
+        if flag:
+            del Bar                         #> Bar=disputed/r
+        return Bar()                        #> Bar=disputed/r

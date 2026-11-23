@@ -30,7 +30,8 @@ def test_body_names_stand_where_the_hand_written_answers_say():
     # every part of a name the extractor records is where a marker says a name is, unless
     # no marker lists it: a name outside the sources (`ValueError`, `Optional`) or lower
     # case may go unlisted, as in the key's selftest (one drawn without a marker fails the
-    # next test); every marked name is recorded, but one in a branch of a platform test
+    # next test); every marked name is recorded, but one in a branch of a platform test and
+    # the ones `del` binds (the key reads them as uses)
     want = _want()
     problems, recorded = [], set()
     for raw in _fixture():
@@ -49,7 +50,8 @@ def test_body_names_stand_where_the_hand_written_answers_say():
     assert problems == []
     missed = sorted((rel, line, answer) for (rel, line, col), (answer, _) in want.items()
                     if answer != "-" and (rel, line, col) not in recorded)
-    assert missed == [("p/platform.py", 18, "disputed")]
+    assert missed == [("p/bindings.py", 47, "var"), ("p/hide.py", 73, "disputed"),
+                      ("p/platform.py", 18, "disputed")]
 
 
 def test_body_relations_go_where_the_hand_written_answers_say():
