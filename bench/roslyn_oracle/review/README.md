@@ -22,6 +22,9 @@ mismatch not listed below, or on fewer names drawn than the table gives.
 | `cs9` | 54 | a qualified name's first part in every position, alias targets, arity, `#if` with `==` and `!=` |
 | `cs10` | 2 | internal and unreferenced projects' namespaces before a qualified name |
 | `dbg` | 9 | a `using` of a namespace of the sources that holds no type itself |
+| `cs11` | 18 | an alias before and after a file-scoped namespace, a block using's generic type before a qualified name, `using static` fields and variables of other members before a receiver |
+| `cs12` | 0 | a package a referenced project references; a project's own code below a package's namespace |
+| `cs13` | 12 | global, csproj and nested-block aliases, an alias of a generic type, arity through block, file, global and static usings |
 
 ## Known limits
 
@@ -30,3 +33,14 @@ whose condition depends on a symbol):
 
 - `cs2/Dead.cs:9:30`
 - `cs2/Dead.cs:14:30`
+
+## Not drawn by design
+
+Below a namespace of a package the project references (the package's id or a namespace
+under it), the package may declare any type, so a name found further out draws nothing,
+although Roslyn finds a type of the sources there:
+
+- cs12/B/Mine.cs line 7 (`Order.Count`, Shop's through `using Shop;`)
+- cs12/E/Use.cs lines 6 to 10: in `namespace CommunityToolkit.Mvvm.Extras.Views` of a project
+  that references CommunityToolkit.Mvvm, a type `using` brings in (`Item`), one of a
+  namespace around (`Helper`), a fully qualified and a partly qualified name (`Box`)
