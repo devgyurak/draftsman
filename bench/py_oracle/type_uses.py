@@ -94,7 +94,9 @@ class Source:
     def char(self, line: int, col: int, name: str, end: bool = False):
         """The character index of ``name`` that mypy places at ``col`` (its start, or its
         end when ``end``), or None. mypy's column is 2 * characters - UTF-8 bytes on a line
-        with other than ASCII before it, the character index on any other."""
+        with other than ASCII before it, the character index on any other; on such a line
+        its start columns are sometimes one more than that (after two characters outside
+        the BMP, `"😀😀", Foo()`), its end columns never are."""
         text = self.lines[line - 1] if 0 < line <= len(self.lines) else ""
         if text.isascii():
             c = col - len(name) if end else col
@@ -241,7 +243,13 @@ class Uses(TraverserVisitor):
             e = e.expr
         if not isinstance(e, NameExpr):
             return None
-        c = self.src.char(e.line, e.column, e.name)
+        # by its end, when the span is the name's (mypy gives a name of the length of a
+        # whole `from m import Foo` in a function)
+        c = self.src.char(e.end_line, e.end_column, e.name, end=True) \
+            if e.end_line == e.line and e.end_column is not None \
+            and e.end_column - e.column in (len(e.name), len(e.name) - 1) else None
+        if c is None:
+            c = self.src.char(e.line, e.column, e.name)
         if c is None:
             return None
         parts.append((e.name, e.line, c, e.node))
@@ -407,7 +415,10 @@ class TypeNames(TypeTraverserVisitor):
         text = src.lines[line - 1] if line <= len(src.lines) else ""
         # mypy's column for the type as written: find the dotted name it starts
         for m in _DOTTED.finditer(text):
-            if src.char(line, t.column, m.group(0).split(".")[0].strip()) == m.start():
+            last = m.group(0).rsplit(".", 1)[-1].strip()
+            if src.char(line, t.column, m.group(0).split(".")[0].strip()) == m.start() or (
+                    t.end_line == line and t.end_column is not None
+                    and src.char(line, t.end_column, last, end=True) == m.end() - len(last)):
                 c = m
                 break
         if c is None or src.at(line, c.start()) in "\"'":

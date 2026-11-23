@@ -77,4 +77,5 @@ def test_body_relations_go_where_the_hand_written_answers_say():
         ("p/hide.py", 56, "p.foo.Foo"), ("p/local.py", 22, "p.foo.Foo"),
         ("p/local.py", 47, "p.bar.Bar"),
         ("p/scopes.py", 11, "p.scopes.Outer.Inner"), ("p/scopes.py", 12, "p.bar.Inner"),
-        ("p/scopes.py", 18, "p.scopes.Outer"), ("p/scopes.py", 34, "p.scopes.Kind")]
+        ("p/scopes.py", 18, "p.scopes.Outer"), ("p/scopes.py", 34, "p.scopes.Kind"),
+        ("p/text.py", 7, "p.foo.Foo"), ("p/text.py", 9, "p.foo.Foo"), ("p/text.py", 9, "p.foo.Foo")]
