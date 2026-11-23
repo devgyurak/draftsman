@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Names in bodies with hand-written answers (README.md), checked against Roslyn by
+       bench/roslyn_oracle/oracle.py selftest. Two target frameworks: a file is in both
+       compilations, and where they resolve a name differently the key says "split". -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net11.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NoWarn>CS0168;CS0219;CS0164;CS8321;CS0649;CS0169;CS0414;CS0162</NoWarn>
+  </PropertyGroup>
+</Project>

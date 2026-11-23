@@ -31,7 +31,7 @@ import json
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 
 def read(path: Path) -> list[dict]:
@@ -137,10 +137,12 @@ def drawable(r: dict) -> bool:
 
 
 def compare(drawn: list[tuple[str, int, int, str, str]], recs: list[dict],
-            verbose: bool = False, key: str = "the answer key") -> int:
+            verbose: bool = False, key: str = "the answer key",
+            same: Callable[[dict, str], bool] = lambda r, dst: True) -> int:
     """Check every name a body relation is drawn from, (file, line, col, from, to) as
     _Builder.body_uses lists them, against what the key resolved at its place; 1 on any
-    mismatch outside the files that did not compile."""
+    mismatch outside the files that did not compile. ``same`` tells whether the key's
+    type of the target's id is the one drawn (C#'s two `Program` classes share an id)."""
     broken = {r["file"] for r in recs if "diagnostic" in r}
     uses = {(r["file"], r["line"], r["col"]): r for r in recs if "use" in r}
     problems: Counter = Counter()
@@ -153,6 +155,8 @@ def compare(drawn: list[tuple[str, int, int, str, str]], recs: list[dict],
             why = f"{key}: {r['kind']}"
         elif r["target"] != dst:
             why = f"{key}: {r['target']}"
+        elif not same(r, dst):
+            why = f"{key}: {r['target']} of {', '.join(r.get('files', ()))}"
         elif r["from"] != src:
             why = f"{key} draws it from {r['from']}"
         else:
