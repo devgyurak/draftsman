@@ -840,7 +840,13 @@ class Extractor:
             # the name may be the whole body: `X = Foo.BAR` (TypeScript's field initializer)
             if owner is None or a is None or not (in_body or node.id in regions):
                 continue
-            key, via, rm = place(a, node.start_byte)
+            _, via, rm = place(a, node.start_byte)
+            # a member inside a member (Python's `self.x = ...` in `__init__`) sees the outer
+            # one's names, under which they are kept
+            top_a = a
+            while (outer := anchor_of(top_a.parent)) is not None:
+                top_a = outer
+            key = top_a.id
             member_names = names.setdefault(key, BodyNames())
             if key not in seeded:
                 seeded.add(key)
