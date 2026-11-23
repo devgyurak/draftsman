@@ -3,8 +3,10 @@ using Shop.Rev.Odd;
 
 namespace Shop.Rev.Odd
 {
-    // a type named as one of C#'s contextual keywords
+    // types named as C#'s contextual keywords
     public class var { public static int Count; }
+    public class value { public static int Count; }
+    public class field { public static int Count; }
 }
 
 namespace Shop.Rev.Ctx
@@ -13,6 +15,9 @@ namespace Shop.Rev.Ctx
     {
         // with a type named var in scope, `var` names it
         public object A() => var.Count;   //> var=Shop.Rev.Odd.var/r
+        // `value` in a setter is its parameter, `field` in a property's accessor its backing field
+        public int P { get => field.GetHashCode(); set { int v = value.GetHashCode(); } }
+        public object B() => value.Count;   //> value=Shop.Rev.Odd.value/r
     }
 
     // `F(Order < b, Customer > d)` is two comparisons, not a declaration; after `out` it is one

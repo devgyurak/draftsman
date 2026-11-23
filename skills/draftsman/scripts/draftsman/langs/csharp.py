@@ -48,6 +48,11 @@ _MEMBER_DECL = re.compile(rb"\b(?:using[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \t]*"
                           rb"(?:;|=(?![=>])|\{[ \t\r\n]*(?:get|set|init)\b|=>)")
 
 
+# where a body's accessor search stops (implicit_variables)
+_TYPE_DECLARATIONS = frozenset({"class_declaration", "struct_declaration", "record_declaration",
+                                "interface_declaration", "enum_declaration", "compilation_unit"})
+
+
 def _blanked(src: bytes) -> bytes:
     """The code preprocess blanks that some build compiles: #elif and #else branches, not
     a branch no build takes (`#if false`, the #else of `#if true`)."""
@@ -761,6 +766,23 @@ class CSharpSpec(LanguageSpec):
             names = set(re.findall(r'\bx:Name\s*=\s*"(\w+)"', xaml))
             return {cls.group(1).rsplit(".", 1)[-1]: names} if cls and names else {}
         return {}
+
+    def implicit_variables(self, node):
+        # `value` in a set, init, add or remove accessor; `field` (C# 14) in a property's
+        # accessor, the property's backing field
+        cur = node.parent
+        while cur is not None and cur.type != "accessor_declaration":
+            if cur.type in _TYPE_DECLARATIONS:
+                return frozenset()
+            cur = cur.parent
+        if cur is None:
+            return frozenset()
+        keyword = next((c.type for c in cur.children if not c.is_named), "")
+        out = {"value"} if keyword in ("set", "init", "add", "remove") else set()
+        owner = cur.parent.parent if cur.parent is not None else None
+        if owner is not None and owner.type == "property_declaration":
+            out.add("field")
+        return frozenset(out)
 
     def implicit_types(self, root_node):
         # top-level statements are the body of an implicit `Program` of the project

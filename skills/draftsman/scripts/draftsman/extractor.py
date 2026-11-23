@@ -992,6 +992,8 @@ class Extractor:
             elif any(name == head for name, *_ in local_imports.get(key, ())):
                 # before the import, outside its function, or two imports of the name
                 ref_names = BodyNames(member_names.variables | {head}, member_names.types)
+            if implicit := self.spec.implicit_variables(node):   # C#'s `value` in a setter
+                ref_names = BodyNames(ref_names.variables | implicit, ref_names.types)
             after = node.parent.child_by_field_name("name") if position == "receiver" else None
             types_by_node[owner.id].body_refs.append(RawBodyRef(
                 ".".join(self.spec.body_name_text(_text(n, src)) for n in parts), position,

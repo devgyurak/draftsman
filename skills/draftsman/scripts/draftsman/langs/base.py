@@ -301,6 +301,11 @@ class LanguageSpec:
         InternalsVisibleTo)."""
         return False
 
+    def implicit_variables(self, node: "ts.Node") -> frozenset[str]:
+        """Variables the language binds around a name in a body without a declaration in
+        the source (C#'s `value` in a setter, `field` in a property's accessor)."""
+        return frozenset()
+
     def implicit_types(self, root_node: "ts.Node") -> list[str]:
         """Ids of the types a file declares without a declaration (C#'s `Program` of
         top-level statements): one per build project that has such a file."""
