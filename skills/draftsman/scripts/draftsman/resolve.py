@@ -779,12 +779,21 @@ class Resolver:
         res = self.resolve(name, rtype, ref.member, scope=ref.scope, strict=True,
                            nested=spec.nested_types_in_bodies)
         if res.status == PROJECT and spec.rebinding_hides and (
-                self._rebound(res.target) or sep not in name and any(
+                self._rebound(res.target) or self._star_outside(ref.scope, spec)
+                or sep not in name and any(
                     found != res.target for found in self._star_provides(name, ref.scope, spec))):
             # `try: from x import Foo` / `except: class Foo`; `class Foo` beside a star
-            # import that brings in another Foo
+            # import that brings in another Foo, or beside one from outside the sources,
+            # which may
             return Resolution(UNRESOLVED)
         return res
+
+    def _star_outside(self, scope: FileScope, spec) -> bool:
+        """Whether the file has a wildcard import of a module outside the sources
+        (`from tkinter import *`), whose names are not known."""
+        return any(imp.wildcard and (imp.external or not (
+            self.scopes_by_ns.get(imp.path) or self._by_suffix(imp.path, self.scopes_by_ns, spec)))
+            for imp in scope.imports)
 
     def _star_provides(self, name: str, scope: FileScope, spec) -> list[str]:
         """The project types the file's wildcard imports are known to bring in as ``name``."""

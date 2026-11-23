@@ -199,7 +199,9 @@ SCOPE_RULES = {
         **_ALL,
         "java": ("StripeGateway", "dependency", "Money", "body"),   # `new Receipt.Money(...)`
         "typescript": ("StripeGateway", "dependency", "Money", "body"),   # `: Receipt.Money`
-        "python": ("StripeGateway", "dependency", "Money", "body"),   # `Receipt.Money(0, "usd")`
+        # `Order(customer)`; gateway.py's `Receipt.Money(0, "usd")` is beside `from stripe
+        # import *`, which may bind Receipt
+        "python": ("OrderService", "dependency", "Order", "body"),
     },
     "package re-export by wildcard": {
         **_ALL,
