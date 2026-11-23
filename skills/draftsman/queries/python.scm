@@ -149,6 +149,22 @@
   alternative: (elif_clause condition: (_) @_test (#match? @_test "sys\\.(platform|version_info)"))
   alternative: (else_clause body: (block) @body.guarded))
 
+; the same for code only run outside type checking: mypy and pyright skip the branches after
+; `if TYPE_CHECKING:` (`typing.TYPE_CHECKING` too) and `if not TYPE_CHECKING:`, and the
+; value of `Foo() if TYPE_CHECKING else Bar()` that runs; only ty reads them
+(if_statement condition: [(identifier) (attribute)] @_tc (#match? @_tc "(^|\\.)TYPE_CHECKING$")
+  alternative: [(elif_clause) (else_clause)] @body.guarded)
+(if_statement condition: (not_operator argument: [(identifier) (attribute)] @_tc)
+  (#match? @_tc "(^|\\.)TYPE_CHECKING$")
+  consequence: (block) @body.guarded)
+(elif_clause condition: (not_operator argument: [(identifier) (attribute)] @_tc)
+  (#match? @_tc "(^|\\.)TYPE_CHECKING$")
+  consequence: (block) @body.guarded)
+(conditional_expression (_) . "if" . [(identifier) (attribute)] @_tc . "else" . (_) @body.guarded
+  (#match? @_tc "(^|\\.)TYPE_CHECKING$"))
+(conditional_expression (_) @body.guarded . "if" . (not_operator argument: [(identifier) (attribute)] @_tc)
+  (#match? @_tc "(^|\\.)TYPE_CHECKING$"))
+
 ; what may hide one: parameters (of the method and of the functions and lambdas in it),
 ; the names its statements bind, and local functions and classes
 (parameters (identifier) @body.var)
