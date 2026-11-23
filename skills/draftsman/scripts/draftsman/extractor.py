@@ -83,6 +83,8 @@ class RawBodyRef:
     classes: list[list[str]] = field(default_factory=list)
     # how many type arguments each part is written with (LanguageSpec.arity), or None
     arities: list[Optional[int]] = field(default_factory=list)
+    # a receiver's member after it (`Create` in `Order.Create()`; LanguageSpec.color_color)
+    next: Optional[str] = None
 
     @property
     def line(self) -> int:
@@ -947,10 +949,13 @@ class Extractor:
             elif any(name == head for name, *_ in local_imports.get(key, ())):
                 # before the import, outside its function, or two imports of the name
                 ref_names = BodyNames(member_names.variables | {head}, member_names.types)
+            after = node.parent.child_by_field_name("name") if position == "receiver" else None
             types_by_node[owner.id].body_refs.append(RawBodyRef(
                 ".".join(self.spec.body_name_text(_text(n, src)) for n in parts), position,
                 [(_line(n), _utf16_col(n, src)) for n in parts], via, ref_scope, rm,
-                ref_names, list(around), [self.spec.arity(n) for n in parts]))
+                ref_names, list(around), [self.spec.arity(n) for n in parts],
+                _text(self._parts(after)[0], src) if after is not None and after.id != node.id
+                else None))
 
     def _enclosing(self, node: ts.Node, type_ids: set[int]) -> Optional[ts.Node]:
         """The function or the type whose body ``node`` stands in, or None."""

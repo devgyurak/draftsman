@@ -189,6 +189,10 @@ class LanguageSpec:
     # class and an import) draws nothing in a body, as a variable would: which binding a
     # body sees depends on what ran (Python's `try: from x import Foo` / `except: class Foo`)
     rebinding_hides: bool = False
+    # Whether a field or property whose type has its name (C#'s `Order Order`) leaves the
+    # name a type before a static member (`Order.Create()`), and a variable before any
+    # other (`Order.Total`): C#'s "Color Color" rule
+    color_color: bool = False
     # Whether a name in a body that is an alias the file declares of one project type
     # (C#'s `using O = Shop.Order;`) draws a relation to that type; a TypeScript alias
     # draws nothing in a body

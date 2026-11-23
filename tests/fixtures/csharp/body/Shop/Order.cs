@@ -8,6 +8,8 @@ public class Order
     public decimal Total;
     public static Order Create() => new Order();   //> Order=- Order=Shop.Order/t
     public static Order Empty { get; } = new Order();   //> Order=- Order=Shop.Order/t
+    public static Order Of() => Empty;   //> Order=-
+    public int Of(int x) => x;
 
     public class Line
     {

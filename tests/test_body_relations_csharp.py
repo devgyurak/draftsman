@@ -66,31 +66,29 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     assert wrong == []
     # every project type is drawn, but a type's own name, the part of a longer name
     # (`Order` in `Order.Line`), in top-level statements, after `global::`, through an
-    # alias, where a variable of the name has the type's name for its type
-    # (`Order Order`: Roslyn reads `Order.Create()` as the type, `Order.Total` as the
-    # variable; the extractor reads neither), where the arity written is not the
-    # nearest type's (`Box` beside Shop.Box<T>: Roslyn's is Lib.Box further out), and
-    # where a static field a file's `using static` brings in shares the name (Roslyn
-    # looks at the namespaces around first; the extractor takes the field wherever)
+    # alias where a namespace around declares a type of the name (Roslyn's is that type,
+    # which in a file-scoped namespace the extractor puts after the alias), where a
+    # parameter of the name has the type's name for its type (`Customer Customer`:
+    # Roslyn reads `Customer.Guest` as the type; the extractor knows a field's type, not a
+    # parameter's) or a field does and the member after it has a static and an instance
+    # overload (`Order.Of()`), where the arity written is not the nearest type's (`Box`
+    # beside Shop.Box<T>: Roslyn's is Lib.Box further out), and where a static field a
+    # file's `using static` brings in shares the name (Roslyn looks at the namespaces
+    # around first; the extractor takes the field wherever)
     missed = [(file, line, answer) for (file, line, col), (answer, position) in want.items()
               if answer in builder.types and (file, line, col) not in drawn]
     own = [("Lib/Lib.cs", 31, "Lib.Extra.Receipt"), ("Shop/Bodies.cs", 30, "Shop.Bodies"),
            ("Shop/Order.cs", 9, "Shop.Order"), ("Shop/Order.cs", 10, "Shop.Order"),
-           ("Shop/Order.cs", 14, "Shop.Order.Line"), ("Shop/Order.cs", 21, "Shop.Customer"),
-           ("Shop/Order.cs", 26, "Shop.Status"), ("Shop/Order.cs", 40, "Shop.Money"),
+           ("Shop/Order.cs", 16, "Shop.Order.Line"), ("Shop/Order.cs", 23, "Shop.Customer"),
+           ("Shop/Order.cs", 28, "Shop.Status"), ("Shop/Order.cs", 42, "Shop.Money"),
            ("Shop/Repo.cs", 11, "Shop.Repo")]
     parts = [("Shop/Positions.cs", 27, "Shop.Order"), ("Shop/Positions.cs", 43, "Shop.Order"),
-             ("Shop/Positions.cs", 44, "Shop.Util")]
+             ("Shop/Positions.cs", 44, "Shop.Util"), ("Shop/ColorColor.cs", 12, "Shop.Order")]
     top_level = [("Program.cs", 4, "Shop.Order"), ("Program.cs", 5, "Shop.Customer"),
                  ("Program.cs", 5, "Shop.Order")]
     global_ = [("Shop/Positions.cs", 28, "Shop.Order"), ("Shop/Positions.cs", 47, "Shop.Status")]
-    # (an alias of one project type is followed, `O`, but not where a namespace around
-    # declares a type of the name: Roslyn's is Shop.Order around it, which in a file-scoped
-    # namespace the extractor puts after the alias)
     alias = [("Shop/Members.cs", 9, "Shop.Order"), ("Shop/Members.cs", 10, "Shop.Order")]
-    color_color = [("Shop/Hiding.cs", 11, "Shop.Order"), ("Shop/Hiding.cs", 17, "Shop.Money"),
-                   ("Shop/Hiding.cs", 29, "Shop.Money"), ("Shop/Hiding.cs", 35, "Shop.Order"),
-                   ("Shop/Hiding.cs", 77, "Shop.Customer")]
+    color_color = [("Shop/Hiding.cs", 77, "Shop.Customer"), ("Shop/ColorColor.cs", 13, "Shop.Order")]
     arity = [("Shop/Signatures.cs", 14, "Lib.Box")]
     using_static = [("Shop/Inner.cs", 17, "Shop.Money")]
     assert sorted(missed) == sorted(own + parts + top_level + global_ + alias + color_color

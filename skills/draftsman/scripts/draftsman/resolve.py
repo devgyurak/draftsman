@@ -14,7 +14,7 @@ from typing import Optional
 
 from .extractor import RawBodyRef, RawFile, RawMember, RawType
 from .langs import LANGUAGES, FileScope, Import, Unseen, spec_for_path
-from .model import IR, External, Location, Relation, Type, Unresolved
+from .model import IR, External, Location, Member, Relation, Type, Unresolved
 from .typeref import Named, function_types, named_refs, parse_type, value_names
 from .wrappers import Wrappers, combine
 
@@ -683,9 +683,14 @@ class Resolver:
         sep = spec.separator
         parts = ref.text.split(sep)
         # a type the member declares (a local class) is no package either
-        if parts[0] in ref.names.types or self._is_variable(parts[0], rtype, ref):
+        if parts[0] in ref.names.types:
             return None
-        res = self._in_body(parts[0], rtype, ref, 0)
+        if self._is_variable(parts[0], rtype, ref):
+            res = self._color_color(parts, rtype, ref, spec)
+            if res is None:
+                return None
+        else:
+            res = self._in_body(parts[0], rtype, ref, 0)
         if res.status == ALIAS and res.target:
             aliased = self._alias_type(res.target, parts[0], rtype, ref)
             res = Resolution(PROJECT, aliased) if aliased else Resolution(UNRESOLVED)
@@ -730,6 +735,67 @@ class Resolver:
                 break   # `Foo.Cond` where Foo's body binds Cond twice: Foo alone
             target, n = nested, n + 1
         return target, n
+
+    def _color_color(self, parts: list[str], rtype: RawType, ref: RawBodyRef,
+                     spec) -> Optional[Resolution]:
+        """The type a receiver's head names although a field or property of the name is
+        in scope, when the field's type has the name and the next part is a static member
+        or a nested type of it (LanguageSpec.color_color: `Order Order` and
+        `Order.Create()`); None where the head is a variable (`Order.Total`), or the
+        variable is one whose type the extractor does not know (a local, a parameter)."""
+        head = parts[0]
+        after = parts[1] if len(parts) > 1 else ref.next
+        if not spec.color_color or after is None or head in ref.names.variables \
+                or any(imp.static for imp in ref.scope.imports):
+            return None
+        member, cur = None, rtype
+        while cur is not None and member is None:
+            if head in cur.body_fields:
+                return None
+            member = self._field_named(cur, head, set())
+            cur = self.index.get(cur.outer) if cur.outer else None
+        written = member and member.type_ref and parse_type(member.type_ref)
+        if not isinstance(written, Named) or written.args \
+                or written.name.rsplit(spec.separator, 1)[-1] != head:
+            return None
+        res = self._in_body(head, rtype, ref, 0)
+        if res.status != PROJECT or not self._static_member(self.index[res.target], after,
+                                                            spec, set()):
+            return None
+        return res
+
+    def _field_named(self, rtype: RawType, name: str, seen: set) -> Optional[Member]:
+        """A field or property ``name`` of the type or a project supertype."""
+        if rtype.qualified_name in seen:
+            return None
+        seen.add(rtype.qualified_name)
+        for rm in rtype.members:
+            if rm.member.name == name and rm.member.kind in ("field", "property"):
+                return rm.member
+        for s in self.supertypes(rtype):
+            if s.status == PROJECT and (found := self._field_named(self.index[s.target], name, seen)):
+                return found
+        return None
+
+    def _static_member(self, rtype: RawType, name: str, spec, seen: set) -> bool:
+        """Whether ``name`` is a nested type of the type or of a project supertype, or
+        names static members there (an enum's constants) and no instance member: with an
+        instance overload beside a static one (`Make()` and `Make(int)`) the call decides."""
+        if self._member_type(rtype, name, spec.separator, True, set()):
+            return True
+        found: list[bool] = []
+
+        def walk(t: RawType) -> None:
+            if t.qualified_name in seen:
+                return
+            seen.add(t.qualified_name)
+            found.extend(rm.member.static or rm.member.kind == "enum_constant"
+                         for rm in t.members if rm.member.name == name)
+            for s in self.supertypes(t):
+                if s.status == PROJECT:
+                    walk(self.index[s.target])
+        walk(rtype)
+        return bool(found) and all(found)
 
     def _alias_type(self, alias: str, name: str, rtype: RawType,
                     ref: RawBodyRef) -> Optional[str]:
