@@ -78,3 +78,69 @@
 ; ---------------------------------------------------------------- aliases
 ; drawn through: a field typed with an alias relates to what the alias names
 (using_directive name: (identifier) @alias "=" . (_) @alias.type)
+
+; ---------------------------------------------------------------- bodies (issue #5)
+; where a name in a body is read: a member's block or `=>`, a constructor initializer, a
+; field's, property's or enum member's initializer
+(method_declaration body: (_) @body.region)
+(constructor_declaration body: (_) @body.region)
+(constructor_declaration (constructor_initializer) @body.region)
+(accessor_declaration body: (_) @body.region)
+(property_declaration value: (_) @body.region)
+(variable_declarator name: (_) . (_) @body.region)
+(enum_member_declaration value: (_) @body.region)
+; bodies of no listed member: their `via` is CSharpSpec.init_via's
+(operator_declaration body: (_) @body.init)
+(conversion_operator_declaration body: (_) @body.init)
+(destructor_declaration body: (_) @body.init)
+(indexer_declaration value: (_) @body.init)
+(indexer_declaration accessors: (accessor_list) @body.init)
+(event_declaration accessors: (accessor_list) @body.init)
+; a primary constructor's base arguments: `class B(int x) : A(x)`
+(base_list (argument_list) @body.init)
+
+; where only a type can stand: every `type:` (a local's, `new`, a cast, `typeof`,
+; `default`, a pattern's, `catch`, `foreach`, a lambda's or local function's parameter,
+; `T?`, `T[]`), `as` and `is` with a type, type arguments, and `is Foo` alone, which
+; Roslyn reads as a type before it reads a constant
+(_ type: [(identifier) (generic_name) (qualified_name) (alias_qualified_name)] @body.ref.type)
+(as_expression right: [(identifier) (generic_name) (qualified_name)] @body.ref.type)
+(is_expression right: [(identifier) (generic_name) (qualified_name)] @body.ref.type)
+(type_argument_list [(identifier) (generic_name) (qualified_name) (alias_qualified_name)] @body.ref.type)
+(is_pattern_expression pattern: (constant_pattern . [(identifier) (generic_name)] .) @body.ref.type)
+; `a * b` read as a pointer type in a declaration: no type
+(pointer_type type: (_) @body.unread)
+
+; where an expression stands, which a variable may be: the head of a member access
+; (`Foo.Create()`, `Foo.Line.Make()`, `Repo<int>.Make()`), `nameof(Foo)`, a constant
+; pattern (`case Status.Open:`, a switch arm's `Foo =>`, `is not Foo`, `is A.B`)
+(member_access_expression
+  expression: [(identifier) (generic_name) (member_access_expression)] @body.ref.receiver)
+(invocation_expression
+  function: (identifier) @_nameof (#eq? @_nameof "nameof")
+  arguments: (argument_list
+    (argument [(identifier) (generic_name) (member_access_expression)] @body.ref.receiver)))
+(constant_pattern [(identifier) (generic_name) (member_access_expression)] @body.ref.receiver)
+
+; variables a member declares: parameters, locals, `foreach`, `catch`, pattern and `out`
+; variables, deconstruction, lambda parameters, LINQ's range variables
+(parameter name: (identifier) @body.var)
+(implicit_parameter) @body.var
+(variable_declarator name: (identifier) @body.var)
+(foreach_statement left: (identifier) @body.var)
+(catch_declaration name: (identifier) @body.var)
+(declaration_pattern name: (identifier) @body.var)
+(declaration_expression name: (identifier) @body.var)
+(recursive_pattern name: (identifier) @body.var)
+(tuple_pattern name: (identifier) @body.var)
+(parenthesized_variable_designation (identifier) @body.var)
+(from_clause name: (identifier) @body.var)
+(let_clause . (identifier) @body.var)
+(join_clause (identifier) @body.var . "in")
+(join_into_clause (identifier) @body.var)
+(query_expression "into" . (identifier) @body.var)
+(type_parameter name: (identifier) @body.type)
+; a primary constructor's parameters are in scope in every body of the class (a record's
+; are its properties)
+(class_declaration (parameter_list (parameter name: (identifier) @body.field)))
+(struct_declaration (parameter_list (parameter name: (identifier) @body.field)))

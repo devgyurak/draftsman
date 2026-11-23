@@ -43,6 +43,9 @@ class Import:
     sep: str = "."
     static: bool = False   # Java `import static`: members of a type (`a.B.N`, `a.B.*`)
     aliased: bool = False  # a module import given its own name (Python's `import a.b as c`)
+    # the namespace block it stands in (LanguageSpec.block_imports): it is looked at with
+    # that namespace's types, before the namespaces around it
+    block: Optional[str] = None
 
     @property
     def local_name(self) -> str:
@@ -80,6 +83,8 @@ class FileScope:
     # top-level names the file binds more than once, one of them by a class statement
     # (LanguageSpec.rebinding_hides): no one class, also where another file imports it
     rebound: set[str] = field(default_factory=set)
+    # LanguageSpec.left_out_types: types a build may declare that the parser never saw
+    left_out_types: set[str] = field(default_factory=set)
     # names a statement at its top binds as a variable (`if x: Foo = None`, `del Foo`,
     # `global Foo` in a function): no class, also where another file takes them from it
     variables: set[str] = field(default_factory=set)
@@ -176,6 +181,9 @@ class LanguageSpec:
     # class and an import) draws nothing in a body, as a variable would: which binding a
     # body sees depends on what ran (Python's `try: from x import Foo` / `except: class Foo`)
     rebinding_hides: bool = False
+    # Whether an import in a namespace block belongs to that namespace (C#'s `namespace A {
+    # using B; }`): looked at after A's types and before the namespaces around A
+    block_imports: bool = False
     # Whether `import a.b` binds the head `a`, so that `a.b.Foo()` in a body goes through it
     # (Python)
     module_imports_bind_heads: bool = False
@@ -197,6 +205,21 @@ class LanguageSpec:
     def preprocess(self, src: bytes) -> bytes:
         """Source cleanup before parsing; must keep byte offsets (C++ macros)."""
         return src
+
+    def conditional_ranges(self, src: bytes) -> list[tuple[int, int]]:
+        """Byte ranges of the code preprocess keeps that a build may leave out (C#'s first
+        branch of an `#if`): a type declared there is no certain type for a body."""
+        return []
+
+    def left_out_types(self, src: bytes) -> set[str]:
+        """Simple names of the types declared in the code preprocess blanks (C#'s `#elif`
+        and `#else` branches): a body name of one of them may be that type in a build."""
+        return set()
+
+    def init_via(self, node: "ts.Node", src: bytes) -> Optional[str]:
+        """The `via` of a body no listed member holds (`@body.init` without `.name`), or
+        None for its text before `{` (Java's `static {}`)."""
+        return None
 
     def file_namespace(self, rel: str) -> Optional[str]:
         """Namespace implied by the file path (module languages), else None."""

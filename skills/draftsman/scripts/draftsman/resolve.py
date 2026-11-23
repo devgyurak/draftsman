@@ -524,19 +524,22 @@ class Resolver:
             for ns in chain:
                 cand = ns + sep + name if ns else name
                 if not self._sees(rtype, cand):
-                    continue
-                if cand in self.index:
+                    pass
+                elif cand in self.index:
                     return Resolution(PROJECT, cand)
-                if cand in self.inline_names:
+                elif cand in self.inline_names:
                     return Resolution(PROJECT, self.inline_names[cand])
-                if cand in self.aliases:
+                elif cand in self.aliases:
                     return Resolution(ALIAS, cand)  # a type alias: drawn through to its target
+                if (found := self._block_import(name, ns, scope, spec, strict)) is not None:
+                    return found
             return None
 
         if spec.namespaces_before_imports and (found := in_namespaces()):
             return found
         for imp in scope.imports:
-            if not imp.wildcard and not imp.module and imp.local_name == name:
+            if not imp.wildcard and not imp.module and imp.local_name == name \
+                    and imp.block is None:
                 if imp.ambiguous:
                     return self._ambiguous_package(imp, imp.path.rsplit(sep, 1)[-1], spec)
                 if not imp.external:
@@ -562,7 +565,7 @@ class Resolver:
         shared_wildcards: list[Import] = []   # declared in the project too, but not this name
         provided: list[str] = []
         for imp in scope.imports:
-            if imp.wildcard:
+            if imp.wildcard and imp.block is None:
                 found = None if imp.external or not self._exports(imp.path, name, spec, strict) \
                     else self.lookup(imp.path + sep + name, spec, certain=strict)
                 if found and not strict:
@@ -813,6 +816,26 @@ class Resolver:
             return Resolution(UNRESOLVED)
         return res
 
+    def _block_import(self, name: str, ns: str, scope: FileScope, spec,
+                      strict: bool) -> Optional[Resolution]:
+        """``name`` through the imports of the namespace block ``ns`` (Import.block), or
+        None: an alias of the name, else the one project type its wildcard imports provide
+        (two: unresolved)."""
+        sep = spec.separator
+        block = [imp for imp in scope.imports if imp.block is not None and imp.block == ns]
+        for imp in block:
+            if not imp.wildcard and imp.local_name == name:
+                found = None if imp.external else self.lookup(imp.path, spec, certain=strict)
+                return self._found(found) if found else Resolution(EXTERNAL, imp.path)
+        hits = list(dict.fromkeys(
+            found for imp in block if imp.wildcard and not imp.external
+            and self._exports(imp.path, name, spec, strict)
+            and (found := self.lookup(imp.path + sep + name, spec, certain=strict))))
+        if len(hits) > 1:
+            return Resolution(UNRESOLVED, candidates=hits,
+                              hint=f"{len(hits)} wildcard imports provide the name")
+        return self._found(hits[0]) if hits else None
+
     def _module_scopes(self, module: str, spec) -> list[FileScope]:
         return self.scopes_by_ns.get(module) or self.scopes_by_ns.get(
             self._by_suffix(module, self.scopes_by_ns, spec) or "", [])
@@ -915,7 +938,7 @@ class Resolver:
                 return True
         cur: Optional[RawType] = rtype
         while cur is not None:
-            if self._has_field(cur, name):
+            if self._has_field(cur, name) or name in cur.body_fields:
                 return True
             cur = self.index.get(cur.outer) if cur.outer else None
         sep = spec.separator
@@ -1020,6 +1043,8 @@ class _Builder:
         self.relations: list[Relation] = []
         # (file, line, column, from, to) of each name a body relation is drawn from
         self.body_uses: list[tuple[str, int, int, str, str]] = []
+        # types some build declares that the parser never saw (LanguageSpec.left_out_types)
+        self.left_out: set[str] = set().union(*(f.scope.left_out_types for f in files))
         self._alias_cache: dict[str, tuple[list, list]] = {}
 
     def _add(self, t: RawType) -> None:
@@ -1064,6 +1089,8 @@ class _Builder:
         existing.supers.extend(t.supers)
         existing.annotation_refs.extend(t.annotation_refs)
         existing.body_refs.extend(t.body_refs)
+        existing.body_fields |= t.body_fields
+        existing.conditional |= t.conditional
         existing.generics += [g for g in t.generics if g not in existing.generics]
         for m in t.modifiers:
             if m not in existing.modifiers:
@@ -1218,6 +1245,12 @@ class _Builder:
             else:
                 target, n = self.resolver.body_receiver(ref, rtype) or (None, 0)
             if target is None or target == rtype.qualified_name:
+                continue
+            # a type declared in code a build may leave out, or a name some build declares
+            # a type of where the parser saw none: no one type for every build
+            sep = LANGUAGES[rtype.language].separator
+            if self.types[target].conditional or any(
+                    p in self.left_out for p in ref.text.split(sep)[:n]):
                 continue
             line, col = ref.places[n - 1]
             self.body_uses.append((ref.scope.file, line, col, rtype.qualified_name, target))

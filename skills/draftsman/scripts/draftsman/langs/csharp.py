@@ -38,6 +38,30 @@ _WPF_REMOVED = ("System.IO", "System.Net.Http")
 _CONDITIONAL = re.compile(rb"^[ \t]*#[ \t]*(if|elif|else|endif)\b")
 
 
+# a type declared in blanked code (LanguageSpec.left_out_types)
+_TYPE_DECL = re.compile(rb"\b(?:class|struct|interface|record|enum)[ \t]+(?:class[ \t]+|struct[ \t]+)?"
+                        rb"([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _lines(src: bytes):
+    """(line, kept, inside an #if) for each line: a directive line is not kept, nor a line
+    of an #elif or #else branch (only each #if's first branch is read)."""
+    stack, active = [], True
+    for line in src.split(b"\n"):
+        m = _CONDITIONAL.match(line)
+        if m:
+            kw = m.group(1)
+            if kw == b"if":
+                stack.append(active)
+            elif kw in (b"elif", b"else"):
+                active = False if stack else active
+            elif stack:   # endif
+                active = stack.pop()
+            yield line, False, bool(stack)
+        else:
+            yield line, active, bool(stack)
+
+
 def _blank(line: bytes) -> bytes:
     return re.sub(rb"[^\r]", b" ", line)
 
@@ -200,8 +224,31 @@ class CSharpSpec(LanguageSpec):
         "accessor_list", "local_function_statement",
     })
     annotation_nodes = frozenset({"attribute"})
+    type_argument_nodes = frozenset({"type_argument_list"})
+    receiver_part_nodes = frozenset({"identifier", "generic_name", "member_access_expression",
+                                     "qualified_name"})
     # `E.V`, and a bare name, which in `nameof(Order)` is a type
     annotation_value_args = frozenset({"member_access_expression", "identifier"})
+
+    def init_via(self, node, src):
+        # the body of an operator, a destructor, an indexer or an event's accessors, or a
+        # primary constructor's base arguments (the constructor's, named as the class)
+        decl = node.parent
+        text = lambda n: src[n.start_byte:n.end_byte].decode("utf8", "replace")   # noqa: E731
+        if decl.type == "operator_declaration":
+            op = decl.child_by_field_name("operator")
+            return f"operator {text(op)}" if op is not None else "operator"
+        if decl.type == "conversion_operator_declaration":
+            return f"operator {text(decl.child_by_field_name('type'))}"
+        if decl.type == "destructor_declaration":
+            return f"~{text(decl.child_by_field_name('name'))}"
+        if decl.type == "indexer_declaration":
+            return "this[]"
+        if decl.type == "event_declaration":
+            return text(decl.child_by_field_name("name"))
+        if decl.type == "base_list":
+            return text(decl.parent.child_by_field_name("name"))
+        return None
 
     def annotation_arg(self, node, text):
         if node.type == "typeof_expression":   # `typeof(X)`
@@ -220,26 +267,26 @@ class CSharpSpec(LanguageSpec):
         "internal": "internal",
     }
     parent_namespace_lookup = True
+    block_imports = True
 
     def preprocess(self, src):
         # keep the first branch of every #if, blank the #elif/#else branches and the
         # directive lines (same length, so line numbers stay exact). One deterministic
         # configuration, and it parses wherever the directives sit
-        out, stack, active = [], [], True
-        for line in src.split(b"\n"):
-            m = _CONDITIONAL.match(line)
-            if m:
-                kw = m.group(1)
-                if kw == b"if":
-                    stack.append(active)
-                elif kw in (b"elif", b"else"):
-                    active = False if stack else active
-                elif stack:   # endif
-                    active = stack.pop()
-                out.append(_blank(line))
-            else:
-                out.append(line if active else _blank(line))
-        return b"\n".join(out)
+        return b"\n".join(line if kept else _blank(line) for line, kept, _ in _lines(src))
+
+    def conditional_ranges(self, src):
+        # what the first branch of an #if keeps
+        out, at = [], 0
+        for line, kept, inside in _lines(src):
+            if kept and inside:
+                out.append((at, at + len(line)))
+            at += len(line) + 1
+        return out
+
+    def left_out_types(self, src):
+        blanked = b"\n".join(line for line, kept, _ in _lines(src) if not kept)
+        return {m.decode() for m in _TYPE_DECL.findall(blanked)}
 
     def is_package_head(self, head, known):
         # namespaces are capitalised too: only what the file or the project uses as one

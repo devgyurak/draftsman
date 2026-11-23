@@ -44,7 +44,7 @@ public class Hiding : Base
         if (o is Order Money) { var d = Money.Total; }   //> Order=Shop.Order/t Money=- Money=var/r
         if (int.TryParse("1", out var Util)) { var e = Util.ToString(); }   //> Util=- Util=var/r
         try { } catch (OrderException Status) { var f = Status.Message; }   //> OrderException=Shop.OrderException/t Status=- Status=var/r
-        using var Repo = new System.IO.MemoryStream();   //> Repo=-
+        using var Repo = new System.IO.MemoryStream();   //> Repo=- System=- IO=- MemoryStream=System.IO.MemoryStream/t
         var g = Repo.Length;   //> Repo=var/r
         var (Line, n) = (1, 2);   //> Line=-
         var h = Line.ToString();   //> Line=var/r

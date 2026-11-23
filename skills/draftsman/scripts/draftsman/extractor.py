@@ -104,6 +104,11 @@ class RawType:
     supers: list[RawSuper] = field(default_factory=list)
     annotation_refs: list[RawAnnotation] = field(default_factory=list)
     body_refs: list[RawBodyRef] = field(default_factory=list)
+    # variables in scope in every body of the type that are none of its members (C#'s
+    # primary constructor parameters, `@body.field`)
+    body_fields: set[str] = field(default_factory=set)
+    # declared in code a build may leave out (LanguageSpec.conditional_ranges)
+    conditional: bool = False
 
 
 @dataclass
@@ -329,13 +334,15 @@ class Extractor:
         spec = self.spec
         original = path.read_bytes()
         src = spec.preprocess(original)
+        conditional = spec.conditional_ranges(original)
         tree = self.parser.parse(src)
         mod_path = self._module_path(root, rel)
         project, build_imports = spec.project_imports(path, root)
         if root not in self._workspaces:
             self._workspaces[root] = spec.workspace_packages(root)
         self._packages = self._workspaces[root]
-        scope = FileScope(file=rel, namespace=spec.file_namespace(mod_path), project=project)
+        scope = FileScope(file=rel, namespace=spec.file_namespace(mod_path), project=project,
+                          left_out_types=spec.left_out_types(original))
         raw = RawFile(path=rel, scope=scope)
         unseen: list[tuple[str, Unseen]] = [
             (name, Unseen(rel, line, line, macro))
@@ -422,6 +429,14 @@ class Extractor:
                 if not spec.is_import(node):
                     continue
                 imp = self._import(caps, src, mod_path)
+                if imp is not None and spec.block_imports:
+                    parts, cur = [], node.parent
+                    while cur is not None:
+                        if cur.id in namespaces:
+                            parts.insert(0, namespaces[cur.id])
+                        cur = cur.parent
+                    if parts:
+                        imp.block = spec.separator.join(p for p in [scope.namespace, *parts] if p)
                 if imp is not None:
                     around = self._enclosing(node, type_ids) if spec.local_imports else None
                     if around is None:
@@ -503,6 +518,7 @@ class Extractor:
                 modifiers=mods,
                 annotations=annos + [annotation_name(_text(a, src))
                                      for a in caps.get("annotation", [])],
+                conditional=any(a <= node.start_byte < b for a, b in conditional),
             )
             return entry["raw"]
 
@@ -667,6 +683,8 @@ class Extractor:
                     regions.add(n.id)
                     if (name := _first(caps, "body.init.name")) is not None:
                         inits[n.id] = _text(name, src)   # a compact constructor
+                    elif (via := self.spec.init_via(n, src)) is not None:
+                        inits[n.id] = via
                     else:
                         head = _text(n, src).split("{", 1)[0].strip()
                         inits[n.id] = f"{head} {{}}" if head else "{}"
@@ -688,6 +706,9 @@ class Extractor:
                     regions.add(n.id)
                 elif cap == "body.var":
                     declared.append((n, "variables"))
+                elif cap == "body.field":
+                    if (owner := self._owner(n, types_by_node)[0]) is not None:
+                        owner.body_fields.add(_text(n, src))
                 elif cap == "body.type":
                     declared.append((n, "types"))
                 elif cap == "body.import":
@@ -918,9 +939,11 @@ class Extractor:
 
     def _dotted(self, node: ts.Node) -> bool:
         """Whether a receiver is a dotted name: every node of it one of
-        LanguageSpec.receiver_part_nodes (no call in `new Foo(x).m`)."""
+        LanguageSpec.receiver_part_nodes (no call in `new Foo(x).m`), type arguments
+        aside (`Repo<int>.Make()`)."""
         return node.type in self.spec.receiver_part_nodes and all(
-            self._dotted(c) for c in node.named_children if not c.is_extra)
+            self._dotted(c) for c in node.named_children
+            if not (c.is_extra or c.type in self.spec.type_argument_nodes))
 
     def _parts(self, node: ts.Node) -> list[ts.Node]:
         """The identifiers of a dotted name, without the annotations, type arguments and
