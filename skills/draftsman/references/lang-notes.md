@@ -134,30 +134,53 @@ is that type. Aliases of aliases are followed.
   brings in, or a member generated code declares (Razor's `@inject` and `@code` members of
   `X.razor` for `X.razor.cs`, also from `_Imports.razor`; XAML's `x:Name` of `X.xaml` for
   `X.xaml.cs`; CommunityToolkit.Mvvm's `[ObservableProperty]` and `[RelayCommand]`;
-  `[JsonSerializable(typeof(T))]`). A field or property whose type has its name
-  (`OrderStatus OrderStatus`) leaves the name the type before a nested type or a member
-  that is static wherever it is declared (C#'s "Color Color"), and the field before any
-  other. A `using` in a namespace block comes before the namespaces around it; an alias
-  the file declares of one project type (`using O = Shop.Order;`) names that type, unless
-  a namespace around declares a type of the name. A name the written arity does not fit
-  (`Box` where the nearest Box is `Box<T>`) draws nothing.
+  `[JsonSerializable(typeof(T))]`), a C# 14 extension block's receiver parameter, or a
+  member of a base class outside the sources: one the .NET and ASP.NET table gives
+  (`ControllerBase.User`, `Exception.Data`; `langs/csharp_framework.json`, made by
+  `bench/roslyn_oracle/oracle.py framework` from the reference assemblies), and any name
+  under a base the table does not know (a package's, MAUI's; a name `I` + a capital is
+  taken for an interface, which passes on none). A private field or nested type of a
+  project base class is no member of its subclass. A field or property whose type has its
+  name (`OrderStatus OrderStatus`) leaves the name the type before a nested type or a
+  member that is static wherever it is declared (C#'s "Color Color") when the field's type,
+  resolved where the field is declared, is that type (not `Lib.Order Order` in Shop, an
+  array, a generic or a struct's `Spot? Spot`) and no extension method of the sources has
+  the member's name; the field before any other. A delegate, and an extension block's type
+  parameter, hide a type of their name. A `using` in a namespace block or after a
+  file-scoped namespace comes before the namespaces around it: a namespace outside the
+  sources declares what the table says (System's `Task`), and one the table does not know
+  may declare any name the block's project namespaces do not; an alias the file declares
+  of one project type (`using O = Shop.Order;`) names that type, unless a namespace around
+  declares a type of the name; `<Using Include Alias>` and `<Using Static="true">` items of
+  the project file are global usings. A Razor component (`X.razor`) is a type of its
+  `@namespace`, else the nearest `_Imports.razor`'s plus the folders below it, else the
+  root namespace plus folders. A `file` type is seen in its file only; a type `internal`
+  in another project (or nested in one) only where that project's `InternalsVisibleTo`
+  (item or attribute) names the file's assembly. A name the written arity does not fit
+  (`Box` where the nearest Box is `Box<T>`) draws nothing; nor does `(Foo) - 1`, which C#
+  reads as a parenthesized name, or a property pattern's path (`{ Customer.Name: "x" }`).
 - Where a build may resolve a body's name differently, nothing is drawn: a type declared
   in the `#if` branch the parser reads (Serilog's `System.TimeProvider` for older
-  targets), a name a type, field or alias of an `#elif`/`#else` branch has, a name the
+  targets), a name a type, field or alias of an `#elif`/`#else` branch has (in any file
+  of the type), a name the
   file resolves through a `using` in an `#if` branch, an id two build projects declare
   (two projects' `partial class Program`, the implicit `Program` of top-level
   statements), a type of a project the file's project does not reference
   (`<ProjectReference>`, followed through), and in a .NET MAUI app code only a platform's
-  build compiles (`Platforms/<platform>/`, `#if ANDROID`, `#if IOS || MACCATALYST`). A
+  build compiles (`Platforms/<platform>/`, `#if ANDROID`, `#if IOS || MACCATALYST`); no
+  build compiles `#if false`. A
   type gRPC generates from the project's `<Protobuf Include>` (each .proto's messages,
   enums and services, in its `csharp_namespace`) hides a type of the name a `using`
   brings in, also for declared relations. Checked against Roslyn (`bench/roslyn_oracle`,
   each file's compilations joined; a place they resolve differently is no answer): 0
   mismatches on eShopOnWeb, eShop and Serilog.
-- Known limits of bodies: a member a base class outside the sources declares is not known
-  (`ControllerBase.User`, `PageModel.Request`), so it hides nothing: a project type of its
-  name in a subclass's body is drawn where C# reads the member (none on the three e2e
-  repositories); the base's nested types the same. Lost: names in top-level statements
+- Known limits of bodies: an `#if` the parser reads takes its first branch, so a symbol no
+  build defines (`#if NEVER_DEFINED`) and `#if !DEBUG` (the key builds Debug) draw where
+  no build compiles. Lost: under a base class outside .NET and ASP.NET, every name where a
+  variable may stand (7 on eShop's MAUI app); behind a namespace the table does not know
+  in a nearer using (2 on eShop); a `file` type's name, and in another file a name it
+  shares; a Color Color name before a member an extension method shares (`Of`); names in
+  top-level statements
   (no type the extractor sees holds them), after `global::`, through an alias another
   file declares, a parameter or a local of its type's name (Color Color, whose type is
   not kept), a static member beside an instance overload of its name, a name a file's
@@ -165,8 +188,7 @@ is that type. Aliases of aliases are followed.
   another arity further out (`Lib.Box` beyond `Box<T>`), and a name a switch arm's
   pattern variable shares elsewhere in the member.
 - Not handled: extension methods (they stay members of their static class, which is
-  correct but not linked to the extended type), alias and static `<Using>` items in the
-  project file, the .NET 8 rule that drops `System.Net.Http` for .NET Framework targets.
+  correct but not linked to the extended type), the .NET 8 rule that drops `System.Net.Http` for .NET Framework targets.
   Declared relations ignore project references and the arity written (`Repo<int>` may
   resolve to a `Repo` of the namespace around), take types of one id from two projects
   for one (`Program`), see the `using X = ...` alias of a file without a namespace in

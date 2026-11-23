@@ -10,7 +10,10 @@ Notes for anyone with `view.json` files written against a development build:
 - **After 0.6.0**: C#'s `ir.json` gains the relations read from names in bodies (below);
   results measured with 0.6.0 are not comparable on what C# bodies relate. One declared
   relation changes: eShop's `BasketService` extends the gRPC-generated
-  `Basket.BasketBase`, an external type now. The other languages' `ir.json` are the same.
+  `Basket.BasketBase`, an external type now; and two of eShop's dependencies go to the type
+  the file's own `using` names (`OrderingContextSeed`'s `CardType`,
+  `CreateOrderDraftCommandHandler`'s `Order`: the domain's, not `Application.Queries`').
+  The other languages' `ir.json` are the same.
 - **0.6.0**: Python's `ir.json` gains the relations read from names in bodies (below);
   results measured with 0.5.0 are not comparable with 0.6.0 ones on what Python bodies
   relate, and a few Python declarations change (an import in a function or a class body
@@ -118,7 +121,7 @@ Notes for anyone with `view.json` files written against a development build:
   compilation resolves at each name; a file several compilations compile (target
   frameworks, `<Compile Include>` links) has an answer only where they all agree, and a
   place none compiles has none. eShopOnWeb: 252 names drawn, Serilog 655 (5 target
-  frameworks), eShop 555 (eShop's MAUI apps compiled for plain `net11.0`), 0 mismatches.
+  frameworks), eShop 551 (eShop's MAUI apps compiled for plain `net11.0`), 0 mismatches.
   The key also answers for any directory with a `.csproj` (`oracle.py key DIR
   --compare`), which four rounds of sources written by hand ran through: they drew a
   wrong type in operator and indexer bodies (their parameters hid nothing), through
@@ -126,15 +129,33 @@ Notes for anyone with `view.json` files written against a development build:
   `using static` in a namespace block, a type of a project the file's project does not
   reference, a `using`, a field or an alias only some build has, and a member generated
   code declares (Razor `@inject`, XAML `x:Name`, `[ObservableProperty]`,
-  `[JsonSerializable]`), all now closed and pinned in a fixture of 174 names compiled for
+  `[JsonSerializable]`), all now closed and pinned in a fixture of 204 names compiled for
   net11.0 and net10.0. The rules turned off one at a time keep these wrong names out of the
   e2e projects: fields and properties 3, 35 and 4 (eShop at a cost of 16 right ones, which
   C#'s Color Color rule, also followed, recovers), a type declared in an `#if` 1 (Serilog,
   at a cost of 8), one id of two projects 2, gRPC's generated types 1, MAUI's platform
-  code 13; the others only the fixture's. eShopOnWeb gains 207 body dependencies, Serilog 363, eShop 442; the
+  code 13; the others only the fixture's. eShopOnWeb gains 207 body dependencies, Serilog 363, eShop 439; the
   e2e focus diagrams grow from 5 to 7 types (`BasketService`), 13 to 22 (`Logger`) and 20
   to 27 (`OrderingContext`). jsoup's, petclinic's, Netty's, nest's, TypeORM's, httpx's and
   Django's `ir.json` are byte for byte the same.
+- **More C# forms that drew a wrong type in a body** (#5, after 0.6.0). A review's four
+  sets of sources written by hand drew 23, 11, 4 and 4 wrong names, now closed: a base
+  class's private nested type or field, a member of a base class outside the sources
+  (`ControllerBase.User`, `Exception.Data`, from a table of .NET's and ASP.NET Core's
+  reference assemblies that `bench/roslyn_oracle/oracle.py framework` writes; under a base
+  the table does not know, a name where a variable may stand draws nothing), a delegate,
+  a C# 14 extension block's receiver and type parameters, `(Order) - 1`, a property
+  pattern's path, Color Color where the field's type only shares the name (`Lib.Order
+  Order`, `Spot? Spot` of a struct) or an extension method shares the member's name, a
+  `using` after a file-scoped namespace or of a namespace outside the sources in a block
+  (System's `Task` before the project's around it; one the table does not know hides any
+  name), `<Using Alias>` and `<Using Static>` items, Razor components' namespaces, `file`
+  types, another project's internal types (`InternalsVisibleTo`), `#if false`, and an
+  `#else` member in another file of a partial type. On the e2e projects nothing was drawn
+  wrong before or after; eShop draws 551 names instead of 555: 5 more through usings after
+  a file-scoped namespace, 7 fewer under MAUI's base classes, which the table does not
+  know, and 2 fewer behind OpenTelemetry's and Polly's namespaces.
+  Lost and documented: a symbol no build defines and `#if !DEBUG` read as compiled.
 - **More Python forms that drew a wrong class in a body** (#5, 0.6.0). Sources
   written by hand for review, run through the extractor and the three checkers together,
   drew a class where the checkers name something else: 21, 15 and 2 names in three sets,

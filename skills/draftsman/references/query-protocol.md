@@ -55,7 +55,9 @@ a body is, which names it writes, and what may hide them there.
 | `@body.unread` | – | a type node that is no name of the scope, never recorded: looked up in the type of an expression (Java `o.new Inner()`), or no name at all (`X.super` in `X.super::m`, where `X` is; a label in a TypeScript type, `[Foo: string]`) |
 | `@body.blind` | – | a class body whose inherited members are not known (the anonymous class of Java `o.new Inner() { }`), or a node whose names are read elsewhere or not at all (TypeScript decorators, TSX closing tags): no name in it is recorded |
 | `@body.var` | – | a variable declared in a member: parameters, locals, lambda, catch, for and pattern variables, resources, fields of local classes, local functions and destructured names (TypeScript), every name a statement binds (Python) |
-| `@body.field` | – | a variable in scope in every body of the type around it that is none of its members (C#'s primary constructor parameters): it hides a type there and in the types nested in it, as a field does |
+| `@body.field` | – | a variable in scope in every body of the type around it that is none of its members (C#'s primary constructor parameters, an extension block's receiver): it hides a type there and in the types nested in it, as a field does |
+| `@body.hidden_type` / `@body.hidden_tparam` | – | a type ir.json does not record (C#'s delegate) or a type parameter of no member (C#'s extension block): in the type around it, or in its namespace outside any type, it hides a type of the name, as a nested type does |
+| `@body.extension` | – | the name of a method that extends another type (C#'s `this` parameter, an extension block's members): a call of the name after a field whose type has its name may be an instance call (`color_color`) |
 | `@body.generated` | – | an attribute whose source generator declares members in the type around it (C#'s `[ObservableProperty]`, `[RelayCommand]`, `[JsonSerializable]`): `LanguageSpec.generated_fields` names them, and they hide a type in its bodies as fields do. Members a file beside the source declares (`X.razor`, `X.xaml`) come from `LanguageSpec.companion_fields` |
 | `@body.type` | – | a type name declared in a member: local classes, type parameters |
 | `@body.import` | – | a name an import binds (Python's import in a function): after it, in the function it stands in (the nearest opaque node) and those inside it, the name resolves through that import, which `@import*` captured too; elsewhere in the member, or where two imports of the name may run, it hides as a variable; outside any member it is the file's import |
@@ -104,13 +106,19 @@ name leaves the name a type before a static member or nested type), and hooks th
 body relation what a build does beyond the sources: `body_name_text` (`@Order` is
 `Order`), `arity` (the type arguments a part is written with, which the type must take),
 `conditional_ranges`, `left_out_types` and `left_out_names` (code and names of `#if`
-branches some build leaves out or the parser never reads), `platform_ranges` (code only a
-platform's build compiles, which no answer key here can), `implicit_types` (a top-level
+branches some build leaves out or the parser never reads), `unbuilt_ranges` (code no build
+compiles, or only a platform's, which no answer key here can: C#'s `#if false`, a MAUI
+app's platform code), `implicit_types` (a top-level
 `Program`), `project_references` (which build projects a file's project sees),
 `build_types` (types a build generates outside the sources, which hide as declared ones
 do), `generated_fields` (`@body.generated`) and `companion_fields` (members a file beside
-the source declares: `X.razor`, `X.xaml`), and `init_via` (the `via` of an operator or
-indexer body). Each of them draws less where a build may differ, never more.
+the source declares: `X.razor`, `X.xaml`), `init_via` (the `via` of an operator or
+indexer body), `subtype_sees` (whether a member of these modifiers is one of a subclass:
+not C#'s private), `file_local` (a type seen in its file only), `internal_type` and
+`internals_visible` (a type of another project seen only by its friends),
+`unknown_bases_hide` with `outside_known` (a base class outside the sources that the
+language's table does not know may have any member), and `outside_namespace` (the types a
+namespace outside the sources declares, None when unknown). Each of them draws less where a build may differ, never more.
 
 ## Ownership
 
