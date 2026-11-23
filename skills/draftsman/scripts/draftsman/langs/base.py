@@ -247,6 +247,12 @@ class LanguageSpec:
         `X.razor.cs`, `X.xaml.cs`): they hide a type in its bodies as fields do."""
         return {}
 
+    def project_references(self, project: str) -> Optional[frozenset[str]]:
+        """The build projects whose types code of ``project`` (FileScope.project) sees: it
+        and those it references, followed through (C#'s <ProjectReference>). None where
+        every project sees every other."""
+        return None
+
     def body_name_text(self, text: str) -> str:
         """The name an identifier in a body is, as written (C#'s `@Order` is `Order`)."""
         return text

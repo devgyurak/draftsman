@@ -68,11 +68,13 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     # (`Order` in `Order.Line`), in top-level statements, after `global::`, through an
     # alias (`O`), where a variable of the name has the type's name for its type
     # (`Order Order`: Roslyn reads `Order.Create()` as the type, `Order.Total` as the
-    # variable; the extractor reads neither), and where the arity written is not the
-    # nearest type's (`Box` beside Shop.Box<T>: Roslyn's is Lib.Box further out)
+    # variable; the extractor reads neither), where the arity written is not the
+    # nearest type's (`Box` beside Shop.Box<T>: Roslyn's is Lib.Box further out), and
+    # where a static field a file's `using static` brings in shares the name (Roslyn
+    # looks at the namespaces around first; the extractor takes the field wherever)
     missed = [(file, line, answer) for (file, line, col), (answer, position) in want.items()
               if answer in builder.types and (file, line, col) not in drawn]
-    own = [("Lib/Lib.cs", 21, "Lib.Extra.Receipt"), ("Shop/Bodies.cs", 30, "Shop.Bodies"),
+    own = [("Lib/Lib.cs", 27, "Lib.Extra.Receipt"), ("Shop/Bodies.cs", 30, "Shop.Bodies"),
            ("Shop/Order.cs", 9, "Shop.Order"), ("Shop/Order.cs", 10, "Shop.Order"),
            ("Shop/Order.cs", 14, "Shop.Order.Line"), ("Shop/Order.cs", 21, "Shop.Customer"),
            ("Shop/Order.cs", 26, "Shop.Status"), ("Shop/Order.cs", 40, "Shop.Money"),
@@ -91,8 +93,9 @@ def test_body_relations_go_where_the_hand_written_answers_say():
                    ("Shop/Hiding.cs", 29, "Shop.Money"), ("Shop/Hiding.cs", 35, "Shop.Order"),
                    ("Shop/Hiding.cs", 77, "Shop.Customer")]
     arity = [("Shop/Signatures.cs", 14, "Lib.Box")]
+    using_static = [("Shop/Inner.cs", 17, "Shop.Money")]
     assert sorted(missed) == sorted(own + parts + top_level + global_ + alias + color_color
-                                    + arity)
+                                    + arity + using_static)
 
 
 def _body(ir) -> list[tuple]:
@@ -279,3 +282,18 @@ public partial class Ctx
 """})
     assert _body(ir) == [("Gen.Ctx", "Gen.Order", "N", 16), ("Gen.ViewModel", "Gen.Order", "M", 9),
                          ("Gen.Web.Plain", "Gen.Customer", "M", 6)]
+
+
+def test_a_type_of_a_project_the_file_does_not_reference_draws_nothing(tmp_path):
+    # B does not reference A, whose Shop.Order is around Shop.B: Roslyn takes Lib.Order
+    # from L through `using Lib;` (the extractor draws nothing there)
+    sdk = '<Project Sdk="Microsoft.NET.Sdk">{}</Project>'
+    ir = extract_source(tmp_path, {
+        "L/L.csproj": sdk.format(""), "L/Lib.cs": "namespace Lib { public class Order { } }\n",
+        "A/A.csproj": sdk.format(""), "A/Shop.cs": "namespace Shop { public class Order { } }\n",
+        "B/B.csproj": sdk.format('<ItemGroup><ProjectReference Include="..\\L\\L.csproj" /></ItemGroup>'),
+        "B/Use.cs": "using Lib;\nnamespace Shop.B { public class Use { object M() => new Order(); } }\n",
+        "C/C.csproj": sdk.format('<ItemGroup><ProjectReference Include="../B/B.csproj" /></ItemGroup>'),
+        "C/Use.cs": "namespace C { public class Use { object M() => new Lib.Order(); } }\n"})
+    # C sees L through B
+    assert _body(ir) == [("C.Use", "Lib.Order", "M", 1)]

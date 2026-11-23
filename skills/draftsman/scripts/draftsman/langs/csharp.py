@@ -122,6 +122,26 @@ def _without_platforms(condition: str) -> Optional[bool]:
 
 
 @lru_cache(maxsize=None)
+def _references(project: str) -> Optional[frozenset[str]]:
+    """The .csproj files a project sees the types of: itself and its <ProjectReference>s,
+    followed through; None for no project file."""
+    start = Path(project)
+    if start.suffix != ".csproj" or _msbuild(start) is None:
+        return None
+    seen, todo = set(), [start.resolve()]
+    while todo:
+        cur = todo.pop()
+        if cur in seen:
+            continue
+        seen.add(cur)
+        doc = _msbuild(cur)
+        for el in doc.iter() if doc is not None else ():
+            if _local(el.tag) == "ProjectReference" and el.get("Include"):
+                todo.append((cur.parent / el.get("Include").replace("\\", "/")).resolve())
+    return frozenset(str(p) for p in seen)
+
+
+@lru_cache(maxsize=None)
 def _uses_maui(project: Path) -> bool:
     for p in (project, _build_props(project.parent)):
         doc = _msbuild(p) if p else None
@@ -349,6 +369,9 @@ class CSharpSpec(LanguageSpec):
                                      "qualified_name"})
     # `E.V`, and a bare name, which in `nameof(Order)` is a type
     annotation_value_args = frozenset({"member_access_expression", "identifier"})
+
+    def project_references(self, project):
+        return _references(project)
 
     def body_name_text(self, text):
         return text.removeprefix("@")   # a verbatim identifier

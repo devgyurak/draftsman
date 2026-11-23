@@ -5,8 +5,10 @@
 (file_scoped_namespace_declaration name: (_) @package)
 (namespace_declaration name: (_) @namespace.name) @namespace
 
-; `using X;` makes every type of namespace X visible
-(using_directive . [(identifier) (qualified_name)] @import.wildcard .)
+; `using X;` makes every type of namespace X visible; `using static X;` the static members
+; and nested types of type X
+[(using_directive . [(identifier) (qualified_name)] @import.wildcard .)
+ (using_directive "static" @import.static . [(identifier) (qualified_name)] @import.wildcard .)]
 
 ; ---------------------------------------------------------------- types
 (class_declaration (modifier)* @modifiers name: (identifier) @name) @type.class

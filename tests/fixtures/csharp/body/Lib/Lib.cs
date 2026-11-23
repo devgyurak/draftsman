@@ -12,6 +12,12 @@ namespace Lib
     public class Box
     {
     }
+
+    public static class Defaults
+    {
+        public static int Customer = 1;
+        public static int Money = 2;
+    }
 }
 
 namespace Lib.Extra

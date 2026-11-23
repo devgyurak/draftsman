@@ -1,5 +1,6 @@
 using Lib;
 using static Shop.Util;
+using static Lib.Defaults;
 
 namespace Shop.Billing.Inner;
 
@@ -12,4 +13,6 @@ public class Far
     public int K() => Lib.Order.Count;   //> Lib=- Order=Lib.Order/r
     public string V() => Version;
     public void H() => Helper.Run();   //> Helper=Shop.Util.Helper/r
+    // the file's `using static` comes after the namespaces around: Shop.Money
+    public object Z() => Money.Zero;   //> Money=Shop.Money/r
 }

@@ -1273,6 +1273,8 @@ class _Builder:
                 continue
             if len(self.projects.get(target, ())) > 1:
                 continue   # one id, a type in each of several projects
+            if not self._visible(target, ref.scope.project, LANGUAGES[rtype.language]):
+                continue   # declared in a project the file's project does not reference
             if ref.arities and ref.arities[n - 1] is not None \
                     and ref.arities[n - 1] not in self.types[target].arities:
                 continue   # `Repo<int>` is no Repo: another type of the name, further out
@@ -1281,6 +1283,18 @@ class _Builder:
             self.relations.append(Relation(rtype.qualified_name, target, "dependency",
                                            Location(ref.scope.file, line), via=ref.via,
                                            evidence="body"))
+
+    def _visible(self, target: str, project: Optional[str], spec) -> bool:
+        """Whether a type is declared in a project every project of a file sees
+        (LanguageSpec.project_references; a file linked into several has them all)."""
+        declared = {p for ps in self.projects.get(target, ()) if ps for p in ps.split(";")}
+        if not declared or any(spec.project_references(p) is None for p in declared):
+            return True   # declared outside any project file: no one knows who sees it
+        for p in (project.split(";") if project else ()):
+            seen = spec.project_references(p)
+            if seen is not None and not declared & seen:
+                return False
+        return True
 
     def _annotation_target(self, rtype: RawType, res: Resolution, via: str,
                            loc: Location) -> None:

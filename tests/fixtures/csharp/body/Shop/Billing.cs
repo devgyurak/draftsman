@@ -17,3 +17,15 @@ namespace Shop.Other
         public object R() => Receipt.Print();   //> Receipt=Lib.Extra.Receipt/r
     }
 }
+
+namespace Shop.Statics
+{
+    using static Lib.Defaults;
+
+    // a `using static` in a namespace block comes before the namespaces around it: the
+    // field Customer, not Shop.Customer
+    public class Near
+    {
+        public int M() => Customer.GetHashCode();   //> Customer=var/r
+    }
+}
