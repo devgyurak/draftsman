@@ -16,3 +16,10 @@ export class Labels {
     void [g, h, new Bar()];                               //> Bar=p/bar.Bar/r
   }
 }
+
+// an enum's member written as a string is a name in its members' values too
+export enum Quoted {
+  "Foo" = 1,                                  //> Foo=-
+  'Kind' = 2,                                 //> Kind=-
+  Next = Foo + Kind,                          //> Next=- Foo=var/r Kind=var/r
+}

@@ -190,6 +190,12 @@ class TypeScriptSpec(LanguageSpec):
     def is_abstract(self, owner_kind, member_kind, modifiers, has_body, marker=None):
         return "abstract" in modifiers or (owner_kind == "interface" and member_kind == "method")
 
+    def body_name(self, member_name):
+        # `"Foo" = 1` and `'Foo' = 1` in an enum are Foo
+        if len(member_name) > 1 and member_name[0] in "'\"" and member_name[-1] == member_name[0]:
+            return member_name[1:-1]
+        return member_name
+
     def finalize_type(self, raw):
         for rm in raw.members:
             m = rm.member

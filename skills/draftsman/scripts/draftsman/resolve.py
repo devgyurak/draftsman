@@ -714,7 +714,7 @@ class Resolver:
         spec = LANGUAGES[rtype.language]
         if not spec.fields_in_scope:
             # an enum's constants are names in its own bodies (`B = A` in an enum)
-            return any(rm.member.name == name and rm.member.kind == "enum_constant"
+            return any(rm.member.kind == "enum_constant" and spec.body_name(rm.member.name) == name
                        for rm in rtype.members)
         for project, outside in self._around(rtype, ref, 0):
             if any(self._has_field(t, name) for t in project) or \

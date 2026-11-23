@@ -212,3 +212,9 @@ export class A {
 """})
     assert _body(ir) == [("a.A", "foo.Bar", "m", 5)]
 
+
+def test_an_enum_member_written_as_a_string_hides_a_class_in_the_enum(tmp_path):
+    ir = extract_source(tmp_path, {
+        "foo.ts": "export class Foo { }",
+        "a.ts": 'import { Foo } from "./foo";\nexport enum E { "Foo" = 1, B = Foo }\n'})
+    assert _body(ir) == []

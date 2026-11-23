@@ -185,6 +185,11 @@ class LanguageSpec:
         or None for no member: a name no declaration can have, read inside a syntax error."""
         return name
 
+    def body_name(self, member_name: str) -> str:
+        """The name a member, as listed, is in scope by in a body (TypeScript's enum
+        member `"Foo" = 1` is Foo)."""
+        return member_name
+
     def type_name(self, node, name: str) -> str:
         """The name of a type declaration whose @name capture is not the name itself."""
         return name
