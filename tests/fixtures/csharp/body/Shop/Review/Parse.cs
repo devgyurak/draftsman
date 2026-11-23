@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Shop.Rev.Parse
 {
     // `(Order) - 1` subtracts from a field: a name in parentheses before `-` or `+` is no cast
@@ -6,6 +8,15 @@ namespace Shop.Rev.Parse
         public int Order = 1;
         public int A() => (Order) - 1;   //> Order=-
         public int B() => (Order) + 1;   //> Order=-
+    }
+
+    // nor before `[`: an element access of a field; a type only a type can be stays a cast
+    public class Elements
+    {
+        public int[] Customer = new int[1];
+        public object A() => (Customer)[0];   //> Customer=-
+        public object B() => (Customer[])[];   //> Customer=Shop.Customer/t
+        public object C() => (List<Customer>)[];   //> List=System.Collections.Generic.List/t Customer=Shop.Customer/t
     }
 
     public class Holder

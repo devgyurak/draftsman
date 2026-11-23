@@ -118,6 +118,12 @@
 (cast_expression
   type: [(identifier) (generic_name) (qualified_name) (alias_qualified_name)] @body.unread
   value: (prefix_unary_expression . ["-" "+" "&" "*" "++" "--" "^"]))
+; `(Money)[0]`, `(a.Money)[0]`: nor before `[` (an element access, which tree-sitter reads
+; as a cast of a collection expression); `(Money[])[...]` and `(List<Money>)[...]` can only
+; be types and stay casts
+(cast_expression
+  type: [(identifier) (qualified_name) (alias_qualified_name)] @body.unread
+  value: (collection_expression))
 ; a property pattern's member path: `{ Customer.Name: "x" }` names members, not a type
 (subpattern . (member_access_expression) @body.blind)
 

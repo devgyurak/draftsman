@@ -51,7 +51,7 @@ def test_body_names_stand_where_the_hand_written_answers_say():
                     if answer != "-" and (rel, line, col) not in recorded)
     assert missed == [("Program.cs", 4, "Shop.Order"), ("Program.cs", 5, "Shop.Customer"),
                       ("Program.cs", 5, "Shop.Order"), ("Shop/Positions.cs", 47, "Shop.Status"),
-                      ("Shop/Review/Parse.cs", 20, "var"), ("Shop/Review/Parse.cs", 21, "var")]
+                      ("Shop/Review/Parse.cs", 31, "var"), ("Shop/Review/Parse.cs", 32, "var")]
 
 
 def test_body_relations_go_where_the_hand_written_answers_say():
