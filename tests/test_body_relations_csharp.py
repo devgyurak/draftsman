@@ -456,3 +456,15 @@ def test_a_package_a_referenced_project_references_is_the_projects_too(tmp_path)
         "L3/L3.csproj": sdk.format(""),
         "P/Mine.cs": "namespace Mine { public class RelayCommand { } }\n"})
     assert _body(ir) == [("CommunityToolkit.Mvvm.Input.P.Use", "Mine.RelayCommand", "M", 2)]
+
+
+def test_a_records_base_arguments_are_its_primary_constructors_body(tmp_path):
+    # `record Sub(int M) : Rec(Order.Count)`: the base arguments are read, `via` the
+    # primary constructor (the record's name), as a class's `class B(int x) : A(x)` are
+    ir = extract_source(tmp_path, {
+        "Types.cs": "namespace Shop { public class Order { public static int Count = 0; } "
+                    "public record Rec(int N); "
+                    "public record Sub(int M) : Rec(Order.Count); "
+                    "public class Base { public Base(int n) { } } "
+                    "public class Derived(int x) : Base(Order.Count + x); }\n"})
+    assert _body(ir) == [("Shop.Derived", "Shop.Order", "Derived", 1), ("Shop.Sub", "Shop.Order", "Sub", 1)]

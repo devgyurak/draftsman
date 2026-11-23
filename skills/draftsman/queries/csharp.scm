@@ -99,8 +99,9 @@
 (indexer_declaration value: (_) @body.init.region) @body.init
 (indexer_declaration accessors: (accessor_list) @body.init.region) @body.init
 (event_declaration accessors: (accessor_list) @body.init.region) @body.init
-; a primary constructor's base arguments: `class B(int x) : A(x)`
+; a primary constructor's base arguments: `class B(int x) : A(x)`, `record R(int x) : Q(x)`
 (base_list (argument_list) @body.init)
+(base_list (primary_constructor_base_type (argument_list) @body.init))
 
 ; where only a type can stand: every `type:` (a local's, `new`, a cast, `typeof`,
 ; `default`, a pattern's, `catch`, `foreach`, a lambda's or local function's parameter,

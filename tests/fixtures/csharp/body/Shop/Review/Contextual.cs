@@ -40,4 +40,8 @@ namespace Shop.Rev.Ctx
         public bool B() => this[Order < b, Customer > d];   //> Order=- Customer=-
         public void C(List<(Shop.Order, int)> pairs) { foreach ((Shop.Order o, int n) in pairs) { } }   //> List=- Shop=- Order=- Shop=- Order=Shop.Order/t
     }
+
+    // a record's base arguments are a body, as a class's are
+    public record RecBase(int N);
+    public record RecSub(int M) : RecBase((int)Status.Open);   //> RecBase=- Status=Shop.Status/r
 }

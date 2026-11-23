@@ -633,6 +633,8 @@ class CSharpSpec(LanguageSpec):
         # an operator, a destructor, an indexer or an event (their accessors), or a
         # primary constructor's base arguments (the constructor's, named as the class)
         decl = node if node.type != "argument_list" else node.parent
+        if decl.type == "primary_constructor_base_type":   # a record's `: Rec(...)`
+            decl = decl.parent
         text = lambda n: src[n.start_byte:n.end_byte].decode("utf8", "replace")   # noqa: E731
         if decl.type == "operator_declaration":
             op = decl.child_by_field_name("operator")
