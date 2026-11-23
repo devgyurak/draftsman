@@ -254,6 +254,10 @@ class LanguageSpec:
         declares with these modifiers (or visibility); not C#'s private ones."""
         return True
 
+    def file_local(self, modifiers: list[str]) -> bool:
+        """Whether a type with these modifiers is seen in its own file only (C#'s `file`)."""
+        return False
+
     def outside_known(self, type_id: str) -> bool:
         """Whether the language's table of libraries knows the type outside the sources
         (C#'s .NET and ASP.NET Core); a base class it does not know may pass on anything."""
@@ -262,6 +266,16 @@ class LanguageSpec:
     def outside_namespace(self, namespace: str) -> Optional[frozenset[str]]:
         """The types a namespace outside the sources declares, when the table knows it."""
         return None
+
+    def internal_type(self, modifiers: list[str], nested: bool) -> bool:
+        """Whether a type declared with these modifiers is seen only in its own build project
+        (C#'s internal, the default of a top-level type)."""
+        return False
+
+    def internals_visible(self, owner_project: str, project: str) -> bool:
+        """Whether ``project`` sees ``owner_project``'s internal types (C#'s
+        InternalsVisibleTo)."""
+        return False
 
     def implicit_types(self, root_node: "ts.Node") -> list[str]:
         """Ids of the types a file declares without a declaration (C#'s `Program` of

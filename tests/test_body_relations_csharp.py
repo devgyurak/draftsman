@@ -75,7 +75,9 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     # overload (`Order.Of()`), where the arity written is not the nearest type's (`Box`
     # beside Shop.Box<T>: Roslyn's is Lib.Box further out), and where a static field a
     # file's `using static` brings in shares the name (Roslyn looks at the namespaces
-    # around first; the extractor takes the field wherever)
+    # around first; the extractor takes the field wherever), and a `file` type's name in
+    # any file but its only one (two files' `file class Local` are one id in ir.json; in
+    # FileB.cs the extractor finds FileA.cs's Helper before Shop.Rev's and gives up)
     missed = [(file, line, answer) for (file, line, col), (answer, position) in want.items()
               if answer in builder.types and (file, line, col) not in drawn]
     own = [("Lib/Lib.cs", 37, "Lib.Extra.Receipt"), ("Shop/Bodies.cs", 30, "Shop.Bodies"),
@@ -92,8 +94,11 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     color_color = [("Shop/Hiding.cs", 77, "Shop.Customer"), ("Shop/ColorColor.cs", 13, "Shop.Order")]
     arity = [("Shop/Signatures.cs", 14, "Lib.Box")]
     using_static = [("Shop/Inner.cs", 17, "Shop.Money")]
+    file_types = [("Shop/Review/FileA.cs", 9, "Shop.Rev.Files.Local"),
+                  ("Shop/Review/FileB.cs", 7, "Shop.Rev.Helper"),
+                  ("Shop/Review/FileB.cs", 8, "Shop.Rev.Files.Local")]
     assert sorted(missed) == sorted(own + parts + top_level + global_ + alias + color_color
-                                    + arity + using_static)
+                                    + arity + using_static + file_types)
 
 
 def _body(ir) -> list[tuple]:
@@ -315,6 +320,47 @@ namespace Other
 }
 """})
     assert _body(ir) == [("Other.Use", "Lib2.Defaults.Inner", "B", 4), ("Other.Use", "Lib2.Order", "A", 4)]
+
+
+def test_an_internal_type_of_another_project_is_seen_by_its_friends_only(tmp_path):
+    # L's internal Lib.Secret: A is a friend (an InternalsVisibleTo item), B (an attribute)
+    # too, C is not (Roslyn: inaccessible)
+    sdk = '<Project Sdk="Microsoft.NET.Sdk">{}</Project>'
+    ref = '<ItemGroup><ProjectReference Include="../L/L.csproj" /></ItemGroup>'
+    use = "using Lib;\nnamespace Other.{0} {{ public class Use {{ object M() => Secret.Count; }} }}\n"
+    ir = extract_source(tmp_path, {
+        "L/L.csproj": sdk.format('<ItemGroup><InternalsVisibleTo Include="A" /></ItemGroup>'),
+        "L/Lib.cs": "namespace Lib { internal class Secret { public static int Count = 1; } }\n",
+        "L/Friends.cs": '[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("B")]\n',
+        "A/A.csproj": sdk.format(ref), "A/Use.cs": use.format("A"),
+        "B/B.csproj": sdk.format(ref), "B/Use.cs": use.format("B"),
+        "C/C.csproj": sdk.format(ref), "C/Use.cs": use.format("C")})
+    assert _body(ir) == [("Other.A.Use", "Lib.Secret", "M", 2), ("Other.B.Use", "Lib.Secret", "M", 2)]
+
+
+def test_a_razor_component_is_a_type_of_its_namespace(tmp_path):
+    # Card.razor is Web.Comp.Card (_Imports.razor's @namespace), Sub/Grid.razor
+    # Web.Comp.Sub.Grid, Item.razor its own @namespace: each hides Shop's in its namespace
+    ir = extract_source(tmp_path, {
+        "W/W.csproj": '<Project Sdk="Microsoft.NET.Sdk.Razor"><PropertyGroup>'
+                      '<RootNamespace>Web.App</RootNamespace></PropertyGroup></Project>',
+        "W/Types.cs": "namespace Shop { public class Card { } public class Grid { } public class Item { } }\n",
+        "W/Pages/_Imports.razor": "@namespace Web.Comp\n@using Shop\n",
+        "W/Pages/Card.razor": "<p>card</p>\n",
+        "W/Pages/Sub/Grid.razor": "<p>grid</p>\n",
+        "W/Pages/Sub/Item.razor": "@namespace Web.Other\n<p>item</p>\n",
+        "W/Pages/Use.cs": """using Shop;
+namespace Web.Comp
+{
+    public class Use { object A() => new Card(); object B() => typeof(Grid); object C() => typeof(Item); }
+}
+namespace Web.Comp.Sub
+{
+    public class Use2 { object A() => typeof(Grid); object B() => typeof(Item); }
+}
+"""})
+    assert _body(ir) == [("Web.Comp.Sub.Use2", "Shop.Item", "B", 8),
+                         ("Web.Comp.Use", "Shop.Grid", "B", 4), ("Web.Comp.Use", "Shop.Item", "C", 4)]
 
 
 def test_a_member_of_an_outside_base_class_hides_a_type(tmp_path):

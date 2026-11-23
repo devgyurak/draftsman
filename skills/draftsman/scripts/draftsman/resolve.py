@@ -1455,6 +1455,10 @@ class _Builder:
                     p in self.left_out or p in ref.scope.left_out_names
                     for p in ref.text.split(sep)[:n]):
                 continue
+            spec = LANGUAGES[rtype.language]
+            if spec.file_local(self.types[target].modifiers) and \
+                    self.part_files.get(target, set()) != {ref.scope.file}:
+                continue   # a C# `file` type is seen in its file only, and is one type there
             if len(self.projects.get(target, ())) > 1:
                 continue   # one id, a type in each of several projects
             if any(imp.conditional for imp in ref.scope.imports) and target != self._without(
@@ -1487,9 +1491,17 @@ class _Builder:
         declared = {p for ps in self.projects.get(target, ()) if ps for p in ps.split(";")}
         if not declared or any(spec.project_references(p) is None for p in declared):
             return True   # declared outside any project file: no one knows who sees it
+        internal, cur, nested = False, self.types.get(target), False
+        while cur is not None and not internal:
+            internal = spec.internal_type(cur.modifiers, cur.outer is not None)
+            cur = self.types.get(cur.outer) if cur.outer else None
         for p in (project.split(";") if project else ()):
             seen = spec.project_references(p)
             if seen is not None and not declared & seen:
+                return False
+            # an internal type only in its own project, or one its InternalsVisibleTo names
+            if internal and p not in declared and not any(
+                    spec.internals_visible(d, p) for d in declared):
                 return False
         return True
 

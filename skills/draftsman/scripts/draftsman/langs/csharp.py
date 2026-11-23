@@ -172,6 +172,77 @@ def _framework_types() -> frozenset:
 
 
 @lru_cache(maxsize=None)
+def _assembly_name(project: Path) -> str:
+    doc = _msbuild(project)
+    names = [el.text.strip() for el in doc.iter() if _local(el.tag) == "AssemblyName"
+             and el.text] if doc is not None else []
+    return names[-1] if names else project.stem
+
+
+@lru_cache(maxsize=None)
+def _friends(project: Path) -> frozenset:
+    """The assemblies a project's InternalsVisibleTo names: <InternalsVisibleTo Include>
+    items, `[assembly: InternalsVisibleTo("Name")]` in its sources."""
+    doc = _msbuild(project)
+    out = {el.get("Include").split(",")[0].strip() for el in doc.iter()
+           if _local(el.tag) == "InternalsVisibleTo" and el.get("Include")} if doc is not None \
+        else set()
+    for dirpath, dirnames, filenames in os.walk(project.parent):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and d not in ("bin", "obj")]
+        for f in filenames:
+            if f.endswith(".cs"):
+                try:
+                    text = Path(dirpath, f).read_text(encoding="utf-8-sig", errors="replace")
+                except OSError:
+                    continue
+                out.update(n.split(",")[0].strip() for n in re.findall(
+                    r'InternalsVisibleTo\s*\(\s*"([^"]+)"', text))
+    return frozenset(out)
+
+
+@lru_cache(maxsize=None)
+def _razor_types(project: Path) -> tuple[tuple[str, frozenset], ...]:
+    """(namespace, class names) of the components the project's .razor files declare: a
+    class named after the file, in its `@namespace`, else the nearest `_Imports.razor`'s
+    with the folders below it, else the root namespace with the folders."""
+    doc = _msbuild(project)
+    roots = [el.text.strip() for el in doc.iter() if _local(el.tag) == "RootNamespace"
+             and el.text] if doc is not None else []
+    root_ns = roots[-1] if roots else re.sub(r"[^A-Za-z0-9_.]", "_", project.stem)
+    out: dict[str, set[str]] = {}
+    for dirpath, dirnames, filenames in os.walk(project.parent):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and d not in ("bin", "obj")]
+        for f in filenames:
+            if not f.endswith(".razor") or f == "_Imports.razor":
+                continue
+            folder = Path(dirpath)
+            try:
+                own = re.search(r"^\s*@namespace\s+([\w.]+)", Path(folder, f).read_text(
+                    encoding="utf-8-sig", errors="replace"), re.M)
+            except OSError:
+                continue
+            ns = own.group(1) if own else _razor_namespace(folder, project.parent, root_ns)
+            out.setdefault(ns, set()).add(re.sub(r"\W", "_", f[:-len(".razor")]))
+    return tuple((ns, frozenset(n)) for ns, n in out.items())
+
+
+def _razor_namespace(folder: Path, top: Path, root_ns: str) -> str:
+    """A component's namespace from its folder: the nearest `_Imports.razor` `@namespace`
+    above it, then the folders below that one, else the root namespace and the folders."""
+    rel = folder.relative_to(top).parts
+    for k in range(len(rel), -1, -1):
+        imports = top.joinpath(*rel[:k], "_Imports.razor")
+        try:
+            m = re.search(r"^\s*@namespace\s+([\w.]+)", imports.read_text(
+                encoding="utf-8-sig", errors="replace"), re.M)
+        except OSError:
+            continue
+        if m:
+            return ".".join([m.group(1), *rel[k:]])
+    return ".".join([root_ns, *(re.sub(r"\W", "_", p) for p in rel)])
+
+
+@lru_cache(maxsize=None)
 def _uses_maui(project: Path) -> bool:
     for p in (project, _build_props(project.parent)):
         doc = _msbuild(p) if p else None
@@ -414,6 +485,9 @@ class CSharpSpec(LanguageSpec):
         # seen in a subtype; `private protected` is
         return any(m in ("public", "protected", "internal", "package") for m in modifiers)
 
+    def file_local(self, modifiers):
+        return "file" in modifiers
+
     def outside_known(self, type_id):
         return type_id in _framework()["types"] or type_id in _framework_types()
 
@@ -447,6 +521,15 @@ class CSharpSpec(LanguageSpec):
                 return f"{cur}.{name}"
             cur = entry.get("b")
         return None
+
+    def internal_type(self, modifiers, nested):
+        if "public" in modifiers or "protected" in modifiers and "private" not in modifiers:
+            return False
+        return True if not nested else any(m in ("internal", "private") for m in modifiers) \
+            or not any(m in ("public", "protected") for m in modifiers)
+
+    def internals_visible(self, owner_project, project):
+        return _assembly_name(Path(project)) in _friends(Path(owner_project))
 
     def body_name_text(self, text):
         return text.removeprefix("@")   # a verbatim identifier
@@ -605,7 +688,7 @@ class CSharpSpec(LanguageSpec):
         projects = ([own] if own else []) + list(_linked_files(root.resolve()).get(path.resolve(), ()))
         out: dict[str, set[str]] = {}
         for project in dict.fromkeys(projects):
-            for ns, names in _protobuf_types(project):
+            for ns, names in _protobuf_types(project) + _razor_types(project):
                 out.setdefault(ns, set()).update(names)
         return out
 
