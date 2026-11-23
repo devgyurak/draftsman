@@ -28,6 +28,7 @@ mismatch not listed below, or on fewer names drawn than the table gives.
 | `cs14` | 22 | a parenthesized name before an operator or `[`, patterns, lambdas, attributes, strings, a local function's type parameter |
 | `cs15` | 6 | a package through two project references, an alias hiding a type |
 | `cs16` | 31 | forms tree-sitter and Roslyn may read apart: `F(a < b, c > d)`, `x is T ? a : b`, pointers, `(A)(b)`, `(A)!b`, `(A)~b`, collection expressions and ranges, types named `var`, `dynamic`, `nameof`, `value`, `field` |
+| `cs17` | 73 | the rest of tree-sitter's declarations in a collection expression and an indexer, type positions (async lambdas, `await foreach`, LINQ with types, combined patterns), array, tuple and generic aliases, where nested and odd members' bodies belong, a record's base arguments, `#if` lines in strings and comments |
 
 ## Known limits
 
