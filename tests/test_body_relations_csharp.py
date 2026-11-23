@@ -433,3 +433,26 @@ namespace App.Web
 """})
     assert _body(ir) == [("App.Web.W", "App.Models.Item", "A", 16), ("App.Web.W", "App.Models.Item", "B", 16),
                          ("Other.Mine.P", "Shop.RelayCommand", "A", 12)]
+
+
+def test_a_package_a_referenced_project_references_is_the_projects_too(tmp_path):
+    # B references L, which references CommunityToolkit.Mvvm: the package flows on to B, and
+    # B's `namespace CommunityToolkit.Mvvm.Input.Mine` is the package's; P references Q,
+    # whose reference is PrivateAssets="all" (an attribute or an element), which does not
+    sdk = '<Project Sdk="Microsoft.NET.Sdk">{}</Project>'
+    ref = '<ItemGroup><ProjectReference Include="../{0}/{0}.csproj" /></ItemGroup>'
+    pkg = '<ItemGroup><PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0"{} /></ItemGroup>'
+    use = ("using {1};\nnamespace CommunityToolkit.Mvvm.Input.{0} "
+           "{{ public class Use {{ object M() => typeof(RelayCommand); }} }}\n")
+    ir = extract_source(tmp_path, {
+        "L/L.csproj": sdk.format(pkg.format("")),
+        "L/Shop.cs": "namespace Shop { public class RelayCommand { } }\n",
+        "B/B.csproj": sdk.format(ref.format("L")), "B/Use.cs": use.format("B", "Shop"),
+        "Q/Q.csproj": sdk.format(pkg.format(' PrivateAssets="all"')),
+        "P/P.csproj": sdk.format(ref.format("Q") + ref.format("L2")), "P/Use.cs": use.format("P", "Mine"),
+        "L2/L2.csproj": sdk.format('<ItemGroup><PackageReference Include="CommunityToolkit.Mvvm" '
+                                   'Version="8.4.0"><PrivateAssets>all</PrivateAssets>'
+                                   '</PackageReference></ItemGroup>' + ref.format("L3")),
+        "L3/L3.csproj": sdk.format(""),
+        "P/Mine.cs": "namespace Mine { public class RelayCommand { } }\n"})
+    assert _body(ir) == [("CommunityToolkit.Mvvm.Input.P.Use", "Mine.RelayCommand", "M", 2)]

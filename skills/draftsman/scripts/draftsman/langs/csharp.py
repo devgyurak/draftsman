@@ -376,15 +376,32 @@ def _build_props(directory: Path) -> Optional[Path]:
 
 
 @lru_cache(maxsize=None)
-def _package_ids(project: Path) -> frozenset:
+def _package_ids(project: Path, flowing: bool = False) -> frozenset:
     """The packages a project references by `<PackageReference Include>`, in it or in the
-    nearest Directory.Build.props, lower-cased."""
+    nearest Directory.Build.props, lower-cased; with ``flowing``, only those that flow on
+    to a project referencing it (not `PrivateAssets="all"`)."""
     out = set()
     for p in (project, _build_props(project.parent)):
         doc = _msbuild(p) if p else None
-        if doc is not None:
-            out |= {el.get("Include").strip().lower() for el in doc.iter()
-                    if _local(el.tag) == "PackageReference" and el.get("Include")}
+        for el in doc.iter() if doc is not None else ():
+            if _local(el.tag) != "PackageReference" or not el.get("Include"):
+                continue
+            private = el.get("PrivateAssets") or next(
+                (c.text or "" for c in el if _local(c.tag) == "PrivateAssets"), "")
+            if not (flowing and private.strip().lower() == "all"):
+                out.add(el.get("Include").strip().lower())
+    return frozenset(out)
+
+
+@lru_cache(maxsize=None)
+def _packages_seen(project: str) -> frozenset:
+    """The packages a project's code sees: its own, and those of the projects its
+    `<ProjectReference>`s reach that flow on."""
+    own = Path(project).resolve()
+    out = set(_package_ids(own))
+    for ref in _references(project) or ():
+        if Path(ref) != own:
+            out |= _package_ids(Path(ref), True)
     return frozenset(out)
 
 
@@ -545,12 +562,13 @@ class CSharpSpec(LanguageSpec):
         return _framework_namespaces().get(namespace)
 
     def package_namespace(self, namespace, project):
-        # a package's root namespace is its id (`CommunityToolkit.Mvvm`); a file several
-        # projects compile is in each one's
+        # a package's root namespace is its id (`CommunityToolkit.Mvvm`): one the project
+        # references, or a project it references does; a file several projects compile is
+        # in each one's
         ns = namespace.lower()
         return any(ns == i or ns.startswith(i + ".")
                    for p in (project or "").split(";") if p.endswith(".csproj")
-                   for i in _package_ids(Path(p)))
+                   for i in _packages_seen(p))
 
     def outside_namespace_exists(self, namespace):
         return namespace in _framework_namespace_parents()
