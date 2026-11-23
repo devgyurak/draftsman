@@ -145,6 +145,8 @@
 ; are its properties)
 (class_declaration (parameter_list (parameter name: (identifier) @body.field)))
 (struct_declaration (parameter_list (parameter name: (identifier) @body.field)))
+; an event field, which is no member of ir.json
+(event_field_declaration (variable_declaration (variable_declarator name: (identifier) @body.field)))
 ; members a source generator declares in the type (CommunityToolkit.Mvvm's
 ; [ObservableProperty] and [RelayCommand], System.Text.Json's [JsonSerializable]):
 ; CSharpSpec.generated_fields names them

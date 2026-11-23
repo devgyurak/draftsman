@@ -945,7 +945,7 @@ class Resolver:
                 return True
         cur: Optional[RawType] = rtype
         while cur is not None:
-            if self._has_field(cur, name) or name in cur.body_fields:
+            if self._has_field(cur, name):
                 return True
             cur = self.index.get(cur.outer) if cur.outer else None
         sep = spec.separator
@@ -967,15 +967,16 @@ class Resolver:
         return False
 
     def _has_field(self, rtype: RawType, name: str) -> bool:
-        """Whether the project type has a field ``name``, also an enum constant or a record
-        component, its own or inherited (through the JDK table for JDK supertypes)."""
+        """Whether the project type has a field ``name``, also an enum constant, a record
+        component or one of its RawType.body_fields, its own or inherited (through the JDK
+        table for JDK supertypes)."""
         key = (rtype.qualified_name, name)
         if key not in self._field_cache:
             self._field_cache[key] = False   # a cycle of supertypes has no field
             spec = LANGUAGES[rtype.language]
             self._field_cache[key] = any(
                 rm.member.name == name and rm.member.kind in ("field", "enum_constant", "property")
-                for rm in rtype.members) or any(
+                for rm in rtype.members) or name in rtype.body_fields or any(
                 self._has_field(self.index[s.target], name)
                 for s in self.supertypes(rtype) if s.status == PROJECT) or any(
                 spec.inherited_field(o, name)

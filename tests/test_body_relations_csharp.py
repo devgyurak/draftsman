@@ -82,8 +82,11 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     top_level = [("Program.cs", 4, "Shop.Order"), ("Program.cs", 5, "Shop.Customer"),
                  ("Program.cs", 5, "Shop.Order")]
     global_ = [("Shop/Positions.cs", 28, "Shop.Order"), ("Shop/Positions.cs", 47, "Shop.Status")]
+    # (and where a compilation unit's alias shares the name, which in a file-scoped
+    # namespace the extractor takes for that namespace's: Roslyn's is Shop.Order around it)
     alias = [("Shop/Hiding.cs", 63, "Shop.Order"), ("Shop/Hiding.cs", 64, "Shop.Order"),
-             ("Shop/Hiding.cs", 64, "Shop.Order")]
+             ("Shop/Hiding.cs", 64, "Shop.Order"), ("Shop/Members.cs", 9, "Shop.Order"),
+             ("Shop/Members.cs", 10, "Shop.Order")]
     color_color = [("Shop/Hiding.cs", 11, "Shop.Order"), ("Shop/Hiding.cs", 17, "Shop.Money"),
                    ("Shop/Hiding.cs", 29, "Shop.Money"), ("Shop/Hiding.cs", 35, "Shop.Order"),
                    ("Shop/Hiding.cs", 77, "Shop.Customer")]

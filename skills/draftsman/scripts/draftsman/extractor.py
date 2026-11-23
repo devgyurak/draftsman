@@ -108,8 +108,9 @@ class RawType:
     supers: list[RawSuper] = field(default_factory=list)
     annotation_refs: list[RawAnnotation] = field(default_factory=list)
     body_refs: list[RawBodyRef] = field(default_factory=list)
-    # variables in scope in every body of the type that are none of its members (C#'s
-    # primary constructor parameters, `@body.field`)
+    # variables in scope in every body of the type, and of its subtypes, that are no
+    # member of ir.json (C#'s primary constructor parameters, event fields, generated
+    # members: `@body.field`, `@body.generated`)
     body_fields: set[str] = field(default_factory=set)
     # declared in code a build may leave out (LanguageSpec.conditional_ranges)
     conditional: bool = False
