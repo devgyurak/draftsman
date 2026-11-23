@@ -12,8 +12,9 @@ The answer is a class's id as ir.json writes it (module + the classes around it 
 `var` (a variable, a parameter, a function, a class attribute, an alias), `local` (a
 class declared in a function), `error` (a name nothing binds), `disputed` (mypy, pyright
 and ty do not give the same: nothing may be drawn there), or `-` (a binding such as
-`case Bound:`, a name in a string annotation, a name in the method's own signature, or
-a nested class reached through a subclass, `Sub.Listener`, which mypy does not bind). The
+`case Bound:`, a name in a string annotation or a type comment, a name in the method's
+own signature, or a nested class reached through a subclass, `Sub.Listener`, which mypy
+does not bind). The
 position is always `r`: a variable of the name hides a class in an annotation as
 anywhere else.
 

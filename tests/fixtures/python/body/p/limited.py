@@ -1,4 +1,7 @@
-__all__ = ["Shown"]
+__all__ = [
+    # a comment in the listing
+    "Shown",
+]
 
 
 class Shown:

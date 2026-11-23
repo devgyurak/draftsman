@@ -776,9 +776,20 @@ class Resolver:
                 return Resolution(EXTERNAL, found + sep + rest if rest else found)
         res = self.resolve(name, rtype, ref.member, scope=ref.scope, strict=True,
                            nested=spec.nested_types_in_bodies)
-        if res.status == PROJECT and spec.rebinding_hides and self._rebound(res.target):
-            return Resolution(UNRESOLVED)   # `try: from x import Foo` / `except: class Foo`
+        if res.status == PROJECT and spec.rebinding_hides and (
+                self._rebound(res.target) or sep not in name and any(
+                    found != res.target for found in self._star_provides(name, ref.scope, spec))):
+            # `try: from x import Foo` / `except: class Foo`; `class Foo` beside a star
+            # import that brings in another Foo
+            return Resolution(UNRESOLVED)
         return res
+
+    def _star_provides(self, name: str, scope: FileScope, spec) -> list[str]:
+        """The project types the file's wildcard imports are known to bring in as ``name``."""
+        sep = spec.separator
+        return [found for imp in scope.imports if imp.wildcard and not imp.external
+                and self._exports(imp.path, name, spec, True)
+                and (found := self.lookup(imp.path + sep + name, spec, certain=True))]
 
     def _is_variable(self, name: str, rtype: RawType, ref: RawBodyRef) -> bool:
         """Whether a variable of the name may be in scope where ``ref`` is written: one the

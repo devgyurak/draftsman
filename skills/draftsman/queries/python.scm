@@ -127,6 +127,8 @@
 ; no names of the scope: a keyword argument's name, the names in an import (it binds them,
 ; below) and in `global`/`nonlocal`
 (keyword_argument name: (identifier) @body.unread)
+; `case Kind.Inner:`, `case p.Foo():`: a part after the first is no name of the scope
+(dotted_name (identifier) . (identifier) @body.unread)
 [(import_statement) (import_from_statement) (future_import_statement)
  (global_statement) (nonlocal_statement)] @body.blind
 
@@ -160,13 +162,16 @@
 (list_pattern (identifier) @body.var)
 (for_statement left: (identifier) @body.var)
 (for_in_clause left: (identifier) @body.var)
-(as_pattern_target (identifier) @body.var)
-(as_pattern_target (tuple (identifier) @body.var))
+(as_pattern_target [(identifier) @body.var
+                    (parenthesized_expression (identifier) @body.var)
+                    (tuple [(identifier) @body.var (list_splat (identifier) @body.var)])
+                    (list [(identifier) @body.var (list_splat (identifier) @body.var)])])
 (named_expression name: (identifier) @body.var)
 (nonlocal_statement (identifier) @body.var)
 (case_pattern . (dotted_name . (identifier) @body.var .) .)
 (function_definition name: (identifier) @body.var)
 (class_definition name: (identifier) @body.type)
+(type_alias_statement left: (type (identifier) @body.var))
 (function_definition type_parameters: (type_parameter
   (type [(identifier) @body.type (constrained_type . (type (identifier) @body.type))
          (splat_type (identifier) @body.type)])))

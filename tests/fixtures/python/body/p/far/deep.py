@@ -1,0 +1,2 @@
+class Far:
+    pass

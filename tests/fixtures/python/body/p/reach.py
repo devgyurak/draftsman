@@ -1,6 +1,6 @@
 import bar
 import p.sub.deep
-from p import sub
+from p import far, sub
 from p.compat import Shim, Twin
 from p.listing import *
 
@@ -11,6 +11,9 @@ class Reach:
 
     def submodule(self):
         return sub.deep.Deep()              #> Deep=p.sub.deep.Deep/r
+
+    def absolute(self):
+        return far.deep.Far()               #> Far=disputed/r
 
     def imported(self):
         return p.sub.deep.Deep()            #> Deep=p.sub.deep.Deep/r
