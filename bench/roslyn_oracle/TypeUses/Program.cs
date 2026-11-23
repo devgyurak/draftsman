@@ -24,6 +24,15 @@
 //   {"diagnostic": ...}         a compile error in a source
 //   {"use": ...}                a name in a body (below)
 //
+//   dotnet TypeUses.dll framework OUT.json LABEL DIR...
+//
+// writes instead what the reference assemblies in DIR... declare that names in bodies can
+// meet: each namespace's public types ("namespaces"), and per public class what a subclass
+// or `using static` sees: its base class ("b"), the public and protected fields, properties
+// and events it declares itself, instance ("f", not for a sealed or static class) and static
+// ("s"), and its public and protected nested types ("n") (langs/csharp_framework.json;
+// CSharpSpec reads it).
+//
 // A body is a method, constructor, accessor, operator or local function body, a
 // constructor initializer (`: base(...)`), a field's, property's or enum member's
 // initializer, a primary constructor's base arguments (`: Base(x)`) or a top-level
@@ -49,6 +58,11 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
 
+if (args[0] == "framework")
+{
+    Framework.Write(args[1], args[2], args.Skip(3));
+    return;
+}
 var (outPath, root, sourcesFile, langArg, configuration) = (args[0], Path.GetFullPath(args[1]), args[2], args[3], args[4]);
 if (!LanguageVersionFacts.TryParse(langArg, out var maxLang))
     throw new ArgumentException($"no language version {langArg}");
@@ -318,6 +332,82 @@ sealed class Reader(SemanticModel model, HashSet<string> sources, HashSet<string
     }
 
     // as ir.json writes a type's id: its namespace and outer types by `.`, no type arguments
+    static string Id(INamedTypeSymbol t)
+    {
+        var names = new List<string>();
+        for (var cur = t; cur != null; cur = cur.ContainingType)
+            names.Insert(0, cur.Name);
+        var ns = t.ContainingNamespace;
+        return ns == null || ns.IsGlobalNamespace ? string.Join(".", names) : $"{ns.ToDisplayString()}.{string.Join(".", names)}";
+    }
+}
+
+static class Framework
+{
+    public static void Write(string outPath, string label, IEnumerable<string> dirs)
+    {
+        var refs = dirs.SelectMany(d => Directory.GetFiles(d, "*.dll")).OrderBy(p => p)
+            .Select(p => MetadataReference.CreateFromFile(p));
+        var compilation = CSharpCompilation.Create("framework", references: refs);
+        var namespaces = new SortedDictionary<string, SortedSet<string>>(StringComparer.Ordinal);
+        var types = new SortedDictionary<string, object>(StringComparer.Ordinal);
+        void Walk(INamespaceSymbol ns)
+        {
+            foreach (var t in ns.GetTypeMembers().Where(Public))
+            {
+                var key = ns.IsGlobalNamespace ? "" : ns.ToDisplayString();
+                if (!namespaces.TryGetValue(key, out var names))
+                    namespaces[key] = names = new SortedSet<string>(StringComparer.Ordinal);
+                names.Add(t.Name);
+                Type(t);
+            }
+            foreach (var inner in ns.GetNamespaceMembers())
+                Walk(inner);
+        }
+        void Type(INamedTypeSymbol t)
+        {
+            var members = t.GetMembers().Where(m => !m.IsImplicitlyDeclared && Visible(m)
+                && m is IFieldSymbol or IPropertySymbol { IsIndexer: false } or IEventSymbol).ToList();
+            var nested = t.GetTypeMembers().Where(Visible).ToList();
+            var entry = new SortedDictionary<string, object>(StringComparer.Ordinal);
+            // a class: what a subclass inherits; a sealed or static one only what `using static`
+            // brings in (static members, nested types); no other kind is extended in C#
+            var extended = t.TypeKind == TypeKind.Class && !t.IsSealed && !t.IsStatic;
+            if (t.TypeKind != TypeKind.Class)
+                members.Clear();
+            if (!extended)
+                members.RemoveAll(m => !m.IsStatic && m is not IFieldSymbol { IsConst: true });
+            if (extended && t.BaseType is { SpecialType: not SpecialType.System_Object } b)
+                entry["b"] = Id(b.OriginalDefinition);
+            var inst = members.Where(m => !m.IsStatic && m is not IFieldSymbol { IsConst: true })
+                .Select(m => m.Name).Distinct().Order(StringComparer.Ordinal).ToList();
+            var stat = members.Where(m => m.IsStatic || m is IFieldSymbol { IsConst: true })
+                .Select(m => m.Name).Distinct().Order(StringComparer.Ordinal).ToList();
+            if (inst.Count > 0) entry["f"] = inst;
+            if (stat.Count > 0) entry["s"] = stat;
+            if (nested.Count > 0 && t.TypeKind == TypeKind.Class)
+                entry["n"] = nested.Select(n => n.Name).Distinct().Order(StringComparer.Ordinal).ToList();
+            if (entry.Count > 0)
+                types[Id(t)] = entry;
+            foreach (var n in nested)
+                Type(n);
+        }
+        Walk(compilation.GlobalNamespace);
+        var doc = new SortedDictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["framework"] = label,
+            ["namespaces"] = namespaces,
+            ["types"] = types,
+        };
+        File.WriteAllText(outPath, JsonSerializer.Serialize(doc) + "\n");
+    }
+
+    static bool Public(INamedTypeSymbol t) => t.DeclaredAccessibility == Accessibility.Public;
+
+    // what a subclass in another assembly sees
+    static bool Visible(ISymbol m) => m.DeclaredAccessibility is Accessibility.Public
+        or Accessibility.Protected or Accessibility.ProtectedOrInternal;
+
     static string Id(INamedTypeSymbol t)
     {
         var names = new List<string>();

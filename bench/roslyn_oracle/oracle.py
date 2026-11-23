@@ -10,6 +10,7 @@ and joins the compilations each file is in.
     uv run bench/roslyn_oracle/oracle.py scope REPO OUT.jsonl ir.json
     uv run bench/roslyn_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR [-v]
     uv run bench/roslyn_oracle/oracle.py measure OUT.jsonl [--ir ir.json]
+    uv run bench/roslyn_oracle/oracle.py framework
 
 `selftest` checks the key against the hand-written answers in tests/fixtures/csharp/body
 (tests/fixtures/java/body/README.md gives the marker format). `key` answers for any
@@ -21,7 +22,10 @@ REPOS says) in the container first, which takes the network. `scope` fails unles
 saw the same types, declared in the same files, as ir.json of those sources. `compare`
 extracts the same sources and checks every name a body relation is drawn from against
 what Roslyn resolved at its place. `measure` prints what the rules for hiding names are
-decided by.
+decided by. `framework` writes the extractor's table of .NET and ASP.NET
+(skills/draftsman/scripts/draftsman/langs/csharp_framework.json) from the reference
+assemblies of the image's SDK: each namespace's public types, and each public class's
+base, members a subclass inherits, static members and nested types.
 
 A file several compilations compile (target frameworks, a file linked into several
 projects) has the answers of all of them: where they agree, that is the record; where
@@ -375,6 +379,24 @@ def measure(args) -> int:
     return 0
 
 
+# the reference assemblies the table is made of, in the image
+PACKS = {"Microsoft.NETCore.App.Ref": "11.0.0", "Microsoft.AspNetCore.App.Ref": "11.0.0"}
+TABLE = ROOT / "skills" / "draftsman" / "scripts" / "draftsman" / "langs" / "csharp_framework.json"
+
+
+def framework(_args) -> int:
+    image()
+    packs = [f"/usr/share/dotnet/packs/{p}/{v}/ref/net{v.rsplit('.', 1)[0]}" for p, v in PACKS.items()]
+    subprocess.run(["docker", "run", "--rm", "-v", f"{TABLE.parent}:/out", IMAGE, "dotnet",
+                    "/opt/type-uses/TypeUses.dll", "framework", f"/out/{TABLE.name}",
+                    ", ".join(f"{p} {v}" for p, v in PACKS.items()), *packs], check=True)
+    table = json.loads(TABLE.read_text())
+    print(f"{TABLE.relative_to(ROOT)}: {len(table['namespaces'])} namespaces, "
+          f"{sum(len(t) for t in table['namespaces'].values())} type names, "
+          f"{len(table['types'])} classes")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -407,6 +429,7 @@ def main(argv=None) -> int:
     m.add_argument("--ir", type=Path, help="ir.json of the same sources: count only what it lacks")
     m.add_argument("-v", "--verbose", action="store_true", help="list the splits and shadows")
     m.set_defaults(fn=measure)
+    sub.add_parser("framework").set_defaults(fn=framework)
     args = ap.parse_args(argv)
     return args.fn(args)
 
