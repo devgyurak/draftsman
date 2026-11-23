@@ -400,6 +400,7 @@ class Extractor:
 
         imports_by_node: dict[int, Import] = {}   # by the nodes of its captures
         type_ids = {_root(caps, "type.")[1].id for caps in type_matches}
+        class_imports: dict[int, list[Import]] = {}   # LanguageSpec.local_imports
         listed: Optional[set[str]] = None   # the names the file lists as its exports
         readable = True
         for caps in other:
@@ -422,8 +423,11 @@ class Extractor:
                     continue
                 imp = self._import(caps, src, mod_path)
                 if imp is not None:
-                    if not (spec.local_imports and self._enclosed(node, type_ids)):
+                    around = self._enclosing(node, type_ids) if spec.local_imports else None
+                    if around is None:
                         scope.imports.append(imp)
+                    elif around.id in type_ids:   # the class's (its declarations' names)
+                        class_imports.setdefault(around.id, []).append(imp)
                     for nodes in caps.values():   # for an import in a member (@body.import)
                         for n in nodes:
                             imports_by_node[n.id] = imp
@@ -598,6 +602,15 @@ class Extractor:
         for ns, origin in build_imports:
             scope.imports.append(Import(ns, wildcard=True, sep=spec.separator, project_wide=True,
                                         origin=origin))
+
+        # an import in a class body names a class in that class's own declarations (its
+        # fields' and methods' annotations), not in its methods' bodies nor its nested classes
+        for nid, imps in class_imports.items():
+            if (rt := types_by_node.get(nid)) is not None:
+                rt.scope = replace(scope, imports=[*imps, *scope.imports])
+                for rm in rt.members:
+                    if rm.scope is scope:
+                        rm.scope = rt.scope
 
         for rt in raw.types:
             spec.finalize_type(rt)
@@ -881,14 +894,14 @@ class Extractor:
                 [(_line(n), _utf16_col(n, src)) for n in parts], via, ref_scope, rm,
                 ref_names, list(around)))
 
-    def _enclosed(self, node: ts.Node, type_ids: set[int]) -> bool:
-        """Whether ``node`` stands in a function or a type's body."""
+    def _enclosing(self, node: ts.Node, type_ids: set[int]) -> Optional[ts.Node]:
+        """The function or the type whose body ``node`` stands in, or None."""
         cur = node.parent
         while cur is not None:
             if cur.id in type_ids or self.spec.is_opaque(cur):
-                return True
+                return cur
             cur = cur.parent
-        return False
+        return None
 
     def _dotted(self, node: ts.Node) -> bool:
         """Whether a receiver is a dotted name: every node of it one of

@@ -304,17 +304,22 @@ def test_python_builtin_wins_unless_the_project_class_is_imported(tmp_path):
 
 def test_python_import_in_a_function_or_a_class_is_not_the_files(tmp_path):
     """An import in a function binds its names in the function, one in a class body in
-    the class body: neither is a name of the module (`class C(Bar)` beside
-    `def helper(): from app.bar import Bar`)."""
+    the class body, where the class's annotations see it: neither is a name of the module
+    (`class C(Bar)` beside `def helper(): from app.bar import Bar`)."""
     from conftest import extract_source
     ir = extract_source(tmp_path, {
         "app/__init__.py": "",
         "app/bar.py": "class Bar: ...\nclass Foo: ...\n",
-        "app/c.py": ("def helper():\n    from app.bar import Bar\n    return Bar\n\n"
-                     "class Holder:\n    from app.bar import Foo\n\n"
+        "app/foo.py": "class Foo: ...\n",
+        "app/c.py": ("from app.foo import Foo as Other\n\n"
+                     "def helper():\n    from app.bar import Bar\n    return Bar\n\n"
+                     "class Holder:\n    from app.bar import Foo as Other\n    x: Other\n\n"
+                     "    def m(self, a: Other) -> None: ...\n\n"
                      "class C(Bar):\n    x: Foo\n\n    def m(self, a: Foo) -> Bar: ...\n"),
     })
-    assert not [r for r in ir.relations if r.from_ == "app.c.C"]
+    assert {(r.from_, r.kind, r.to) for r in ir.relations} == {
+        ("app.c.Holder", "association", "app.bar.Foo"),
+        ("app.c.Holder", "dependency", "app.bar.Foo")}
     assert {u.raw_type for u in ir.unresolved} == {"Bar", "Foo"}
 
 
