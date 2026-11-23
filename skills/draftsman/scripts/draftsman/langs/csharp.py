@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import xml.etree.ElementTree as ET
@@ -149,6 +150,25 @@ def _references(project: str) -> Optional[frozenset[str]]:
             if _local(el.tag) == "ProjectReference" and el.get("Include"):
                 todo.append((cur.parent / el.get("Include").replace("\\", "/")).resolve())
     return frozenset(str(p) for p in seen)
+
+
+@lru_cache(maxsize=None)
+def _framework() -> dict:
+    """langs/csharp_framework.json: what .NET's and ASP.NET Core's reference assemblies
+    declare (`bench/roslyn_oracle/oracle.py framework` writes it)."""
+    with open(Path(__file__).with_name("csharp_framework.json")) as f:
+        return json.load(f)
+
+
+@lru_cache(maxsize=None)
+def _framework_namespaces() -> dict[str, frozenset]:
+    return {ns: frozenset(names) for ns, names in _framework()["namespaces"].items()}
+
+
+@lru_cache(maxsize=None)
+def _framework_types() -> frozenset:
+    return frozenset(f"{ns}.{n}" if ns else n
+                     for ns, names in _framework()["namespaces"].items() for n in names)
 
 
 @lru_cache(maxsize=None)
@@ -383,6 +403,42 @@ class CSharpSpec(LanguageSpec):
     def project_references(self, project):
         return _references(project)
 
+    def subtype_sees(self, modifiers):
+        # a private member, or a nested type with no access modifier (private), is not
+        # seen in a subtype; `private protected` is
+        return any(m in ("public", "protected", "internal", "package") for m in modifiers)
+
+    def outside_known(self, type_id):
+        return type_id in _framework()["types"] or type_id in _framework_types()
+
+    def inherited_field(self, super_id, name, static=False):
+        # a field, property or event a .NET or ASP.NET Core class (or one it extends)
+        # declares; with ``static``, a static one (what `using static` brings in)
+        seen: set[str] = set()
+        cur: Optional[str] = super_id
+        while cur and cur not in seen:
+            seen.add(cur)
+            entry = _framework()["types"].get(cur)
+            if entry is None:
+                return False
+            if name in entry.get("s", ()) or not static and name in entry.get("f", ()):
+                return True
+            cur = entry.get("b")
+        return False
+
+    def inherited_type(self, super_id, name):
+        seen: set[str] = set()
+        cur: Optional[str] = super_id
+        while cur and cur not in seen:
+            seen.add(cur)
+            entry = _framework()["types"].get(cur)
+            if entry is None:
+                return None
+            if name in entry.get("n", ()):
+                return f"{cur}.{name}"
+            cur = entry.get("b")
+        return None
+
     def body_name_text(self, text):
         return text.removeprefix("@")   # a verbatim identifier
 
@@ -437,6 +493,7 @@ class CSharpSpec(LanguageSpec):
     block_imports = True
     body_aliases = True
     color_color = True
+    unknown_bases_hide = True
 
     def preprocess(self, src):
         # keep the first branch of every #if, blank the #elif/#else branches and the

@@ -294,3 +294,23 @@ def test_a_type_of_a_project_the_file_does_not_reference_draws_nothing(tmp_path)
         "C/Use.cs": "namespace C { public class Use { object M() => new Lib.Order(); } }\n"})
     # C sees L through B
     assert _body(ir) == [("C.Use", "Lib.Order", "M", 1)]
+
+
+def test_a_member_of_an_outside_base_class_hides_a_type(tmp_path):
+    # ControllerBase.User and Request (the .NET table); a base no table knows may have any
+    # member: nothing is drawn under it where a variable may stand; an interface passes
+    # on none
+    ir = extract_source(tmp_path, {
+        "Types.cs": "namespace Shop { public class User { public static int Count = 0; } "
+                    "public class Request { public static int Count = 0; } }\n",
+        "Use.cs": """using Microsoft.AspNetCore.Mvc;
+using Some.Package;
+namespace Shop.Web
+{
+    public class Users : ControllerBase { object A() => User.Identity; object B() => new User(); object C() => Request.Count; }
+    public class Other : PackageBase { object A() => User.Count; object B() => new User(); }
+    public class Plain : IPackage { object A() => User.Count; }
+}
+"""})
+    assert _body(ir) == [("Shop.Web.Other", "Shop.User", "B", 6), ("Shop.Web.Plain", "Shop.User", "A", 7),
+                         ("Shop.Web.Users", "Shop.User", "B", 5)]

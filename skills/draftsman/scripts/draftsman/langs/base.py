@@ -189,6 +189,9 @@ class LanguageSpec:
     # class and an import) draws nothing in a body, as a variable would: which binding a
     # body sees depends on what ran (Python's `try: from x import Foo` / `except: class Foo`)
     rebinding_hides: bool = False
+    # Whether, under a base class outside the sources the language's table does not know
+    # (C#'s EF Core DbContext), a receiver draws nothing: the base may have any member
+    unknown_bases_hide: bool = False
     # Whether a field or property whose type has its name (C#'s `Order Order`) leaves the
     # name a type before a static member (`Order.Create()`), and a variable before any
     # other (`Order.Total`): C#'s "Color Color" rule
@@ -242,6 +245,16 @@ class LanguageSpec:
         compile (a .NET MAUI app's `Platforms/iOS/`, its `#if ANDROID`): no name in them is
         read for a body relation."""
         return []
+
+    def subtype_sees(self, modifiers: list[str]) -> bool:
+        """Whether a subtype sees by its simple name a nested type or field a supertype
+        declares with these modifiers (or visibility); not C#'s private ones."""
+        return True
+
+    def outside_known(self, type_id: str) -> bool:
+        """Whether the language's table of libraries knows the type outside the sources
+        (C#'s .NET and ASP.NET Core); a base class it does not know may pass on anything."""
+        return False
 
     def implicit_types(self, root_node: "ts.Node") -> list[str]:
         """Ids of the types a file declares without a declaration (C#'s `Program` of

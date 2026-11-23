@@ -8,6 +8,7 @@ external type end up in ``IR.unresolved`` for Claude to judge.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
@@ -271,10 +272,13 @@ class Resolver:
         if cand in self.index or cand in self.aliases:
             return cand
         if inherit:
+            spec = LANGUAGES[owner.language]
             for sup in self.supertypes(owner):
                 if sup.status == PROJECT:
                     found = self._member_type(self.index[sup.target], name, sep, inherit, seen)
-                    if found:
+                    # C#'s private nested type is no member of a subclass
+                    if found and (found not in self.index
+                                  or spec.subtype_sees(self.index[found].modifiers)):
                         return found
         return None
 
@@ -1035,7 +1039,7 @@ class Resolver:
                 return True
         cur: Optional[RawType] = rtype
         while cur is not None:
-            if self._has_field(cur, name):
+            if self._has_field(cur, name) or spec.unknown_bases_hide and self._unknown_base(cur):
                 return True
             cur = self.index.get(cur.outer) if cur.outer else None
         sep = spec.separator
@@ -1056,18 +1060,49 @@ class Resolver:
                     return True
         return False
 
-    def _has_field(self, rtype: RawType, name: str) -> bool:
+    def _unknown_base(self, rtype: RawType) -> bool:
+        """Whether the type or a project supertype extends a class outside the sources the
+        language's table does not know (LanguageSpec.unknown_bases_hide): an interface by
+        .NET's convention (`I` + a capital) passes on no member."""
+        key = (rtype.qualified_name, "?base")
+        if key not in self._field_cache:
+            self._field_cache[key] = False
+            spec = LANGUAGES[rtype.language]
+            found = False
+            for written, sup in zip(rtype.supers, self.supertypes(rtype)):
+                if sup.status == PROJECT:
+                    found = self._unknown_base(self.index[sup.target])
+                else:
+                    ref = parse_type(written.text)
+                    name = ref.name if isinstance(ref, Named) else ""
+                    last = name.rsplit(spec.separator, 1)[-1]
+                    if not last or re.match(r"I[A-Z]", last):
+                        continue
+                    scope = written.scope or rtype.scope
+                    if sup.status == EXTERNAL and sup.target:
+                        cands = [sup.target]
+                    else:   # any namespace a using brings in (the sources may share one)
+                        cands = [name] + [i.path + spec.separator + name for i in scope.imports
+                                          if i.wildcard]
+                    found = not any(spec.outside_known(t) for t in cands)
+                if found:
+                    break
+            self._field_cache[key] = found
+        return self._field_cache[key]
+
+    def _has_field(self, rtype: RawType, name: str, inherited: bool = False) -> bool:
         """Whether the project type has a field ``name``, also an enum constant, a record
         component or one of its RawType.body_fields, its own or inherited (through the JDK
         table for JDK supertypes)."""
-        key = (rtype.qualified_name, name)
+        key = (rtype.qualified_name, name, inherited)
         if key not in self._field_cache:
             self._field_cache[key] = False   # a cycle of supertypes has no field
             spec = LANGUAGES[rtype.language]
             self._field_cache[key] = any(
                 rm.member.name == name and rm.member.kind in ("field", "enum_constant", "property")
+                and (not inherited or spec.subtype_sees([rm.member.visibility, *rm.member.modifiers]))
                 for rm in rtype.members) or name in rtype.body_fields or any(
-                self._has_field(self.index[s.target], name)
+                self._has_field(self.index[s.target], name, True)
                 for s in self.supertypes(rtype) if s.status == PROJECT) or any(
                 spec.inherited_field(o, name)
                 for o in self._external_ancestors(rtype, starred=True))
