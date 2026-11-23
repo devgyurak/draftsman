@@ -14,3 +14,10 @@ export class Props {
     return Foo.create();                      //> Foo=p/foo.Foo/r
   }
 }
+
+// an enum's members are values in its members' values
+export enum Order {
+  Foo = 1,                                    //> Foo=-
+  Next = Foo + 1,                             //> Next=- Foo=var/r
+  Last = Kind.B,                              //> Last=- Kind=p/foo.Kind/r B=-
+}

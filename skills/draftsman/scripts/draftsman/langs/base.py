@@ -108,7 +108,8 @@ class LanguageSpec:
     # shares it, and draws nothing (a TypeScript interface beside `const Token = ...`)
     type_only_kinds: frozenset[str] = frozenset()
     # Whether a body sees the fields of the types around it by their simple names (Java's
-    # `X.m()` may be a field X); in TypeScript a field is always `this.X`
+    # `X.m()` may be a field X); in TypeScript a field is always `this.X`. An enum's own
+    # constants are in scope in its bodies either way (`B = A` in a TypeScript enum)
     fields_in_scope: bool = True
     # How a dotted receiver whose head is no type and no variable is read: as a package
     # (Java's `io.netty.Foo.m()`), or, when False, through what the scope binds the head to

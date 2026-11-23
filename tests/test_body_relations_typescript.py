@@ -174,3 +174,11 @@ export class A {
 }
 """})
     assert _body(ir) == [("a.A", "foo.Foo", "m", 4)]
+
+
+def test_an_enum_member_hides_a_class_in_the_enum(tmp_path):
+    ir = extract_source(tmp_path, {
+        "foo.ts": "export class Foo { static N = 1; }",
+        "a.ts": 'import { Foo } from "./foo";\n'
+                'export enum E { Foo = 1, B = Foo }\nexport enum F { C = Foo.N }\n'})
+    assert _body(ir) == [("a.F", "foo.Foo", "C", 3)]
