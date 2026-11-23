@@ -25,6 +25,9 @@ mismatch not listed below, or on fewer names drawn than the table gives.
 | `cs11` | 18 | an alias before and after a file-scoped namespace, a block using's generic type before a qualified name, `using static` fields and variables of other members before a receiver |
 | `cs12` | 0 | a package a referenced project references; a project's own code below a package's namespace |
 | `cs13` | 12 | global, csproj and nested-block aliases, an alias of a generic type, arity through block, file, global and static usings |
+| `cs14` | 22 | a parenthesized name before an operator or `[`, patterns, lambdas, attributes, strings, a local function's type parameter |
+| `cs15` | 6 | a package through two project references, an alias hiding a type |
+| `cs16` | 31 | forms tree-sitter and Roslyn may read apart: `F(a < b, c > d)`, `x is T ? a : b`, pointers, `(A)(b)`, `(A)!b`, `(A)~b`, collection expressions and ranges, types named `var`, `dynamic`, `nameof`, `value`, `field` |
 
 ## Known limits
 
