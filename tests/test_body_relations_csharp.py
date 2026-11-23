@@ -66,7 +66,7 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     assert wrong == []
     # every project type is drawn, but a type's own name, the part of a longer name
     # (`Order` in `Order.Line`), in top-level statements, after `global::`, through an
-    # alias (`O`), where a variable of the name has the type's name for its type
+    # alias, where a variable of the name has the type's name for its type
     # (`Order Order`: Roslyn reads `Order.Create()` as the type, `Order.Total` as the
     # variable; the extractor reads neither), where the arity written is not the
     # nearest type's (`Box` beside Shop.Box<T>: Roslyn's is Lib.Box further out), and
@@ -84,11 +84,10 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     top_level = [("Program.cs", 4, "Shop.Order"), ("Program.cs", 5, "Shop.Customer"),
                  ("Program.cs", 5, "Shop.Order")]
     global_ = [("Shop/Positions.cs", 28, "Shop.Order"), ("Shop/Positions.cs", 47, "Shop.Status")]
-    # (and where a compilation unit's alias shares the name, which in a file-scoped
-    # namespace the extractor takes for that namespace's: Roslyn's is Shop.Order around it)
-    alias = [("Shop/Hiding.cs", 63, "Shop.Order"), ("Shop/Hiding.cs", 64, "Shop.Order"),
-             ("Shop/Hiding.cs", 64, "Shop.Order"), ("Shop/Members.cs", 9, "Shop.Order"),
-             ("Shop/Members.cs", 10, "Shop.Order")]
+    # (an alias of one project type is followed, `O`, but not where a namespace around
+    # declares a type of the name: Roslyn's is Shop.Order around it, which in a file-scoped
+    # namespace the extractor puts after the alias)
+    alias = [("Shop/Members.cs", 9, "Shop.Order"), ("Shop/Members.cs", 10, "Shop.Order")]
     color_color = [("Shop/Hiding.cs", 11, "Shop.Order"), ("Shop/Hiding.cs", 17, "Shop.Money"),
                    ("Shop/Hiding.cs", 29, "Shop.Money"), ("Shop/Hiding.cs", 35, "Shop.Order"),
                    ("Shop/Hiding.cs", 77, "Shop.Customer")]

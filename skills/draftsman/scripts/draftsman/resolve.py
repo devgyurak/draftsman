@@ -670,6 +670,8 @@ class Resolver:
         """The project type a name in type position stands for where ``ref`` is written,
         or None: also when a type of the name is declared anywhere in the member."""
         res = self._in_body(name, rtype, ref, 0)
+        if res.status == ALIAS and res.target:
+            return self._alias_type(res.target, name, rtype, ref)
         return res.target if res.status == PROJECT else None
 
     def body_receiver(self, ref: RawBodyRef, rtype: RawType) -> Optional[tuple[str, int]]:
@@ -684,6 +686,9 @@ class Resolver:
         if parts[0] in ref.names.types or self._is_variable(parts[0], rtype, ref):
             return None
         res = self._in_body(parts[0], rtype, ref, 0)
+        if res.status == ALIAS and res.target:
+            aliased = self._alias_type(res.target, parts[0], rtype, ref)
+            res = Resolution(PROJECT, aliased) if aliased else Resolution(UNRESOLVED)
         if res.status == EXTERNAL and res.target in self.scopes_by_ns:
             res = Resolution(UNRESOLVED)   # Python's `from p import mod`: a module, no type
         if res.status == PROJECT:
@@ -725,6 +730,25 @@ class Resolver:
                 break   # `Foo.Cond` where Foo's body binds Cond twice: Foo alone
             target, n = nested, n + 1
         return target, n
+
+    def _alias_type(self, alias: str, name: str, rtype: RawType,
+                    ref: RawBodyRef) -> Optional[str]:
+        """The project type an alias the file declares names as a whole (C#'s `using O =
+        Shop.Order;`, not `using Orders = List<Order>;`; LanguageSpec.body_aliases), or
+        None; also None for one in code a build may leave out, and where a namespace
+        around declares a type of the name, which C# looks at before the file's aliases."""
+        spec = LANGUAGES[rtype.language]
+        entry = self.alias_targets.get(alias)
+        if not spec.body_aliases or entry is None or entry[1].file != ref.scope.file \
+                or alias in entry[1].conditional_aliases or not isinstance(
+                    written := parse_type(entry[0]), Named) or written.args:
+            return None
+        chain = self._namespace_chain(rtype.namespace, spec.separator,
+                                      spec.parent_namespace_lookup, ref.scope.namespace)
+        if any((ns + spec.separator + name if ns else name) in self.index for ns in chain):
+            return None
+        res = self.resolve(written.name, rtype, None, scope=entry[1], strict=True)
+        return res.target if res.status == PROJECT else None
 
     def _binds(self, head: str, rtype: RawType, ref: RawBodyRef) -> bool:
         """Whether ``head`` is a name the file imports or a namespace around ``rtype``."""

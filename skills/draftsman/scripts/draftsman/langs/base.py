@@ -89,6 +89,8 @@ class FileScope:
     # LanguageSpec.left_out_types: types a build may declare that the parser never saw
     left_out_types: set[str] = field(default_factory=set)
     left_out_names: set[str] = field(default_factory=set)   # LanguageSpec.left_out_names
+    # aliases declared in code a build may leave out (LanguageSpec.conditional_ranges)
+    conditional_aliases: set[str] = field(default_factory=set)
     implicit_types: list[str] = field(default_factory=list)          # LanguageSpec.implicit_types
     build_types: dict[str, set[str]] = field(default_factory=dict)   # LanguageSpec.build_types
     # names a statement at its top binds as a variable (`if x: Foo = None`, `del Foo`,
@@ -187,6 +189,10 @@ class LanguageSpec:
     # class and an import) draws nothing in a body, as a variable would: which binding a
     # body sees depends on what ran (Python's `try: from x import Foo` / `except: class Foo`)
     rebinding_hides: bool = False
+    # Whether a name in a body that is an alias the file declares of one project type
+    # (C#'s `using O = Shop.Order;`) draws a relation to that type; a TypeScript alias
+    # draws nothing in a body
+    body_aliases: bool = False
     # Whether an import in a namespace block belongs to that namespace (C#'s `namespace A {
     # using B; }`): looked at after A's types and before the namespaces around A
     block_imports: bool = False

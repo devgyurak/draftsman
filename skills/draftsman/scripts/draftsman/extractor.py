@@ -604,6 +604,8 @@ class Extractor:
                         scope.block_local[q] = (_line(block), block.end_point[0] + 1)
                     if target:
                         scope.alias_targets[q] = spec.normalize_type(target)
+                    if any(a <= n.start_byte < b for a, b in conditional):
+                        scope.conditional_aliases.add(q)
             elif (n := _first(caps, "annotation")) is not None:
                 target = _first(caps, "annotation.target")
                 if target is None:

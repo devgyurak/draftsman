@@ -435,6 +435,7 @@ class CSharpSpec(LanguageSpec):
     }
     parent_namespace_lookup = True
     block_imports = True
+    body_aliases = True
 
     def preprocess(self, src):
         # keep the first branch of every #if, blank the #elif/#else branches and the
