@@ -126,7 +126,9 @@ language's table does not know may have any member), `outside_namespace` (the ty
 namespace outside the sources declares, None when unknown; also those of a namespace
 around the code, before the file's imports), `outside_namespace_exists` (a namespace
 the table knows, also one holding only namespaces) and `package_namespace` (a namespace of
-a package the file's build project references, or a project it references passes on). Each of them draws less where a build may differ, never more.
+a package the file's build project references, or a project it references passes on),
+and `implicit_variables` (names a body binds without declaring them: C#'s `value` in a
+setter, `field` in a property's accessor). Each of them draws less where a build may differ, never more.
 
 ## Ownership
 

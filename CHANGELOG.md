@@ -129,7 +129,7 @@ Notes for anyone with `view.json` files written against a development build:
   `using static` in a namespace block, a type of a project the file's project does not
   reference, a `using`, a field or an alias only some build has, and a member generated
   code declares (Razor `@inject`, XAML `x:Name`, `[ObservableProperty]`,
-  `[JsonSerializable]`), all now closed and pinned in a fixture of 236 names compiled for
+  `[JsonSerializable]`), all now closed and pinned in a fixture of 247 names compiled for
   net11.0 and net10.0. The rules turned off one at a time keep these wrong names out of the
   e2e projects: fields and properties 3, 35 and 4 (eShop at a cost of 16 right ones, which
   C#'s Color Color rule, also followed, recovers), a type declared in an `#if` 1 (Serilog,
@@ -169,7 +169,10 @@ Notes for anyone with `view.json` files written against a development build:
   fit, also through a block's using), and at each level a namespace before the types of
   the level's usings; an alias's target is looked up where the alias is declared (before
   `namespace X;`: the global namespace). `#if false ... #else` reads the
-  `#else`, and `==` and `!=` in an `#if` are worked out. The reviews' sources are kept in
+  `#else`, and `==` and `!=` in an `#if` are worked out. `(Money)[0]` indexes a field and
+  `F(Order < b, Customer > d)` compares, where tree-sitter reads a cast and a declaration;
+  `value` in a setter and `field` in a property's accessor are variables. Roslyn's key now
+  records `var` where it names a type of the sources (`class var`), which it skipped. The reviews' sources are kept in
   `bench/roslyn_oracle/review/` and `oracle.py review` checks all of them: 0 mismatches
   but for the two `#if` limits below. eShop draws 560 names instead of 551, 9 receivers
   written partly qualified (`Services.Common.Common.X`), and eShopOnWeb 251 instead of 252,

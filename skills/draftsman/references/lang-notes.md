@@ -175,8 +175,15 @@ is that type. Aliases of aliases are followed.
   root namespace plus folders. A `file` type is seen in its file only; a type `internal`
   in another project (or nested in one) only where that project's `InternalsVisibleTo`
   (item or attribute) names the file's assembly. A name the written arity does not fit
-  (`Box` where the nearest Box is `Box<T>`) draws nothing; nor does `(Foo) - 1`, which C#
-  reads as a parenthesized name, or a property pattern's path (`{ Customer.Name: "x" }`).
+  (`Box` where the nearest Box is `Box<T>`) draws nothing; nor does `(Foo) - 1` or
+  `(Foo)[0]`, which C# reads as a parenthesized name (an element access before `[`, which
+  tree-sitter takes for a cast of a collection expression; `(Foo[])[]` stays a cast), a
+  property pattern's path (`{ Customer.Name: "x" }`), or `F(Order < b, Customer > d)`, two
+  comparisons tree-sitter reads as a declaration (a call's argument declares only after
+  `out`, `ref` or `in`). `value` in a setter (and `init`, `add`, `remove`) and C# 14's `field`
+  in a property's accessor are variables, which hide a type of the name. On the three e2e
+  repositories tree-sitter's parse of the (preprocessed) sources has no ERROR or MISSING
+  node.
 - Where a build may resolve a body's name differently, nothing is drawn: a type declared
   in the `#if` branch the parser reads (Serilog's `System.TimeProvider` for older
   targets), a name a type, field or alias of an `#elif`/`#else` branch has (in any file
@@ -217,7 +224,10 @@ is that type. Aliases of aliases are followed.
   not kept), a static member beside an instance overload of its name, a name a file's
   `using static` brings a field of (C# looks at the namespaces around first), a type of
   another arity further out (`Lib.Box` beyond `Box<T>`), and a name a switch arm's
-  pattern variable shares elsewhere in the member. Drawn where it may be wrong: a
+  pattern variable shares elsewhere in the member, a local function's type parameter's
+  (`typeof(Money)` elsewhere in a method whose local function is `M<Money>()`), a type
+  named as a pointer's (`Point* p`), and a type named `var` or `nameof` where a declaration
+  or a call would be read. Drawn where it may be wrong: a
   namespace around the code of a package the project does not reference itself (one that
   comes through another package or the SDK) is taken for the project's.
 - Not handled: extension methods (they stay members of their static class, which is
