@@ -206,6 +206,12 @@ class LanguageSpec:
     # Whether an import in a namespace block belongs to that namespace (C#'s `namespace A {
     # using B; }`): looked at after A's types and before the namespaces around A
     block_imports: bool = False
+    # Whether a namespace around the code that no type of the sources is declared in, and
+    # that a using of the sources imports (C#'s `namespace CommunityToolkit.Mvvm.Input.Mine`
+    # with `using CommunityToolkit.Mvvm.Input;` somewhere), is taken for one outside the
+    # sources: its types may hide any name found further out, which a body then draws
+    # nothing from
+    enclosing_outside_hides: bool = False
     # Whether `import a.b` binds the head `a`, so that `a.b.Foo()` in a body goes through it
     # (Python)
     module_imports_bind_heads: bool = False

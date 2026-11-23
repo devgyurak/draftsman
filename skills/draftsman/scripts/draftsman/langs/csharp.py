@@ -601,6 +601,7 @@ class CSharpSpec(LanguageSpec):
         "internal": "internal",
     }
     parent_namespace_lookup = True
+    enclosing_outside_hides = True
     block_imports = True
     body_aliases = True
     color_color = True
