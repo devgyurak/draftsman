@@ -243,10 +243,10 @@ class LanguageSpec:
         (C#'s fields and aliases)."""
         return set()
 
-    def platform_ranges(self, src: bytes, path: Path, root: Path) -> list[tuple[int, int]]:
-        """Byte ranges of code only a platform's build reads, which the answer key cannot
-        compile (a .NET MAUI app's `Platforms/iOS/`, its `#if ANDROID`): no name in them is
-        read for a body relation."""
+    def unbuilt_ranges(self, src: bytes, path: Path, root: Path) -> list[tuple[int, int]]:
+        """Byte ranges of code no build compiles (C#'s `#if false`) or only a platform's
+        build does, which the answer key cannot compile (a .NET MAUI app's `Platforms/iOS/`,
+        its `#if ANDROID`): no name in them is read for a body relation."""
         return []
 
     def subtype_sees(self, modifiers: list[str]) -> bool:

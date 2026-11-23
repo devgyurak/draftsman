@@ -81,9 +81,9 @@ _PLATFORM_SYMBOL = re.compile(r"(ANDROID|IOS|MACCATALYST|MACOS|TVOS|WINDOWS|TIZE
 _PLATFORM_FOLDERS = ("Android", "iOS", "MacCatalyst", "Windows", "Tizen")
 
 
-def _without_platforms(condition: str) -> Optional[bool]:
-    """An #if condition with every platform symbol false: True, False, or None when it
-    depends on another symbol."""
+def _without_platforms(condition: str, platforms: bool = True) -> Optional[bool]:
+    """An #if condition with every platform symbol false (``platforms``; else they are
+    unknown, as any other symbol): True, False, or None when it depends on a symbol."""
     tokens = re.findall(r"&&|\|\||[!()]|[A-Za-z_][A-Za-z0-9_]*", condition.split("//")[0])
     at = 0
 
@@ -109,7 +109,7 @@ def _without_platforms(condition: str) -> Optional[bool]:
         t = take() if peek() is not None else ""
         if t == "true":
             return True
-        if t == "false" or _PLATFORM_SYMBOL.fullmatch(t):
+        if t == "false" or platforms and _PLATFORM_SYMBOL.fullmatch(t):
             return False
         return None
 
@@ -593,22 +593,23 @@ class CSharpSpec(LanguageSpec):
         # configuration, and it parses wherever the directives sit
         return b"\n".join(line if kept else _blank(line) for line, kept, _ in _lines(src))
 
-    def platform_ranges(self, src, path, root):
-        # in a .NET MAUI app: its Platforms/<platform>/ folders, and the first branch of an
-        # #if that is false with every platform symbol false (`#if IOS || MACCATALYST`, not
-        # `#if !WINDOWS`), which only a platform's build compiles
+    def unbuilt_ranges(self, src, path, root):
+        # the first branch of an #if that is false whatever the symbols (`#if false`); in a
+        # .NET MAUI app also its Platforms/<platform>/ folders, and a first branch false with
+        # every platform symbol false (`#if IOS || MACCATALYST`, not `#if !WINDOWS`), which
+        # only a platform's build compiles
         project = _project_file(path.resolve().parent)
-        if project is None or not _uses_maui(project):
-            return []
-        below = path.resolve().relative_to(project.parent).parts
-        if len(below) > 2 and below[0] == "Platforms" and below[1] in _PLATFORM_FOLDERS:
-            return [(0, len(src))]
+        maui = project is not None and _uses_maui(project)
+        if maui:
+            below = path.resolve().relative_to(project.parent).parts
+            if len(below) > 2 and below[0] == "Platforms" and below[1] in _PLATFORM_FOLDERS:
+                return [(0, len(src))]
         out, at, stack, off = [], 0, [], False   # stack: whether each #if's branch was off
         for line in src.split(b"\n"):
             m = re.match(rb"^[ \t]*#[ \t]*(if|elif|else|endif)\b(.*)", line)
             if m and m.group(1) == b"if":
                 stack.append(off)
-                off = off or _without_platforms(m.group(2).decode("utf8", "replace")) is False
+                off = off or _without_platforms(m.group(2).decode("utf8", "replace"), maui) is False
             elif m and m.group(1) in (b"elif", b"else"):
                 off = stack[-1] if stack else off   # blanked anyway
             elif m and stack:

@@ -119,6 +119,9 @@ class RawType:
     # names of types the type declares that ir.json does not record (C#'s nested delegates:
     # "type"; an extension block's type parameters: "tparam"; `@body.hidden_type`)
     hidden_types: dict[str, str] = field(default_factory=dict)
+    # names a build may declare in the type's #elif/#else branches, in any of its files
+    # (LanguageSpec.left_out_names)
+    left_out: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -538,6 +541,7 @@ class Extractor:
                 annotations=annos + [annotation_name(_text(a, src))
                                      for a in caps.get("annotation", [])],
                 conditional=any(a <= node.start_byte < b for a, b in conditional),
+                left_out=set(scope.left_out_names),
             )
             return entry["raw"]
 
@@ -637,7 +641,7 @@ class Extractor:
             self._annotation_ref(annotation_refs[nid], src, scope, types_by_node,
                                  set(annotation_refs))
         self._body_refs(bodies, src, scope, types_by_node, members_by_node, namespaces,
-                        imports_by_node, spec.platform_ranges(original, path, root))
+                        imports_by_node, spec.unbuilt_ranges(original, path, root))
 
         # what the build imports into every file (implicit usings), after the file's own
         # (a C# <Using Alias> is looked at after the namespaces around, as a file's alias at
@@ -702,7 +706,7 @@ class Extractor:
     def _body_refs(self, matches, src, scope, types_by_node, members_by_node,
                    namespaces, imports_by_node, unread_ranges=()) -> None:
         """Names written in bodies, each with what may hide it there (query-protocol.md);
-        none in ``unread_ranges`` (LanguageSpec.platform_ranges)."""
+        none in ``unread_ranges`` (LanguageSpec.unbuilt_ranges)."""
         regions: set[int] = set()
         inits: dict[int, str] = {}           # initializer block -> its `via`
         classes: dict[int, list[str]] = {}   # body of an anonymous or local class -> supertypes

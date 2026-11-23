@@ -1292,6 +1292,7 @@ class _Builder:
         existing.body_refs.extend(t.body_refs)
         existing.body_fields |= t.body_fields
         existing.conditional |= t.conditional
+        existing.left_out |= t.left_out
         existing.hidden_types.update(t.hidden_types)
         existing.generics += [g for g in t.generics if g not in existing.generics]
         for m in t.modifiers:
@@ -1452,7 +1453,7 @@ class _Builder:
             # a type of where the parser saw none: no one type for every build
             sep = LANGUAGES[rtype.language].separator
             if self.types[target].conditional or any(
-                    p in self.left_out or p in ref.scope.left_out_names
+                    p in self.left_out or p in ref.scope.left_out_names or p in rtype.left_out
                     for p in ref.text.split(sep)[:n]):
                 continue
             spec = LANGUAGES[rtype.language]
