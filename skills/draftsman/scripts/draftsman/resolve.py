@@ -106,12 +106,16 @@ class Resolver:
         return all(spec.star_exports(name, s, certain) for s in scopes)
 
     def _rebound(self, target: str) -> bool:
-        """Whether the module of a project type binds its name (or its outermost type's)
-        more than once at its top (FileScope.rebound)."""
+        """Whether the module of a project type binds its name (or an outer type's) more
+        than once at its top, or the class body around it does (FileScope.rebound: `Foo`,
+        `Foo.Cond`)."""
         t = self.index[target]
+        names = [t.name]
         while t.outer and t.outer in self.index:
             t = self.index[t.outer]
-        return t.name in t.scope.rebound
+            names.insert(0, t.name)
+        sep = LANGUAGES[t.language].separator
+        return any(sep.join(names[:k]) in t.scope.rebound for k in range(1, len(names) + 1))
 
     def lookup(self, path: str, spec, depth: int = 0, certain: bool = False) -> Optional[str]:
         """Project type or alias id for a fully written path, following re-exports;
@@ -706,8 +710,9 @@ class Resolver:
         while n < len(parts) and not self._has_field(self.index[target], parts[n]):
             nested = self._member_type(self.index[target], parts[n], sep,
                                        spec.inherited_member_types, set())
-            if nested is None or self.index[nested].kind in spec.type_only_kinds:
-                break
+            if nested is None or self.index[nested].kind in spec.type_only_kinds or (
+                    spec.rebinding_hides and self._rebound(nested)):
+                break   # `Foo.Cond` where Foo's body binds Cond twice: Foo alone
             target, n = nested, n + 1
         return target, n
 

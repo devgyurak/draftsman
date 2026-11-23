@@ -781,6 +781,7 @@ class Extractor:
         # class -> what the statements of its body bind outside its members
         # (LanguageSpec.initializers_in_class_scope)
         in_class: dict[int, set[str]] = {}
+        nested: Counter = Counter()   # (class, the name of a class statement in its body)
 
         def class_around(cur: Optional[ts.Node]) -> Optional[ts.Node]:
             """The type whose body ``cur`` stands in, with no function between."""
@@ -819,6 +820,9 @@ class Extractor:
             elif self.spec.initializers_in_class_scope and kind in ("variables", "imports") \
                     and (cls := class_around(node.parent)) is not None:
                 in_class.setdefault(cls.id, set()).add(_text(node, src))
+            elif self.spec.rebinding_hides and kind == "types" and node.parent.id in types_by_node \
+                    and (cls := class_around(node.parent.parent)) is not None:
+                nested[(cls.id, _text(node, src))] += 1
             elif (kind == "variables" or self.spec.rebinding_hides) and (path := namespace_path(
                     # a function's or a class's name is the scope's around it
                     node.parent.parent if node.parent.child_by_field_name("name") == node
@@ -837,6 +841,14 @@ class Extractor:
         for path, counts in bound.items():
             in_namespace.setdefault(path, set()).update(n for n, k in counts.items() if k > 1)
         scope.rebound = {n for n in top_classes if n in in_namespace.get((), ())}
+        # the same in a class body: `if x: class Cond` / `else: class Cond` in Foo is no one
+        # `Foo.Cond`, nor is a nested class the body also binds as a variable
+        for (cid, name), k in nested.items():
+            if k > 1 or name in in_class.get(cid, ()):
+                outer = types_by_node[cid].qualified_name
+                if scope.namespace and outer.startswith(scope.namespace + self.spec.separator):
+                    outer = outer[len(scope.namespace) + len(self.spec.separator):]
+                scope.rebound.add(outer + self.spec.separator + name)
         if not refs:
             return
         seeded: set[int] = set()   # members given the variables of the namespaces around
