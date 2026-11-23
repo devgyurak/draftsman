@@ -80,11 +80,12 @@ is that type. Aliases of aliases are followed.
   name is, from the innermost scope out: `Models.Order` in `namespace App.Web` is
   `App.Models.Order` when the namespace `App.Models` exists, and `Lib.Order` where a class
   `Lib` is nearer than the namespace `Lib` is that class's nested `Order` (a `Lib<T>` is
-  passed over: the arity written must fit). At each level a namespace's members, its
+  passed over, also one a block's using brings in: the arity written must fit). At each level a namespace's members, its
   namespaces among them, come before its usings: `Models.Order.Count` is the global
   namespace `Models`'s, not the class `Models` a file-level `using App.Entities;` brings
   in. `using X;` is a wildcard import, `using A = B;` an alias, whose target is looked up
-  where the alias is declared (at the top of the file: from the global namespace).
+  where the alias is declared (at the top of the file, also before `namespace X;`: from
+  the global namespace; after it, from X).
   `global::A.B` is `A.B`. Primary constructors (C# 12, `class Order(IRepo<Order> repo)`)
   are a public constructor whose parameters are dependencies; records keep their
   parameters as properties. `params Q[] qs` is a parameter. Tuples (`(Person a, Point b)`)
@@ -165,7 +166,8 @@ is that type. Aliases of aliases are followed.
   declares a type of the name; `<Using Include Alias>` and `<Using Static="true">` items of
   the project file are global usings. A namespace around the code that is a package's
   the project references (the `<PackageReference Include>` id, in the project or its
-  `Directory.Build.props`, or a namespace below it, case aside: `namespace
+  `Directory.Build.props`, or in a project its `<ProjectReference>`s reach unless
+  `PrivateAssets="all"`, or a namespace below it, case aside: `namespace
   CommunityToolkit.Mvvm.Input.Mine` with CommunityToolkit.Mvvm) and that the table does
   not know may hold any type, which hides a name found further out: such a name draws
   nothing, also where the sources declare types in that namespace. A Razor component (`X.razor`) is a type of its
@@ -196,10 +198,15 @@ is that type. Aliases of aliases are followed.
   no build compiles. Lost: under a base class outside .NET and ASP.NET, every name where a
   variable may stand (7 on eShop's MAUI app); behind a namespace the table does not know
   in a nearer using (2 on eShop); found further out than a package's namespace around the
-  code (the rule above; 1 on eShopOnWeb, in `namespace Ardalis.GuardClauses`), also an
-  alias's target there; a qualified name whose first part another project's internal
+  code (the rule above), also an alias's target there: a project that puts its own code
+  below a package's namespace loses the names its usings, the namespaces around and
+  qualified names give (eShopOnWeb 1, in `namespace Ardalis.GuardClauses`;
+  serilog-sinks-file's `src` at `4c8e677`, in `namespace Serilog` and
+  `Serilog.Sinks.File` of the Serilog package, 13 body dependencies instead of 20); a qualified name whose first part another project's internal
   type or a project the file's does not reference takes (`Models.Order` where `App.Models`
-  is such a class or namespace), or that starts with `global::`; a name of the table's ASP.NET
+  is such a class or namespace), or that starts with `global::`; a receiver whose head a
+  field of the file's `using static` shares while a namespace of the name comes first, and
+  one whose name another member of the type binds as a variable; a name of the table's ASP.NET
   namespaces around the code where the project does not reference ASP.NET (the table is
   one for every project); a name through a namespace alias or an alias of a generic
   (`M.Order` with `using M = Shop.Models;`); a `file` type's name, and in another file a name it

@@ -129,7 +129,7 @@ Notes for anyone with `view.json` files written against a development build:
   `using static` in a namespace block, a type of a project the file's project does not
   reference, a `using`, a field or an alias only some build has, and a member generated
   code declares (Razor `@inject`, XAML `x:Name`, `[ObservableProperty]`,
-  `[JsonSerializable]`), all now closed and pinned in a fixture of 231 names compiled for
+  `[JsonSerializable]`), all now closed and pinned in a fixture of 236 names compiled for
   net11.0 and net10.0. The rules turned off one at a time keep these wrong names out of the
   e2e projects: fields and properties 3, 35 and 4 (eShop at a cost of 16 right ones, which
   C#'s Color Color rule, also followed, recovers), a type declared in an `#if` 1 (Serilog,
@@ -161,13 +161,14 @@ Notes for anyone with `view.json` files written against a development build:
   namespace outside the sources around the code is looked in before the file's usings, as
   C# does: `Host` in `namespace Microsoft.Extensions.Hosting` and `Random` in `namespace
   System.Mine` are the framework's (the .NET table's); a namespace around the code that is
-  the id of a package the project references, or below it (`namespace
-  CommunityToolkit.Mvvm.Input.Mine`), is the package's, and a name found further out than it
-  draws nothing. A qualified name's first part is looked up as a simple name: `Models.Order`
+  the id of a package the project references, or a project it references passes on, or
+  below it (`namespace CommunityToolkit.Mvvm.Input.Mine`), is the package's, and a name
+  found further out than it draws nothing. A qualified name's first part is looked up as a simple name: `Models.Order`
   in `namespace App.Web` is `App.Models.Order` where that namespace exists, a class `Lib`
   around comes before a namespace `Lib` (not a `Lib<T>`, which the written arity does not
-  fit), and at each level a namespace before the types of the level's usings; an alias's
-  target is looked up where the alias is declared. `#if false ... #else` reads the
+  fit, also through a block's using), and at each level a namespace before the types of
+  the level's usings; an alias's target is looked up where the alias is declared (before
+  `namespace X;`: the global namespace). `#if false ... #else` reads the
   `#else`, and `==` and `!=` in an `#if` are worked out. The reviews' sources are kept in
   `bench/roslyn_oracle/review/` and `oracle.py review` checks all of them: 0 mismatches
   but for the two `#if` limits below. eShop draws 560 names instead of 551, 9 receivers
@@ -176,7 +177,9 @@ Notes for anyone with `view.json` files written against a development build:
   Declared relations do not change; eShop's unresolved go from 517 to 513 and
   eShopOnWeb's from 195 to 194 (files declared in a `Microsoft.*` namespace find
   `IServiceCollection`, `IHostEnvironment`, `IUrlHelper` there). Lost and documented:
-  names past a package's namespace, a name of the table's ASP.NET namespaces around code
+  names past a package's namespace, which a project that puts its own code below one
+  loses (serilog-sinks-file's `src`: 13 body dependencies instead of 20), a name of the
+  table's ASP.NET namespaces around code
   whose project does not reference ASP.NET, and a first part another project's internal
   type or an unreferenced project's namespace takes; drawn where it may be wrong: a
   namespace of a package the project does not reference itself.
