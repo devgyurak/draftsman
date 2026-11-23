@@ -835,9 +835,10 @@ class Resolver:
     def _uncertain(self, scope: FileScope, name: str, spec) -> bool:
         """Whether a file's ``name`` may be another class than the one it resolves to: bound
         by a wildcard import of a module outside the sources (`from tkinter import *`),
-        whose names are not known, or bound to two classes at the top of the file (`from .a
+        whose names are not known, bound to two classes at the top of the file (`from .a
         import Foo` and `from .b import Foo`, two star imports that bring in two, an import
-        and a class); in the file, or in a project module the file takes the name from, by
+        and a class), or bound as a variable there (FileScope.variables); in the file, or
+        in a project module the file takes the name from, by
         its name or by a wildcard import that brings it in (`from q.gui import *`, `gui.py`
         importing tkinter's *; `from q.dup import Foo`)."""
         key = (id(scope), name)
@@ -846,6 +847,9 @@ class Resolver:
         self._uncertain_names[key] = False   # a cycle of imports adds nothing
         sep = spec.separator
         found = False
+        if name in scope.variables:   # `if x: Foo = None` in the module the name comes from
+            self._uncertain_names[key] = True
+            return True
         own = f"{scope.namespace}{sep}{name}" if scope.namespace else name
         targets = {own} if own in self.index and self.index[own].location.file == scope.file \
             else set()

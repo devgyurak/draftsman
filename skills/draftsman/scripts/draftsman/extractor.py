@@ -831,6 +831,7 @@ class Extractor:
                         top_classes.add(_text(node, src))
                         if _inside(node, guarded):   # no one class for every checker
                             in_namespace.setdefault((), set()).add(_text(node, src))
+        scope.variables = set(in_namespace.get((), ()))   # before the names bound twice
         # a name bound twice there (two class statements, a class and an import) is no
         # one type (LanguageSpec.rebinding_hides), here and where it is imported
         for path, counts in bound.items():

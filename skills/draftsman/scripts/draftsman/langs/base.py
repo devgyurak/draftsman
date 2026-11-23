@@ -80,6 +80,9 @@ class FileScope:
     # top-level names the file binds more than once, one of them by a class statement
     # (LanguageSpec.rebinding_hides): no one class, also where another file imports it
     rebound: set[str] = field(default_factory=set)
+    # names a statement at its top binds as a variable (`if x: Foo = None`, `del Foo`,
+    # `global Foo` in a function): no class, also where another file takes them from it
+    variables: set[str] = field(default_factory=set)
     # names the file may declare where the parser could not see it: simple name ->
     # namespace around it -> places (an argument of a blanked macro, a class head inside
     # a syntax error)
