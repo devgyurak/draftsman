@@ -97,6 +97,31 @@ Notes for anyone with `view.json` files written against a development build:
   (`Field`). Django extracts in about 2.5 s instead of 1.0 s. jsoup's, petclinic's,
   Netty's, TypeORM's and nest's `ir.json` are byte for byte the same; the C#, Kotlin and
   C++ e2e projects were not run again.
+- **More Python forms that drew a wrong class in a body** (#5, after 0.5.0). Sources
+  written by hand for review, run through the extractor and the three checkers together,
+  drew a class where the checkers name something else: 21, 15 and 2 names in three sets,
+  now 0. An attribute's name after a value was read as a name of the scope
+  (`super().Foo`, `xs[0].Foo()`, `Foo().Inner`); a pattern's keyword was read and its
+  captures did not hide (`case Bar(Foo=0)`, `case Bar(real=Foo)`, `as Foo`, `*Foo`,
+  `**Foo`); what a class body's statements bind did not hide a name in its values (`if x:
+  Foo = 1`, `for Foo in ...`, `Foo, y = 1, 2`, `(Foo := 1)`, an import there); an import in
+  a function or a class body was the whole file's (`def helper(): from gui import
+  TimeoutError` made every `except TimeoutError:` the project's, and an import in one
+  method reached the others), declared relations included, before #5 too; `self.x = Foo`
+  in `__init__` missed the method's names. Listing where tree-sitter-python puts an
+  identifier in Django, httpx and the standard library found `del Foo` and `type Pair[T] =
+  ...`, which bind names, and checking more forms by hand found two more: `p.bar.Bar()`
+  after `from p.bar import Bar` (pyright and ty find no `p.bar`: only `import p.bar`
+  reaches it now) and a class beside a star import of an outside module (`from tkinter
+  import *`: no name of the file is drawn). An import in a class body names a class in
+  that class's annotations, which also corrects `y: Foo` after `from m import Bar as Foo`
+  there (the module's Foo before). The key gained four fixes: a name after characters
+  outside the BMP on its line (`"😀😀", Foo()`, where mypy's start column is off by one,
+  its end column not), `case {**rest}`, a `type` statement's name, `Foo[int]` read once.
+  The fixture grows to 185 names and 38 non-names; each fix fails a test when turned off.
+  Django's and httpx's `ir.json` are byte for byte the same (none of these forms occurs
+  there in a way that changes a relation: still 4065 and 186 names, 3 and 0 mismatches,
+  the same keys), and so are jsoup's, petclinic's, Netty's, TypeORM's and nest's.
 - **A TypeScript namespace's own type comes before an import of its name** (after 0.5.0).
   In `import { Foo } from "./foo"; namespace N2 { class Foo {} export class A { f: Foo |
   null = null } }`, A's Foo is N2's, as the compiler says, but the extractor checked the

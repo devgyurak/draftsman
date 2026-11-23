@@ -317,24 +317,35 @@ is that type. Aliases of aliases are followed.
   `models.Model()`. What hides one: the member's parameters and every name its statements
   bind, anywhere in it (also after the name, and a comprehension's or a lambda's variable
   outside them, so a few are lost): assignment and `for` targets, `with`/`except ... as`,
-  `:=`, `nonlocal`, a `case` capture, a function, class or PEP 695 type parameter it
-  declares. An import in the member (`from x import Foo`) names x's Foo after it, in the
+  `:=`, `del`, `nonlocal`, a `case` capture (`case Foo`, `case Bar(real=Foo)`, `case Bar()
+  as Foo`, `case [*Foo]`, `case {**Foo}`), a function, class, `type Pair[T]` statement or
+  PEP 695 type parameter it declares. `self.x = Foo` in `__init__`, a field written in a
+  method, sees the method's names. An attribute's name is no name of the scope
+  (`super().Foo`, `xs[0].Foo()`, `Foo().Inner`, `case Bar(Foo=0)`). An import in the
+  member (`from x import Foo`) names x's Foo after it, in the
   function it stands in and those inside it; elsewhere in the member, before it, or where
-  two imports of the name may run, it hides the name, as `import a.b` hides `a`. The
+  two imports of the name may run, it hides the name, as `import a.b` hides `a`. An
+  import in a function or a class body is never the file's: not in another method, nor in
+  a declaration (`class C(Bar)` beside `def helper(): from x import Bar`); one in a class
+  body names a class in that class's annotations and signatures. The
   module's variables (assignments, `for` and
   `with` targets, functions and `type X = ...` at its top, under `if`/`try` too: `try:
   from x import Foo` / `except ImportError: Foo = None`) and every name a `global`
   statement names hide it in every class of the file. In a class-level value, the class's
-  own names do (fields, methods, nested classes: `value = Foo` after `Foo = 1`; its
-  nested class there is missed). A method does not see its class body: not its
+  own names do (fields, methods, nested classes, and what its statements bind: `value =
+  Foo` after `Foo = 1`, `if x: Foo = 1`, `for Foo in ...`, `Foo, y = 1, 2`, an import in
+  the class body; its nested class there is missed). A method does not see its class body: not its
   attributes, nor its nested classes by their simple names (`Outer.Inner()` is drawn, a
   bare `Inner()` is the module's). A name the module binds twice at its top (two class
   statements, a class and an import of its name, a class and a star import that brings
-  in another one of that name) is no one class, there or where another file imports it.
+  in another one of that name) is no one class, there or where another file imports it;
+  beside a star import of a module outside the sources (`from tkinter import *`), whose
+  names are not known, no name of the file is drawn.
   A dotted value goes through what the file imports (`models.Model()` after `from
   django.db import models`, `p.foo.Foo()` after `import p.foo`), never a variable, and
-  reaches a submodule only when the file imports it (`models.base.ModelBase()` draws
-  nothing after `from django.db import models` alone). In a body nothing comes through a
+  reaches a submodule only when the file imports it as a module (`models.base.ModelBase()`
+  draws nothing after `from django.db import models` alone; `p.bar.Bar()` nothing after
+  `from p.bar import Bar` or `from p import bar`, where pyright and ty find no `p.bar`). In a body nothing comes through a
   star import whose `__all__` cannot be read (`__all__ = a_all + b_all`). No name in a
   branch of a `sys.platform` or `sys.version_info` test is read, and a class declared in
   one draws nothing, in its file or where another imports it. Checked against mypy, pyright and ty together
@@ -345,10 +356,13 @@ is that type. Aliases of aliases are followed.
   `raw_id_fields = ()`, and gives no definition in it. The key is the name as static
   analysis sees it: monkeypatching, a name another module rebinds later, and code only
   another platform runs are in none of the three. Known limits: a plain name that starts
-  lower-case is not read (a class named so is missed); a class beside a star import of
-  an outside module (`from tkinter import *`) is taken to be the module's own; a nested
-  class reached through a subclass (`Sub.Listener()`) draws only `Sub`; names in string
-  annotations and type comments are not read.
+  lower-case is not read (a class named so is missed); a nested class reached through a
+  subclass (`Sub.Listener()`) draws only `Sub`; a name an import in the class body binds
+  is not read in the class's values; after two imports of one package's modules (`import
+  p.foo`, `import p.bar`) `p.foo.Foo()` draws nothing, as `p` counts as bound twice;
+  names in string annotations and type comments are not read. In a declaration, a nested
+  class's annotation sees the outer class's nested classes (`class Outer: class Sub: x:
+  Inner` is `Outer.Inner`), which Python's scoping does not (the module's `Inner`).
 - Not handled: `__all__` written as anything but a list or tuple of strings
   (`a_all + b_all`, `__all__.extend(...)`; a star import is then taken to bring in every
   name not starting with `_`, except in a body), attributes created outside `__init__`,
