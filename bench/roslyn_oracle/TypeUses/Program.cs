@@ -17,7 +17,8 @@
 //   {"compilation": NAME, ...}  a compilation: its language version, configuration,
 //                               preprocessor symbols and error count
 //   {"workspace": MESSAGE}      what the workspace reported while loading
-//   {"declared": ID, "file"}    a class, struct, interface, record or enum a source declares
+//   {"declared": ID, "file"}    a class, struct, interface, record or enum a source declares,
+//                               with "parts": the sources declaring it (a partial type's)
 //   {"disabled": FILE, "lines"} the lines of a source the compilation does not compile
 //                               (an inactive #if branch): every source it compiles has one
 //   {"diagnostic": ...}         a compile error in a source
@@ -121,7 +122,7 @@ sealed class Reader(SemanticModel model, HashSet<string> sources, HashSet<string
         emit(new { disabled = file, lines = off, comp });
         foreach (var decl in root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
             if (model.GetDeclaredSymbol(decl) is INamedTypeSymbol t)
-                emit(new { declared = Id(t), file, comp });
+                emit(new { declared = Id(t), file, parts = Parts(t), comp });
         foreach (var name in root.DescendantNodes().OfType<SimpleNameSyntax>())
             if (InBody(name))
                 Chain(name);
@@ -202,7 +203,7 @@ sealed class Reader(SemanticModel model, HashSet<string> sources, HashSet<string
         // (`x is Status.Closed`), where a variable comes first
         var typeContext = top is TypeSyntax ts && SyntaxFacts.IsInNamespaceOrTypeContext(ts)
             && !(top.Parent is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.IsExpression }
-                 && model.GetSymbolInfo(top).Symbol is not ITypeSymbol);
+                 && Bound(model.GetSymbolInfo(top)) is not ITypeSymbol);
         var got = new List<Dictionary<string, object?>>();
         foreach (var part in parts)
         {
@@ -251,18 +252,21 @@ sealed class Reader(SemanticModel model, HashSet<string> sources, HashSet<string
     Dictionary<string, object?> Classify(SimpleNameSyntax part)
     {
         var info = model.GetSymbolInfo(part);
-        var sym = info.Symbol ?? (info.CandidateSymbols.Length == 1 ? info.CandidateSymbols[0] : null);
+        var sym = Bound(info);
         var rec = new Dictionary<string, object?> { ["kind"] = "error", ["target"] = null, ["project"] = false };
         if (info.Symbol == null && info.CandidateSymbols.Length > 0)
+        {
             rec["candidates"] = info.CandidateReason.ToString();
+            if (info.CandidateSymbols.All(c => c is IMethodSymbol))
+                rec["kind"] = "method";   // `nameof(Save)` of an overloaded method
+        }
         if (model.GetAliasInfo(part) is { } alias)
             rec["alias"] = alias.Name;
         switch (sym)
         {
             case INamedTypeSymbol t when t.TypeKind != TypeKind.Error:
                 var def = t.OriginalDefinition;
-                var files = def.DeclaringSyntaxReferences.Select(r => r.SyntaxTree.FilePath)
-                    .Where(sources.Contains).Select(rel).Distinct().Order().ToList();
+                var files = Parts(def);
                 rec["kind"] = "type";
                 rec["target"] = Id(def);
                 // a delegate is no type to the extractor
@@ -295,6 +299,14 @@ sealed class Reader(SemanticModel model, HashSet<string> sources, HashSet<string
         }
         return rec;
     }
+
+    // the sources that declare a type: one, or each part of a partial type
+    List<string> Parts(INamedTypeSymbol t) => t.DeclaringSyntaxReferences.Select(r => r.SyntaxTree.FilePath)
+        .Where(sources.Contains).Select(rel).Distinct().Order().ToList();
+
+    // the symbol, or the one candidate (a lambda bound for several overloads)
+    static ISymbol? Bound(SymbolInfo info) =>
+        info.Symbol ?? (info.CandidateSymbols.Length == 1 ? info.CandidateSymbols[0] : null);
 
     string From(int position)
     {

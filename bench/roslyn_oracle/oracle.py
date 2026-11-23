@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -123,6 +124,8 @@ def oracle(checkout: Path, root: str, files: list[Path], loads: list[str], langu
                    f"/src/{root}".rstrip("/"), "/work/sources", language, CONFIGURATION,
                    *(f"/src/{load}" for load in loads)], checkout, work)
         raw = answer_key.read(work / "raw.jsonl")
+        if keep := os.environ.get("ROSLYN_ORACLE_RAW"):   # each compilation's records
+            shutil.copy(work / "raw.jsonl", keep)
     recs = join(raw, {f.resolve().relative_to(checkout / root).as_posix() for f in files})
     recs.insert(0, {"config": {**config, "configuration": CONFIGURATION, "langversion": language,
                                "loads": loads, "roslyn": "5.12.0"}})
@@ -143,11 +146,8 @@ def join(raw: list[dict], files: set[str]) -> list[dict]:
             off[r["disabled"]][r["comp"]] = set(r["lines"])
     out = [r for r in raw if "compilation" in r or "workspace" in r]
     out += [r for r in raw if "diagnostic" in r]
-    parts: dict[tuple[str, str], set[str]] = defaultdict(set)
-    for r in raw:
-        if "declared" in r:
-            parts[(r["declared"], r["file"])].add(r["comp"])
-    out += [{"declared": t, "file": f} for t, f in sorted(parts)]
+    declared = {(r["declared"], r["file"], tuple(r["parts"])) for r in raw if "declared" in r}
+    out += [{"declared": t, "file": f, "parts": list(p)} for t, f, p in sorted(declared)]
     at: dict[tuple, dict[str, dict]] = defaultdict(dict)
     for r in raw:
         if "use" in r:
@@ -159,7 +159,10 @@ def join(raw: list[dict], files: set[str]) -> list[dict]:
         if len(set(answers.values())) == 1 and set(by) == compiling:
             out.append({**first, "comps": len(compiling)})
         else:
-            said = {c: answer_key.answer(r) for c, r in by.items()}
+            said = {c: " ".join([answer_key.answer(r)]
+                                + ([f"({', '.join(r['files'])})"] if r.get("files") else [])
+                                + [r["pos"], f"in {r['from']}"]
+                                + ([] if r["maximal"] else ["(part)"])) for c, r in by.items()}
             said.update({c: "none" for c in compiling - set(by)})
             out.append({**first, "kind": "split", "target": None, "project": False,
                         "answers": dict(sorted(said.items())), "comps": len(compiling)})
@@ -246,7 +249,25 @@ def run(args) -> int:
                   conf["prepare"], args.output.resolve(),
                   {"repo": args.repo, "commit": conf["commit"], "sdk": conf["sdk"]})
     summary(recs, args.repo)
+    print("  of them read by the extractor (the first branch of an #if): "
+          + (", ".join(f"{f}: {n}" for f, n in read_uncompiled(recs, checkout / conf["root"]))
+             or "none"))
     return 0
+
+
+def read_uncompiled(recs: list[dict], root: Path) -> list[tuple[str, int]]:
+    """(file, lines) of the lines no compilation compiles that the extractor reads: code
+    in the first branch of an #if, not the #else branches it blanks."""
+    from draftsman.langs import spec_for_path
+    out = []
+    for r in recs:
+        if "uncompiled" in r and r["lines"] != "all":
+            kept = spec_for_path(r["uncompiled"]).preprocess(
+                (root / r["uncompiled"]).read_bytes()).split(b"\n")
+            n = sum(1 for no in r["lines"] if kept[no - 1].strip())
+            if n:
+                out.append((r["uncompiled"], n))
+    return out
 
 
 def declared_files(recs: list[dict]) -> dict[str, set[str]]:
@@ -259,15 +280,24 @@ def declared_files(recs: list[dict]) -> dict[str, set[str]]:
 
 def in_scope(recs: list[dict], ir: dict[str, str]) -> int:
     """answer_key.in_scope, a type of several files (partial, or two types of one id)
-    taken as declared in any of them: ir.json gives one file for an id."""
+    taken as declared in any of them: ir.json gives one file for an id. Types declared
+    in a file no compilation compiles are not seen, and listed as such."""
     seen = declared_files(recs)
     flat = [{"declared": t, "file": ir[t] if t in ir and ir[t] in fs else sorted(fs)[0]}
             for t, fs in seen.items()]
-    for t, fs in sorted(seen.items()):
-        if len(fs) > 1:
-            print(f"several files: {t}: {', '.join(sorted(fs))}"
-                  + (f" (ir.json: {ir[t]})" if t in ir else ""))
-    return answer_key.in_scope(flat, ir, language="C#")
+    types: dict[str, set[tuple]] = defaultdict(set)
+    for r in recs:
+        if "declared" in r:
+            types[r["declared"]].add(tuple(r["parts"]))
+    for t, ps in sorted(types.items()):
+        if len(ps) > 1:
+            print(f"{len(ps)} types of one id: {t}: "
+                  + "; ".join(", ".join(p) for p in sorted(ps))
+                  + (f" (ir.json: one type, at {ir[t]})" if t in ir else ""))
+    whole = {r["uncompiled"] for r in recs if "uncompiled" in r and r["lines"] == "all"}
+    unseen = {t: f"declared in {f}, which no compilation compiles"
+              for t, f in ir.items() if f in whole and t not in seen}
+    return answer_key.in_scope(flat, ir, unseen, language="C#")
 
 
 def scope(args) -> int:
