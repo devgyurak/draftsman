@@ -833,26 +833,40 @@ class Resolver:
         return False
 
     def _uncertain(self, scope: FileScope, name: str, spec) -> bool:
-        """Whether a file's ``name`` may be bound by a wildcard import of a module outside
-        the sources (`from tkinter import *`), whose names are not known: one in the file,
-        or in a project module the file takes the name from, by its name or by a wildcard
-        import that brings it in (`from q.gui import *`, `gui.py` importing tkinter's *)."""
+        """Whether a file's ``name`` may be another class than the one it resolves to: bound
+        by a wildcard import of a module outside the sources (`from tkinter import *`),
+        whose names are not known, or bound to two classes at the top of the file (`from .a
+        import Foo` and `from .b import Foo`, two star imports that bring in two, an import
+        and a class); in the file, or in a project module the file takes the name from, by
+        its name or by a wildcard import that brings it in (`from q.gui import *`, `gui.py`
+        importing tkinter's *; `from q.dup import Foo`)."""
         key = (id(scope), name)
         if key in self._uncertain_names:
             return self._uncertain_names[key]
         self._uncertain_names[key] = False   # a cycle of imports adds nothing
         sep = spec.separator
         found = False
+        own = f"{scope.namespace}{sep}{name}" if scope.namespace else name
+        targets = {own} if own in self.index and self.index[own].location.file == scope.file \
+            else set()
         for imp in scope.imports:
             if imp.wildcard:
                 scopes = [] if imp.external else self._module_scopes(imp.path, spec)
-                found = not scopes or any(spec.star_exports(name, s) and self._uncertain(s, name, spec)
-                                          for s in scopes)
+                brings = [s for s in scopes if spec.star_exports(name, s)]
+                found = not scopes or any(self._uncertain(s, name, spec) for s in brings)
+                if brings and (target := self.lookup(imp.path + sep + name, spec, certain=True)):
+                    targets.add(target)
             elif not imp.module and imp.local_name == name:
                 module, _, original = imp.path.rpartition(sep)
                 found = any(self._uncertain(s, original, spec)
                             for s in self._module_scopes(module, spec))
-            if found:
+                if target := self.lookup(imp.path, spec):
+                    targets.add(target)
+            # not in a scope made for one name (an import in a function before the file's,
+            # a class body's imports before the file's): there the first import wins
+            if found or len(targets) > 1 and any(
+                    f is scope for f in self.scopes_by_ns.get(scope.namespace, ())):
+                found = True
                 break
         self._uncertain_names[key] = found
         return found
