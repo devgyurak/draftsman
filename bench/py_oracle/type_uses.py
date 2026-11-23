@@ -49,7 +49,8 @@ from mypy.nodes import (
     AssertTypeExpr, AssignmentExpr, AssignmentStmt, Block, CallExpr, CastExpr, ClassDef,
     Decorator, DictionaryComprehension, ForStmt, FuncDef, GeneratorExpr, IfStmt, ListExpr,
     MemberExpr, MypyFile, NameExpr, OperatorAssignmentStmt, OverloadedFuncDef, StarExpr,
-    TryStmt, TupleExpr, TypeInfo, TypeVarExpr, WhileStmt, WithStmt,
+    TryStmt, TupleExpr, TypeAliasStmt, TypeApplication, TypeInfo, TypeVarExpr, WhileStmt,
+    WithStmt,
 )
 from mypy.options import Options
 from mypy.patterns import AsPattern, MappingPattern, StarredPattern
@@ -372,6 +373,12 @@ class Uses(TraverserVisitor):
         if f.unanalyzed_type is not None and f.type is not None and not self.src.type_comment(f):
             self.types(f.type)
         f.body.accept(self)
+
+    def visit_type_application(self, e: TypeApplication) -> None:
+        pass   # `Foo[int]`: its name is the index expression's, visited already
+
+    def visit_type_alias_stmt(self, s: TypeAliasStmt) -> None:
+        s.value.expr().accept(self)   # `type Pair[T] = ...`: not its name, a binding
 
     def visit_decorator(self, d: Decorator) -> None:
         for dec in d.decorators:
