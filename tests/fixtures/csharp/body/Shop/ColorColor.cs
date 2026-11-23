@@ -18,3 +18,38 @@ public class Holder2
         public object M() => Order.Max;   //> Order=Shop.Order/r
     }
 }
+
+// a field of another type of the name (Lib's Order, inherited): the name is the field
+public class OtherOrder : Lib.OrderHolder
+{
+    public object A() => Order.Create();   //> Order=var/r
+}
+
+// `Spot? Spot` is a Nullable<Spot>: no Color Color
+public struct Spot
+{
+    public static int Value = 1;
+}
+
+public class SpotHolder
+{
+    public Spot? Spot;
+    public object A() => Spot.Value;   //> Spot=var/r
+}
+
+// an extension method of the name may make the call an instance one
+public class Stamp
+{
+    public static int Make() => 0;
+}
+
+public static class StampExtensions
+{
+    public static int Make(this Stamp s, int x) => x;
+}
+
+public class StampHolder
+{
+    public Stamp Stamp = new Stamp();   //> Stamp=- Stamp=- Stamp=Shop.Stamp/t
+    public object A() => Stamp.Make(1);   //> Stamp=var/r
+}

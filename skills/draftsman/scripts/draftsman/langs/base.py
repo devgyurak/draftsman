@@ -89,6 +89,9 @@ class FileScope:
     # LanguageSpec.left_out_types: types a build may declare that the parser never saw
     left_out_types: set[str] = field(default_factory=set)
     left_out_names: set[str] = field(default_factory=set)   # LanguageSpec.left_out_names
+    # methods that extend a type (C#'s `this` parameter, `extension(T t)` blocks): a call of
+    # one of these names may be an instance call on any value (`@body.extension`)
+    extension_methods: set[str] = field(default_factory=set)
     # aliases declared in code a build may leave out (LanguageSpec.conditional_ranges)
     conditional_aliases: set[str] = field(default_factory=set)
     implicit_types: list[str] = field(default_factory=list)          # LanguageSpec.implicit_types

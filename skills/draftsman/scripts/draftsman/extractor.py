@@ -736,6 +736,8 @@ class Extractor:
                 elif cap == "body.generated":
                     if (owner := self._owner(n, types_by_node)[0]) is not None:
                         owner.body_fields.update(self.spec.generated_fields(n, src))
+                elif cap == "body.extension":
+                    scope.extension_methods.add(_text(n, src))
                 elif cap in ("body.hidden_type", "body.hidden_tparam"):
                     kind = "type" if cap == "body.hidden_type" else "tparam"
                     if (owner := self._owner(n, types_by_node)[0]) is not None:

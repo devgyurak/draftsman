@@ -16,7 +16,7 @@ from typing import Optional
 from .extractor import RawBodyRef, RawFile, RawMember, RawType
 from .langs import LANGUAGES, FileScope, Import, Unseen, spec_for_path
 from .model import IR, External, Location, Member, Relation, Type, Unresolved
-from .typeref import Named, function_types, named_refs, parse_type, value_names
+from .typeref import Named, Nullable, function_types, named_refs, parse_type, value_names
 from .wrappers import Wrappers, combine
 
 PROJECT, EXTERNAL, BUILTIN, TPARAM, ALIAS, UNRESOLVED = (
@@ -55,6 +55,9 @@ class Resolver:
                 self.scopes_by_ns.setdefault(s.namespace, []).append(s)
                 self.namespaces.add(s.namespace)
         self.aliases: set[str] = set().union(*(s.aliases for s in scopes)) if scopes else set()
+        # methods that may make a call an instance one (FileScope.extension_methods)
+        self.resolver_extensions: set[str] = set().union(*(s.extension_methods for s in scopes)) \
+            if scopes else set()
         # namespace -> types the build generates outside the sources (LanguageSpec.build_types)
         self.build_types: dict[str, set[str]] = {}
         for s in scopes:
@@ -757,30 +760,47 @@ class Resolver:
         if not spec.color_color or after is None or head in ref.names.variables \
                 or any(imp.static for imp in ref.scope.imports):
             return None
-        member, cur = None, rtype
-        while cur is not None and member is None:
-            if head in cur.body_fields:
+        if after in self.resolver_extensions:
+            return None   # an extension method of the name may make it an instance call
+        found, cur = None, rtype
+        while cur is not None and found is None:
+            if head in cur.body_fields or cur.hidden_types.get(head):
                 return None
-            member = self._field_named(cur, head, set())
+            found = self._field_named(cur, head, set())
             cur = self.index.get(cur.outer) if cur.outer else None
-        written = member and member.type_ref and parse_type(member.type_ref)
+        if found is None:
+            return None
+        owner, member = found
+        # the field's own type, where it is declared, must be the type the name is: not
+        # `Lib.Order Order` in Shop, nor `Money? Money` of a struct (Nullable<Money>)
+        written = member.type_ref and parse_type(member.type_ref)
+        nullable = isinstance(written, Nullable)
+        if nullable:
+            written = written.inner
         if not isinstance(written, Named) or written.args \
                 or written.name.rsplit(spec.separator, 1)[-1] != head:
             return None
+        declared = self.resolve(written.name, owner, None, strict=True)
         res = self._in_body(head, rtype, ref, 0)
-        if res.status != PROJECT or not self._static_member(self.index[res.target], after,
-                                                            spec, set()):
+        if res.status != PROJECT or declared.status != PROJECT or declared.target != res.target:
+            return None
+        target = self.index[res.target]
+        if nullable and (target.kind in ("struct", "enum") or "struct" in target.modifiers):
+            return None
+        if not self._static_member(target, after, spec, set()):
             return None
         return res
 
-    def _field_named(self, rtype: RawType, name: str, seen: set) -> Optional[Member]:
-        """A field or property ``name`` of the type or a project supertype."""
+    def _field_named(self, rtype: RawType, name: str,
+                     seen: set) -> Optional[tuple[RawType, Member]]:
+        """(the type declaring it, a field or property ``name``) of the type or a project
+        supertype."""
         if rtype.qualified_name in seen:
             return None
         seen.add(rtype.qualified_name)
         for rm in rtype.members:
             if rm.member.name == name and rm.member.kind in ("field", "property"):
-                return rm.member
+                return rtype, rm.member
         for s in self.supertypes(rtype):
             if s.status == PROJECT and (found := self._field_named(self.index[s.target], name, seen)):
                 return found

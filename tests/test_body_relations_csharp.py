@@ -78,7 +78,7 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     # around first; the extractor takes the field wherever)
     missed = [(file, line, answer) for (file, line, col), (answer, position) in want.items()
               if answer in builder.types and (file, line, col) not in drawn]
-    own = [("Lib/Lib.cs", 31, "Lib.Extra.Receipt"), ("Shop/Bodies.cs", 30, "Shop.Bodies"),
+    own = [("Lib/Lib.cs", 37, "Lib.Extra.Receipt"), ("Shop/Bodies.cs", 30, "Shop.Bodies"),
            ("Shop/Order.cs", 9, "Shop.Order"), ("Shop/Order.cs", 10, "Shop.Order"),
            ("Shop/Order.cs", 16, "Shop.Order.Line"), ("Shop/Order.cs", 23, "Shop.Customer"),
            ("Shop/Order.cs", 28, "Shop.Status"), ("Shop/Order.cs", 42, "Shop.Money"),

@@ -3,6 +3,12 @@ namespace Lib
     public class Order
     {
         public static int Count => 0;
+        public int Create() => 0;
+    }
+
+    public class OrderHolder
+    {
+        public Order Order = null!;
     }
 
     public class Invoice

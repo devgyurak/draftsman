@@ -160,6 +160,13 @@
 (extension_declaration (type_parameter_list (type_parameter name: (identifier) @body.hidden_tparam)))
 ; a delegate is a type ir.json does not record: it hides a type of its name
 (delegate_declaration name: (identifier) @body.hidden_type)
+; methods that extend a type: a call of one of these names may be an instance call
+(method_declaration
+  name: (identifier) @body.extension
+  parameters: (parameter_list . (parameter (modifier) @_this (#eq? @_this "this"))))
+(extension_declaration
+  (extension_body [(method_declaration name: (identifier) @body.extension)
+                   (property_declaration name: (identifier) @body.extension)]))
 ; an event field, which is no member of ir.json
 (event_field_declaration (variable_declaration (variable_declarator name: (identifier) @body.field)))
 ; members a source generator declares in the type (CommunityToolkit.Mvvm's
