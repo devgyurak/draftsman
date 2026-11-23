@@ -18,5 +18,8 @@ class BaseEntity(ABC):
     def is_new(self) -> bool:
         raise NotImplementedError
 
+    def audited(self) -> bool:
+        return isinstance(self, Auditable)
+
     class Listener(Protocol):
         def changed(self, entity: BaseEntity) -> None: ...

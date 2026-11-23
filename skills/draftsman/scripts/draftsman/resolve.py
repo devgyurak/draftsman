@@ -48,6 +48,7 @@ class Resolver:
                 for ns, places in by_ns.items():
                     self.unseen_types.setdefault(n, {}).setdefault(ns, []).extend(places)
         self.scopes_by_ns: dict[str, list[FileScope]] = {}
+        self._uncertain_names: dict[tuple[int, str], bool] = {}   # _uncertain
         for s in scopes:
             if s.namespace:
                 self.scopes_by_ns.setdefault(s.namespace, []).append(s)
@@ -779,21 +780,68 @@ class Resolver:
         res = self.resolve(name, rtype, ref.member, scope=ref.scope, strict=True,
                            nested=spec.nested_types_in_bodies)
         if res.status == PROJECT and spec.rebinding_hides and (
-                self._rebound(res.target) or self._star_outside(ref.scope, spec)
+                self._rebound(res.target) or self._uncertain_path(name, ref.scope, spec)
                 or sep not in name and any(
                     found != res.target for found in self._star_provides(name, ref.scope, spec))):
             # `try: from x import Foo` / `except: class Foo`; `class Foo` beside a star
-            # import that brings in another Foo, or beside one from outside the sources,
-            # which may
+            # import that brings in another Foo, or beside one that may bring in anything
+            # (from outside the sources), here or in a module the name comes through
             return Resolution(UNRESOLVED)
         return res
 
-    def _star_outside(self, scope: FileScope, spec) -> bool:
-        """Whether the file has a wildcard import of a module outside the sources
-        (`from tkinter import *`), whose names are not known."""
-        return any(imp.wildcard and (imp.external or not (
-            self.scopes_by_ns.get(imp.path) or self._by_suffix(imp.path, self.scopes_by_ns, spec)))
-            for imp in scope.imports)
+    def _module_scopes(self, module: str, spec) -> list[FileScope]:
+        return self.scopes_by_ns.get(module) or self.scopes_by_ns.get(
+            self._by_suffix(module, self.scopes_by_ns, spec) or "", [])
+
+    def _uncertain_path(self, name: str, scope: FileScope, spec) -> bool:
+        """_uncertain for a dotted name: its head in the file, then each part in the module
+        the parts before it name (`relay.Button` after `from p import relay`)."""
+        sep = spec.separator
+        parts = name.split(sep)
+        if self._uncertain(scope, parts[0], spec):
+            return True
+        named = {imp.path for imp in scope.imports if not imp.wildcard
+                 and not imp.module and imp.local_name == parts[0]}
+        if len(named) == 1:
+            module = named.pop()
+        elif not named and spec.module_imports_bind_heads and any(
+                imp.module and imp.path.split(sep, 1)[0] == parts[0] for imp in scope.imports):
+            module = parts[0]
+        else:
+            return False
+        for part in parts[1:]:
+            scopes = self._module_scopes(module, spec)
+            if not scopes:
+                return False
+            if any(self._uncertain(s, part, spec) for s in scopes):
+                return True
+            module = module + sep + part
+        return False
+
+    def _uncertain(self, scope: FileScope, name: str, spec) -> bool:
+        """Whether a file's ``name`` may be bound by a wildcard import of a module outside
+        the sources (`from tkinter import *`), whose names are not known: one in the file,
+        or in a project module the file takes the name from, by its name or by a wildcard
+        import that brings it in (`from q.gui import *`, `gui.py` importing tkinter's *)."""
+        key = (id(scope), name)
+        if key in self._uncertain_names:
+            return self._uncertain_names[key]
+        self._uncertain_names[key] = False   # a cycle of imports adds nothing
+        sep = spec.separator
+        found = False
+        for imp in scope.imports:
+            if imp.wildcard:
+                scopes = [] if imp.external else self._module_scopes(imp.path, spec)
+                found = not scopes or any(spec.star_exports(name, s) and self._uncertain(s, name, spec)
+                                          for s in scopes)
+            elif not imp.module and imp.local_name == name:
+                module, _, original = imp.path.rpartition(sep)
+                found = any(self._uncertain(s, original, spec)
+                            for s in self._module_scopes(module, spec))
+            if found:
+                break
+        self._uncertain_names[key] = found
+        return found
 
     def _star_provides(self, name: str, scope: FileScope, spec) -> list[str]:
         """The project types the file's wildcard imports are known to bring in as ``name``."""

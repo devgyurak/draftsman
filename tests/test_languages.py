@@ -199,9 +199,9 @@ SCOPE_RULES = {
         **_ALL,
         "java": ("StripeGateway", "dependency", "Money", "body"),   # `new Receipt.Money(...)`
         "typescript": ("StripeGateway", "dependency", "Money", "body"),   # `: Receipt.Money`
-        # `Order(customer)`; gateway.py's `Receipt.Money(0, "usd")` is beside `from stripe
-        # import *`, which may bind Receipt
-        "python": ("OrderService", "dependency", "Order", "body"),
+        # `isinstance(self, Auditable)`: the shop's other bodies name classes beside a star
+        # import from outside the sources (`from stripe import *`), which may bind them
+        "python": ("BaseEntity", "dependency", "Auditable", "body"),
     },
     "package re-export by wildcard": {
         **_ALL,
