@@ -42,6 +42,8 @@ import org.jetbrains.kotlin.fir.references.FirResolvedNamedReference
 import org.jetbrains.kotlin.fir.references.FirThisReference
 import org.jetbrains.kotlin.fir.resolve.fullyExpandedType
 import org.jetbrains.kotlin.fir.scopes.unsubstitutedScope
+import org.jetbrains.kotlin.fir.scopes.FirContainingNamesAwareScope
+import org.jetbrains.kotlin.fir.scopes.processClassifiersByName
 import org.jetbrains.kotlin.fir.declarations.utils.visibility
 import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.fir.resolve.providers.symbolProvider
@@ -153,19 +155,21 @@ class TableChecker(private val sink: Sink, private val table: File) : FirDeclara
             }
             val sym = found as? FirRegularClassSymbol
             if (sym == null) { sink.write(obj("missing" to id.asString())); continue }
+            // a subclass in another module sees what is public or protected: a private or
+            // Java package-private member or nested class hides no name of the sources
             val scope = sym.unsubstitutedScope(session, context.scopeSession, false, null)
-            val callables = scope.getCallableNames().filter { name ->
+            val callables = visibleCallables(scope)
+            val companion = sym.resolvedCompanionObjectSymbol?.let { c ->
+                visibleCallables(c.unsubstitutedScope(session, context.scopeSession, false, null))
+            }.orEmpty()
+            val statics = sym.fir.staticScope(session, context.scopeSession)?.let { visibleCallables(it) }.orEmpty()
+            val nested = scope.getClassifierNames().filter { name ->
                 var seen = false
-                scope.processFunctionsByName(name) { if (it.visibility != Visibilities.Private) seen = true }
-                scope.processPropertiesByName(name) { if (it.visibility != Visibilities.Private) seen = true }
+                scope.processClassifiersByName(name) {
+                    if ((it as? FirClassLikeSymbol<*>)?.resolvedStatus?.visibility?.isPublicAPI == true) seen = true
+                }
                 seen
             }.map { it.asString() }.sorted()
-            val companion = sym.resolvedCompanionObjectSymbol?.let { c ->
-                c.unsubstitutedScope(session, context.scopeSession, false, null).getCallableNames().map { it.asString() }.sorted()
-            }.orEmpty()
-            val statics = sym.fir.staticScope(session, context.scopeSession)?.getCallableNames()
-                ?.map { it.asString() }?.sorted().orEmpty()
-            val nested = scope.getClassifierNames().map { it.asString() }.sorted()
             sink.write(obj(
                 "type" to id.asString(), "kind" to sym.classKind.name.lowercase(),
                 "modality" to sym.resolvedStatus.modality?.name?.lowercase(),
@@ -176,6 +180,14 @@ class TableChecker(private val sink: Sink, private val table: File) : FirDeclara
         }
     }
 }
+
+/** The names of the public and protected functions and properties of a scope. */
+fun visibleCallables(scope: FirContainingNamesAwareScope): List<String> = scope.getCallableNames().filter { name ->
+    var seen = false
+    scope.processFunctionsByName(name) { if (it.visibility.isPublicAPI) seen = true }
+    scope.processPropertiesByName(name) { if (it.visibility.isPublicAPI) seen = true }
+    seen
+}.map { it.asString() }.sorted()
 
 /** The class a typealias stands for, through other aliases (outside any checker context). */
 fun expandedId(alias: FirTypeAliasSymbol, session: FirSession): String? =

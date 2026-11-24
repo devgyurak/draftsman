@@ -670,18 +670,12 @@ def table(_args) -> int:
                    "-d", "/work/classes", "/work/X.kt"], {str(work): "/work"}, cwd="/work")
         recs = [json.loads(x) for f in sorted((work / "out").glob("*.jsonl"))
                 for x in f.read_text().splitlines()[1:] if x.strip()]
-    packages: dict[str, set] = defaultdict(set)
     types, aliases = {}, {}
     for r in recs:
         if "alias" in r and r["target"]:
             aliases[ident(r["alias"])] = ident(r["target"])
-            pkg, _, name = r["alias"].rpartition("/")
-            packages[pkg.replace("/", ".")].add(name)
         if "type" not in r or r["visibility"] not in ("public", "protected"):
             continue
-        pkg, _, rel = r["type"].rpartition("/")
-        if "." not in rel:
-            packages[pkg.replace("/", ".")].add(rel)
         if r["kind"] in ("class", "interface") and r["modality"] in ("open", "abstract"):
             def names(*lists):
                 own = {n for ns in lists for n in ns if not n.startswith("<")}
@@ -694,12 +688,10 @@ def table(_args) -> int:
                                        "nested": r["nested"]}
     out = {"read from": {"kotlin": v, "libraries": TABLE_JARS, "jdk": "the image's (temurin 21)",
                          "jdk packages": sorted(p for ps in TABLE_JDK.values() for p in ps)},
-           "packages": {p: sorted(n) for p, n in sorted(packages.items())},
            "aliases": dict(sorted(aliases.items())),
            "types": dict(sorted(types.items()))}
     TABLE.write_text(json.dumps(out, indent=0, sort_keys=False) + "\n")
-    print(f"{TABLE.relative_to(ROOT)}: {TABLE.stat().st_size // 1024} KB, {len(out['packages'])} "
-          f"packages, {sum(map(len, out['packages'].values()))} type names, {len(types)} "
+    print(f"{TABLE.relative_to(ROOT)}: {TABLE.stat().st_size // 1024} KB, {len(types)} "
           f"supertypes, {len(aliases)} aliases, {sum(1 for r in recs if 'missing' in r)} ids not found")
     return 0
 

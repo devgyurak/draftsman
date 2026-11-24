@@ -248,3 +248,19 @@ def test_an_extensions_receiver_hides_a_name_by_a_member_of_it(tmp_path):
                      "  val Ctx.prop: Any get() = Order.toString()\n"
                      "  fun Ctx.part(): Any = Part()\n  fun h() = Money(4)\n}\n"})
     assert _body(ir) == [("shop.R", "shop.Money", 10), ("shop.R", "shop.Part", 9)]
+
+
+def test_a_supertype_outside_hides_only_what_a_subclass_sees(tmp_path):
+    # the table keeps a library type's public and protected names: Thread's private
+    # nested Caches and field eetop, ArrayList's package-private elementData hide nothing
+    # in a subclass; its public static MAX_PRIORITY and protected modCount do
+    ir = extract_source(tmp_path, {
+        "shop/A.kt": "package shop\nobject Caches\nobject eetop\nobject elementData\n"
+                     "object MAX_PRIORITY\nobject modCount\n"
+                     "class W : Thread() {\n"
+                     "  fun a(): Any = Caches\n  fun b(): Any = eetop\n"
+                     "  fun c(): Any = MAX_PRIORITY\n}\n"
+                     "class L : java.util.ArrayList<Int>() {\n"
+                     "  fun a(): Any = elementData\n  fun b(): Any = modCount\n}\n"})
+    assert _body(ir) == [("shop.L", "shop.elementData", 13), ("shop.W", "shop.Caches", 8),
+                         ("shop.W", "shop.eetop", 9)]

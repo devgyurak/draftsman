@@ -883,14 +883,9 @@ class Resolver:
 
     def _outside_candidates(self, name: str, res: Resolution, scope: FileScope,
                             rtype: RawType) -> list[Optional[str]]:
-        """The types outside the sources a supertype's name may be (_outside), without
-        those of packages the language's table knows to lack the name
-        (LanguageSpec.outside_package_types); [None] when it may be any."""
-        spec = LANGUAGES[rtype.language]
-        sep = spec.separator
-        cands = [c for c in self._outside(name, res, scope, rtype, True)
-                 if (types := spec.outside_package_types(c.rsplit(sep, 1)[0])) is None
-                 or c.rsplit(sep, 1)[-1] in types or res.status in (EXTERNAL, BUILTIN)]
+        """The types outside the sources a supertype's name may be (_outside); [None] when
+        it may be any."""
+        cands = self._outside(name, res, scope, rtype, True)
         return cands or ([] if res.status == UNRESOLVED and res.outside and name else [None])
 
     def _outside_member_of(self, rtype: RawType, name: str, nested_only: bool,

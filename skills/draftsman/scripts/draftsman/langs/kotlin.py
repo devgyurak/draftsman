@@ -423,10 +423,6 @@ class KotlinSpec(LanguageSpec):
         known = _outside_names(type_id, "instance") if type_id else None
         return known is not None and name in known
 
-    def outside_package_types(self, package):
-        types = _outside_table()["packages"].get(package)
-        return frozenset(types) if types is not None else None
-
     def outside_functions(self, scope):
         # Kotlin/Native's platform libraries (`platform.posix`, `platform.windows`) are C
         # APIs: functions of any name, `WinHttpConnect` beside a class of the name
