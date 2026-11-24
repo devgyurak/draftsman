@@ -8,7 +8,7 @@ Google's Android sample: Compose, Hilt, Room, DataStore, many Gradle modules.
 | Commit | `2982e63cb6` (2026-10-20) |
 | Extracted | the whole repository without tests, test fixtures and generated `build/` output; `*.gradle.kts` build scripts are never extracted |
 
-Measured on 2026-11-24 with Draftsman after 0.7.0 (at `c90a7d4`); the declared relations are the same as 0.3.0's.
+Measured on 2026-11-24 with Draftsman 0.8.0 (at `c90a7d4`; 0.8.0 extracts the same `ir.json`); the declared relations are the same as 0.3.0's.
 
 ## Run
 

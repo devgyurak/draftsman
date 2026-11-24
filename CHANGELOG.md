@@ -7,8 +7,9 @@ Notes for anyone with `view.json` files written against a development build:
 - **0.3.0**: the entries below on nested types and annotations change the default
   focus diagram and the relations in `ir.json`; results measured with 0.2.0 (the
   benchmark's runs among them) are not comparable with 0.3.0 ones.
-- **After 0.7.0**: Kotlin's `ir.json` gains the relations read from names in bodies
-  (below); results measured with 0.7.0 are not comparable on what Kotlin bodies relate.
+- **0.8.0**: Kotlin's `ir.json` gains the relations read from names in bodies
+  (below); results measured with 0.7.0 are not comparable with 0.8.0 ones on what Kotlin
+  bodies relate.
   Kotlin's declared relations and every other language's `ir.json` are the same.
 - **0.7.0**: C#'s `ir.json` gains the relations read from names in bodies (below);
   results measured with 0.6.0 are not comparable with 0.7.0 ones on what C# bodies relate. One declared
@@ -113,7 +114,7 @@ Notes for anyone with `view.json` files written against a development build:
   (`Field`). Django extracts in about 2.5 s instead of 1.0 s. jsoup's, petclinic's,
   Netty's, TypeORM's and nest's `ir.json` are byte for byte the same; the C#, Kotlin and
   C++ e2e projects were not run again.
-- **Names in Kotlin bodies are relations** (#5, after 0.7.0). A project type a body
+- **Names in Kotlin bodies are relations** (#5, 0.8.0). A project type a body
   names where only a type stands (a local's or parameter's type, `is`, `as`, type
   arguments, `catch`, a local class's or anonymous object's supertypes), where a member is
   reached through it (`Foo.x`, `Foo::class`), where it is called (`Foo(1)`, `::Foo`) or
@@ -145,8 +146,8 @@ Notes for anyone with `view.json` files written against a development build:
   compilations; 68 more in modules its build leaves out, unchecked), 0 mismatches. Not
   drawn: code outside every type (#8: 300 of nowinandroid's 454 project type names in
   bodies, 3967 of Ktor's 7600), lambdas with a receiver (a limit: their names may be the
-  receiver's members). Hand-written review sets kt1, kt2, kt4 and kt6 to kt13
-  (`oracle.py review`) and a fixture of 197 names pin the forms. nowinandroid gains 110 body
+  receiver's members). Hand-written review sets kt1, kt2, kt4 and kt6 to kt14
+  (`oracle.py review`) and a fixture of 203 names pin the forms. nowinandroid gains 110 body
   dependencies and Ktor 2970; Ktor's focus diagram grows from 32 to 38 types
   (`HttpClientCall`). Declared relations are unchanged; the lookup rules above apply to
   bodies only (#7 lists where declared relations differ).

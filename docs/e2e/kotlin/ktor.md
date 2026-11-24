@@ -8,7 +8,7 @@ An asynchronous client and server framework, Kotlin Multiplatform: common code w
 | Commit | `cc3d345bc2` (2026-11-16) |
 | Extracted | the whole repository without test source sets (`<module>/<platform>/test`), test-support modules (`ktor-server-test-host`, `ktor-client-tests`, ...), the compiler plugin's test data and the Gradle build logic |
 
-Measured on 2026-11-24 with Draftsman after 0.7.0 (at `c90a7d4`); the declared relations are the same as 0.3.0's.
+Measured on 2026-11-24 with Draftsman 0.8.0 (at `c90a7d4`; 0.8.0 extracts the same `ir.json`); the declared relations are the same as 0.3.0's.
 
 ## Run
 
