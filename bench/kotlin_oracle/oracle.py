@@ -528,13 +528,11 @@ def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: 
     where = {t.id: t.location.file for t in ir.types if t.language == "kotlin"}
     if in_scope(recs, where):
         return 1
-    skipped = {r["uncompiled"] for r in recs if "uncompiled" in r}
-    for file, line, col, src, dst in builder.body_uses:
-        if file in skipped:
-            print(f"  drawn where nothing is compiled: {file}:{line}:{col + 1} {src} -> {dst}")
-    # code outside every type draws nothing: not a miss
+    # code outside every type draws nothing: not a miss. A file no compilation compiles
+    # (a module the build leaves out) has no answers: what is drawn there is counted apart
     return answer_key.compare(builder.body_uses, recs, verbose, key="the compiler",
-                              drawable=lambda r: answer_key.drawable(r) and r["from"] is not None)
+                              drawable=lambda r: answer_key.drawable(r) and r["from"] is not None,
+                              uncompiled={r["uncompiled"] for r in recs if "uncompiled" in r})
 
 
 def compare(args) -> int:

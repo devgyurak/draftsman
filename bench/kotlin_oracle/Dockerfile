@@ -1,4 +1,5 @@
-# The Kotlin answer key's environment: JDK 21, the Android SDK, the Kotlin compilers the e2e
+# The Kotlin answer key's environment: JDK 21, the Android SDK (the platforms and build tools
+# nowinandroid and Ktor ask for, so that no build downloads them), the Kotlin compilers the e2e
 # repositories build with, and TypeUses built for each of them. linux/amd64: AGP's aapt2 and
 # the Kotlin/Native compiler ship for x86_64 Linux hosts only (on an arm64 Mac this runs
 # under Rosetta). Gradle itself comes from each checkout's wrapper; Gradle's caches and
@@ -11,7 +12,7 @@ RUN mkdir -p $ANDROID_HOME/cmdline-tools && cd /tmp \
  && echo "e025545c62a8e64c7559119566a569fb1dec5f60  tools.zip" | sha1sum -c - \
  && unzip -q tools.zip && mv cmdline-tools $ANDROID_HOME/cmdline-tools/latest && rm tools.zip \
  && yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null \
- && $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "platform-tools" >/dev/null
+ && $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "platforms;android-36" "build-tools;36.0.0" "platform-tools" >/dev/null
 # the compilers (Maven Central, pinned by SHA-256): nowinandroid builds with 2.3.0, Ktor
 # with 2.3.21, and Gradle 9.7.1's kotlin-dsl (nowinandroid's build-logic) with 2.4.0
 COPY compiler.sha256 /opt/kotlin/
