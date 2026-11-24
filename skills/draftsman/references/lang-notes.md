@@ -332,7 +332,8 @@ is that type. Aliases of aliases are followed.
   receiver (`fun Ctx.ext()`: its instance properties and functions, also those of its
   supertypes outside the sources as far as the table knows them, not its nested types;
   a receiver that is a type parameter is its bounds, `<T : Ctx>`, `where T : Ctx`, an
-  alias the class it names), or, for a call, a function of
+  alias the class it names, also a library one; an anonymous function's receiver, `fun
+  Ctx.() = ...`, is one too, and its simple name a type in the body), or, for a call, a function of
   the name declared at any file's top or a method of the types around (`Money(1, 2)`
   beside `class Money`: which one is called depends on the arguments). A typealias draws
   the class it names directly (`typealias Cash = Money`), wherever it is declared; one of a
@@ -363,8 +364,9 @@ is that type. Aliases of aliases are followed.
 - Known limits of bodies. Drawn where it may be wrong: a member or nested type of a
   supertype the table does not know (Android, Gradle, Netty) that shares a project type's
   name the file sees (androidx.work's `CoroutineWorker` passes on `Result`: e2e 0); a
-  lambda with a receiver (`with(c) { Money(1) }`, `routing { }`): which lambda has one,
-  and of what type, is the called function's, not the syntax's; a module the build leaves
+  lambda with a receiver (`with(c) { Money(1) }`, `routing { }`, also beside its written
+  type, `val e: Ctx.() -> Int = { Money(1) }`): which lambda has one, and of what type, is
+  its context's, not the syntax's; a module the build leaves
   out (Ktor's ktor-client-tracing and stetho, not in its settings, and webrtc-rs, which
   needs cargo: 68 names), as the extractor does not read Gradle's settings; a platform
   source set's types are taken as the common ones' where the sources lay them out
@@ -379,7 +381,9 @@ is that type. Aliases of aliases are followed.
   import or a nested type of an interface or a companion when another type of the name
   comes first; in type positions, a name an import of an enum entry or an object's
   member brings in (`import shop.Kind.A`, where Kotlin looks for a class `A`); in a
-  member with a local extension, its receiver's members everywhere in the member; a
+  member with a local extension or an anonymous function with a receiver, its receiver's
+  members everywhere in the member; a qualified or generic anonymous function's receiver
+  type (`fun shop.Ctx.()`); a
   superclass's or an interface's companion members taken for a receiver's or an
   implementing class's; `o.Part()` (an inner class's constructor after a value). Declared relations follow none of the lookup rules above
   (#7): they take an interface's or a superclass's companion's nested type for inherited,

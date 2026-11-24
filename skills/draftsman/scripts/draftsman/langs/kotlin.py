@@ -456,6 +456,20 @@ class KotlinSpec(LanguageSpec):
         return False
 
     def receiver_types(self, node, text, src):
+        if node.type == "receiver_type":   # without `@receiver:Suppress("x")`
+            written = [c for c in node.named_children if c.type != "type_modifiers"]
+            if written:
+                text = src[written[0].start_byte:written[-1].end_byte].decode("utf-8", "replace")
+        elif node.parent is not None and node.parent.type == "anonymous_function":
+            # `fun shop.Ctx.()`: from its first part to the `.` before the parameters
+            params = next((c for c in node.parent.children
+                           if c.type == "function_value_parameters"), None)
+            if params is None:
+                return []
+            text = src[node.start_byte:params.start_byte].decode("utf-8", "replace").strip()
+            if not text.endswith("."):
+                return []
+            text = text[:-1].strip()
         # `fun <T : Ctx> T.ext()`, `fun <T> T.ext() where T : Ctx`: the bounds of a type
         # parameter of the extension or of a class around it (none: Any's members only)
         bounds = _type_parameter_bounds(node.parent, text.rstrip("?").strip(), src, 0)

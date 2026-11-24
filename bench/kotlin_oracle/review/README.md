@@ -20,6 +20,7 @@ not listed below as a known limit, and on fewer names drawn than the table says.
 | `kt11` | 9 | accessors on the line after their property (`val b: Any` / `get() = ...`), block getters, setters, `override` properties |
 | `kt12` | 7 | a class's delegate `: Face by Proxy`, after a superclass's constructor call, in an object, through a constructor parameter |
 | `kt13` | 10 | a library supertype's private and package-private names (Thread's `Caches`, `eetop`, `holder`, ArrayList's `Itr`, `elementData`), which hide nothing, beside its protected and public static ones (`modCount`, `MAX_PRIORITY`), which do |
+| `kt14` | 13 | accessors of extension properties, a comment between a property and its getter, `field` and `value`, receivers: an alias of a library type (`typealias T2 = Thread`), a qualified, parenthesized or annotated one (`@receiver:Suppress("x") Ctx`), an anonymous function's (`fun Ctx.(): Int = Money(2)`), class type parameters as receivers. No compile errors |
 
 A mismatch in a file with compile errors counts as one here: the sets compile with errors on
 purpose.
@@ -31,6 +32,8 @@ Known limits (mismatches that stay):
 - `kt7/shop/Recv.kt:5:29` the same (`c.run { Order.toString() }`)
 - `kt1/q/Use.kt:42:25` the same (`dsl { Widget(); Registry }`: the value `Registry` is the
   receiver's property)
+- `kt14/shop/A.kt:34:30` the same, where the lambda's type is written beside it
+  (`val e: Ctx.() -> Int = { Money(1) }`): the type a lambda takes is its context's
 
 Names the compiler finds that are not drawn (misses, no failure):
 

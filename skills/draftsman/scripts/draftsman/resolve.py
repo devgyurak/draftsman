@@ -1014,7 +1014,8 @@ class Resolver:
             res = self._in_body(written.name, rtype, ref, 0)
             if res.status == ALIAS and res.target:   # `fun Cash.ext()`: the class it names
                 aliased = self._alias_type(res.target, written.name, rtype, ref)
-                res = Resolution(PROJECT, aliased) if aliased else res
+                res = Resolution(PROJECT, aliased) if aliased else \
+                    self._alias_resolution(res.target, spec, 0) or res
             if res.status == PROJECT:
                 t = self.index[res.target]
                 # its own or a project supertype's, or one of a supertype outside
@@ -1176,6 +1177,13 @@ class Resolver:
         (LanguageSpec.alias_declarations: Kotlin's `typealias Cash = Money`; also through
         another alias), resolved where it is declared; None for one of a generic type or a
         function type."""
+        res = self._alias_resolution(alias, spec, depth)
+        return res.target if res is not None and res.status == PROJECT else None
+
+    def _alias_resolution(self, alias: str, spec, depth: int) -> Optional[Resolution]:
+        """What a type alias that is a declaration names directly, through other aliases,
+        resolved where it is declared (a project class, or one outside the sources:
+        `typealias T2 = Thread`); None for one of a generic type or a function type."""
         entry = self.alias_targets.get(alias)
         if entry is None or depth > 4:
             return None
@@ -1191,8 +1199,8 @@ class Resolver:
                       outer=owner if owner in self.index else None)
         res = self.resolve(written.name, ctx, None, strict=True)
         if res.status == ALIAS and res.target and res.target != alias:
-            return self._declared_alias_type(res.target, spec, depth + 1)
-        return res.target if res.status == PROJECT else None
+            return self._alias_resolution(res.target, spec, depth + 1)
+        return res if res.status in (PROJECT, EXTERNAL, BUILTIN) else None
 
     def _binds(self, head: str, rtype: RawType, ref: RawBodyRef) -> bool:
         """Whether ``head`` is a name the file imports or a namespace around ``rtype``."""

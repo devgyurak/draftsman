@@ -38,3 +38,12 @@ class Worker2 : Thread() {
     fun b(): Any = Caches   //> Caches=shop.Caches/r
     fun c(): Any = MAX_PRIORITY   //> MAX_PRIORITY=property/r
 }
+
+// receivers: an alias of a library type, an anonymous function's, an annotated one (kt14)
+typealias ThreadAlias = Thread
+class Receivers3 {
+    fun ThreadAlias.a(): Any = name   //> name=property/r
+    val b = fun Ctx.() = Customer(1)   //> Ctx=shop.Ctx/t Customer=function/r
+    fun c(): Any = fun Ctx.() = Registry   //> Ctx=shop.Ctx/t Registry=property/r
+    fun @receiver:Suppress("x") Ctx.d(): Any = Customer(2)   //> Customer=function/r
+}

@@ -380,7 +380,9 @@ def review(args) -> int:
     import contextlib
     import io
     readme = (REVIEW / "README.md").read_text()
-    known = set(re.findall(r"^- `([^`]+)`", readme, re.M))
+    # the known limits only, not the list of names the compiler finds that are not drawn
+    limits = readme.split("Known limits", 1)[-1].split("Names the compiler finds", 1)[0]
+    known = set(re.findall(r"^- `([^`]+)`", limits, re.M))
     counts = {k: int(v) for k, v in re.findall(r"^\| `(\w+)` \| (\d+) \|", readme, re.M)}
     sets = sorted((d for d in REVIEW.iterdir() if d.is_dir() and not args.sets
                    or d.name in (args.sets or ())), key=lambda d: (len(d.name), d.name))

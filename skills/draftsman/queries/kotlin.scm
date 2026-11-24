@@ -153,6 +153,11 @@
 ; extension's body
 (function_declaration (receiver_type) @body.receiver)
 (property_declaration (receiver_type) @body.receiver)
+; an anonymous function's (`fun Ctx.(): Int = ...`), which the grammar spreads over the
+; function's children (`shop.Ctx` is two type identifiers): its first, and a simple
+; name is a type in the body
+(anonymous_function "fun" . (type_identifier) @body.receiver)
+(anonymous_function "fun" . (type_identifier) @body.ref.type . "." . (function_value_parameters))
 ; a name standing alone where a value does (`listOf(Registry)`, `val x = Loading`,
 ; `return Kind`, `"$Registry"`, `Cause.Missing`): an object, a class's companion, or a value
 ; of any kind
