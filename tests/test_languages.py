@@ -200,6 +200,7 @@ SCOPE_RULES = {
         "java": ("StripeGateway", "dependency", "Money", "body"),   # `new Receipt.Money(...)`
         "typescript": ("StripeGateway", "dependency", "Money", "body"),   # `: Receipt.Money`
         "csharp": ("StripeGateway", "dependency", "Money", "body"),   # `new Receipt.Money(...)`
+        "kotlin": ("Order", "dependency", "OrderLine", "body"),   # `{ x: OrderLine -> x }`
         # `isinstance(self, Auditable)`: the shop's other bodies name classes beside a star
         # import from outside the sources (`from stripe import *`), which may bind them
         "python": ("BaseEntity", "dependency", "Auditable", "body"),

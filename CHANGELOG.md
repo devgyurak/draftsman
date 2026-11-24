@@ -7,6 +7,9 @@ Notes for anyone with `view.json` files written against a development build:
 - **0.3.0**: the entries below on nested types and annotations change the default
   focus diagram and the relations in `ir.json`; results measured with 0.2.0 (the
   benchmark's runs among them) are not comparable with 0.3.0 ones.
+- **After 0.7.0**: Kotlin's `ir.json` gains the relations read from names in bodies
+  (below); results measured with 0.7.0 are not comparable on what Kotlin bodies relate.
+  Kotlin's declared relations and every other language's `ir.json` are the same.
 - **0.7.0**: C#'s `ir.json` gains the relations read from names in bodies (below);
   results measured with 0.6.0 are not comparable with 0.7.0 ones on what C# bodies relate. One declared
   relation changes: eShop's `BasketService` extends the gRPC-generated
@@ -110,6 +113,40 @@ Notes for anyone with `view.json` files written against a development build:
   (`Field`). Django extracts in about 2.5 s instead of 1.0 s. jsoup's, petclinic's,
   Netty's, TypeORM's and nest's `ir.json` are byte for byte the same; the C#, Kotlin and
   C++ e2e projects were not run again.
+- **Names in Kotlin bodies are relations** (#5, after 0.7.0). A project type a body
+  names where only a type stands (a local's or parameter's type, `is`, `as`, type
+  arguments, `catch`, a local class's or anonymous object's supertypes), where a member is
+  reached through it (`Foo.x`, `Foo::class`), where it is called (`Foo(1)`, `::Foo`) or
+  where it stands alone as a value (an object or a companion: `listOf(Registry)`) is a
+  dependency marked `evidence: "body"`. Kotlin has no `new`: a call of a class's name draws
+  nothing where a function of the name may be called instead (one at any file's top, a
+  method around, a companion's function; Ktor: 88 wrong names kept out at a cost of 11),
+  and a property at any file's top (`val ContentNegotiation`), an extension's receiver's
+  members, a constructor parameter and the usual variables hide a name. Kotlin's own lookup
+  is followed: an interface and a companion pass on no nested type, an import alias hides
+  the name it renames, a private class is its file's, a typealias names the class it
+  stands for (one of a generic or function type draws nothing in a body). What a build
+  decides is read from the sources: a platform source set sees only its own and the
+  common types, a type of the file's package in another module only may be unseen, an
+  Apple source set draws nothing, and a call in a file star-importing a Kotlin/Native
+  platform library (C functions of any name) draws nothing. Under a supertype outside the
+  sources, only what `langs/kotlin_outside.json` knows hides a name: the members, statics
+  and nested types of the standard library's, kotlinx's (coroutines, serialization, io)
+  and the JDK's common types, as the Kotlin compiler sees them (`oracle.py table`, 634 KB);
+  a supertype it does not know hides nothing, as in Java (a limit: its members may share a
+  project type's name). The Kotlin compiler is the answer key: `bench/kotlin_oracle` puts a
+  compiler plugin (TypeUses, built in a container for Kotlin 2.3.0, 2.3.21 and 2.4.0) into
+  each repository's own Gradle build and records what each compilation resolves at each
+  name; a file several compilations compile (KMP targets and source sets) has an answer
+  only where they agree. nowinandroid: 143 names drawn (101 compilations), Ktor 3443 (1089
+  compilations; 27 more in modules its build leaves out, unchecked), 0 mismatches. Not
+  drawn: code outside every type (#8: 300 of nowinandroid's 454 project type names in
+  bodies, 3967 of Ktor's 7600), lambdas with a receiver (a limit: their names may be the
+  receiver's members). Hand-written review sets kt1, kt2, kt4, kt6, kt7, kt8
+  (`oracle.py review`) and a fixture of 178 names pin the forms. nowinandroid gains 107 body
+  dependencies and Ktor 2872; Ktor's focus diagram grows from 32 to 38 types
+  (`HttpClientCall`). Declared relations are unchanged; the lookup rules above apply to
+  bodies only (#7 lists where declared relations differ).
 - **Names in C# method bodies are relations** (#5, 0.7.0). As in Java, a project
   type a body names where only a type stands (a local's type, `new Foo()`, a cast,
   `typeof`, `as`, a pattern's type, type arguments, `is Foo` alone) or where an expression

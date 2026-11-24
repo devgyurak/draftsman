@@ -313,6 +313,69 @@ is that type. Aliases of aliases are followed.
   `Receipt.Companion.Parser` is read as `Receipt.Parser`.
 - `typealias` is an alias (see the note on aliases below). Not handled: delegation targets
   (`by x`).
+- Names in bodies (`evidence: "body"`; function bodies, property initializers, getters,
+  setters and delegates, default arguments, `init` blocks, secondary constructors and
+  their delegation, a superclass's constructor arguments, a class's delegate `by x`, an
+  enum entry's arguments and body, and what is inside them: lambdas, anonymous objects,
+  local classes and functions): a name where only a type stands (a local's or a
+  parameter's type, `is`, `as`, type arguments, `catch`, a local class's or an anonymous
+  object's supertypes, `super<Foo>`) is looked up among types; the head of a member access
+  (`Foo.x`, `Foo.Line.x`, `Foo::class`, `Foo::bar`), what is called (`Foo(1)`,
+  `Outer.Inner()`, `::Foo`) and a name standing alone where a value does (an object or a
+  companion: `listOf(Registry)`, `val x = Loading`, `when (s) { Loading -> }`,
+  `"$Registry"`, `Cause.Missing`) may be something else, and draws nothing where a
+  variable of the name is in scope (a parameter, a local, a lambda's, `for`, `catch` or
+  destructured name, a local function, anywhere in the member), a property or enum entry
+  of the type, of the types around it and of their project supertypes, a constructor
+  parameter, a property declared at any file's top in the sources (`val
+  ContentNegotiation`), a member of an extension's receiver (`fun Ctx.ext()`: its
+  instance properties and functions, not its nested types), or, for a call, a function of
+  the name declared at any file's top or a method of the types around (`Money(1, 2)`
+  beside `class Money`: which one is called depends on the arguments). A typealias draws
+  the class it names directly (`typealias Cash = Money`), wherever it is declared; one of a
+  generic or a function type draws nothing in a body (declared relations draw the types
+  inside it: `val c: Cashes` with `typealias Cashes = List<Money>` depends on `Money`).
+  What a build decides, read from the sources: a platform source set (Ktor's
+  `<module>/jvm/src`, Gradle's `src/jvmMain/kotlin`; the module is the nearest directory
+  with a build script) sees its own types and the common ones (`common`, `commonMain`,
+  `main`), not another platform's; a type of the file's package in another module only is
+  taken only where no star or default import could bring in the name (the module's
+  dependencies are the build's); a private top-level class only in its file (each
+  platform's own private class of one id is that id there); an Apple source set (`ios`,
+  `macos`, `tvos`, `watchos`, `darwin`, `apple`) draws nothing, as no answer key here
+  compiles it; in a file that star-imports a Kotlin/Native platform library
+  (`platform.posix.*`), whose C functions take any name, a call of a class's name draws
+  nothing (`WinHttpConnect(...)`). Kotlin's lookup: a class sees its superclasses' nested
+  types by simple name, not an interface's, nor those of a superclass's companion object
+  (its own, and those of the types around it, it sees); `import p.Money as Coin` hides
+  `Money` in the file, also through a star import and the file's package. Supertypes
+  outside the sources: under one `kotlin_outside.json` knows (the standard library,
+  kotlinx coroutines, serialization and io, the JDK's common packages, as the Kotlin
+  compiler sees them: `bench/kotlin_oracle/oracle.py table`), a name draws nothing where
+  the supertype has a member of it (properties and functions, its companion's and Java's
+  static members, nested types through superclasses only); under one it does not know,
+  nothing is hidden, as in Java. Checked against the Kotlin compiler (`bench/kotlin_oracle`):
+  nowinandroid 143 names, Ktor 3,443, no mismatch.
+- Known limits of bodies. Drawn where it may be wrong: a member or nested type of a
+  supertype the table does not know (Android, Gradle, Netty) that shares a project type's
+  name the file sees (androidx.work's `CoroutineWorker` passes on `Result`: e2e 0); a
+  lambda with a receiver (`with(c) { Money(1) }`, `routing { }`): which lambda has one,
+  and of what type, is the called function's, not the syntax's; a module the build leaves
+  out (Ktor's ktor-client-tracing and stetho, not in its settings, and webrtc-rs, which
+  needs cargo: 27 names), as the extractor does not read Gradle's settings; a platform
+  source set's types are taken as the common ones' where the sources lay them out
+  otherwise. Lost: everything in code outside every type, top-level functions and
+  properties (no type in ir.json to draw from: nowinandroid 300 names of 454, Ktor 3,967
+  of 7,600; #8); annotations in a body; a call of a class's name beside a function of the
+  name anywhere in the sources (Ktor 11), in a file star-importing a native platform
+  library (Ktor 11), a name beside a top-level property of it anywhere (Ktor 1), a type of
+  another platform's source set a platform one depends on (`jvmAndPosix` from `jvm`: Ktor
+  12); a type a name finds through a star import or a nested type of an interface or a
+  companion when another type of the name comes first; `o.Part()` (an inner class's
+  constructor after a value). Declared relations follow none of the lookup rules above
+  (#7): they take an interface's or a superclass's companion's nested type for inherited,
+  a project type for one an outside superclass nests (`Thread`'s `State`), and see a name
+  an import alias hides.
 
 ## TypeScript / TSX
 

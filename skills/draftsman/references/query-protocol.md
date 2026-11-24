@@ -52,6 +52,9 @@ a body is, which names it writes, and what may hide them there.
 | `@body.region` | – | a body: a method or constructor body, a field initializer, an enum constant's arguments and body. A name is read only at or below one (a TypeScript field initializer may be the name itself: `X = Kind.A`), so a signature's `List<Foo>` is not |
 | `@body.init` (+ `@body.init.name`, `@body.init.region`) | – | a body of no listed member, `via` `.name` when given (a record's compact constructor), else `LanguageSpec.init_via` (C#'s `operator +`, `~Order`, `this[]`), else its text before `{` plus `{}` (initializer blocks: `static {}`, `{}`). With `.region` the init is a declaration whose body that is: its parameters are the body's names, its signature no body (C#'s operators and indexers). Only a named type's own count |
 | `@body.ref.type` / `@body.ref.receiver` | yes | a name written in a body: `.type` where only a type can stand (every type name: `new Foo()`, a cast, `X.class`, `X.this`), `.receiver` where a variable can too (`Foo.bar()`; in TypeScript every value: `new Foo()`, `typeof Foo`, `<Foo />`; in Python every name, an annotation's too). A receiver is a dotted name: every node of it one of `LanguageSpec.receiver_part_nodes` (not `this.x`, `new Foo(x).m`). A capture whose parent is captured too is part of that name and dropped (`Foo` in `p.Foo`), and so is one captured as `@body.type` (`T` in `<T extends Foo>`). The name is its identifiers joined by `.`, leaving out annotations, comments and `LanguageSpec.type_argument_nodes` (`Outer<T>.Inner` is `Outer.Inner`, and `T` a name of its own); each part keeps its line and column, in UTF-16 code units as javac counts them |
+| `@body.ref.call` / `@body.ref.value` | yes | a name in a body where a value stands, read as `.receiver` is: `.call` what is called (Kotlin's `Foo(1)`, `Outer.Inner()`, `::Foo`), which a function of the name may be as well; `.value` a name standing alone (an object or a companion: `listOf(Registry)`) |
+| `@body.function` / `@body.value` | – | a function or a property a file declares at its top, which every file may name (Kotlin): a call of the function's name, any name of the property, may be it (`FileScope.top_functions`, `top_values`, kept per language) |
+| `@body.receiver` | – | an extension's receiver type (Kotlin's `fun Ctx.ext()`, `val Ctx.prop`): its members are names in the member's body (`RawMember.receivers`) |
 | `@body.declared_type` | – | a declaration's type in an expression (C#'s `declaration_expression`): its names are read only where LanguageSpec.declaration_read says the language reads a declaration there |
 | `@body.unread` | – | a type node that is no name of the scope, never recorded: looked up in the type of an expression (Java `o.new Inner()`), or no name at all (`X.super` in `X.super::m`, where `X` is; a label in a TypeScript type, `[Foo: string]`) |
 | `@body.blind` | – | a class body whose inherited members are not known (the anonymous class of Java `o.new Inner() { }`), or a node whose names are read elsewhere or not at all (TypeScript decorators, TSX closing tags): no name in it is recorded |
@@ -99,6 +102,20 @@ binds `a`), `submodules_need_import` (a dotted receiver reaches a submodule only
 file imports it), `suffix_skips_no_package` (a suffix match of an import never drops a
 package of the sources) and `star_exports` (what a wildcard import brings in: `__all__`,
 else no `_` name; in a body nothing through a listing that cannot be read).
+Kotlin adds `alias_declarations` (a typealias is a declaration every file may name: a
+name of one draws the class it names directly, looked up where it is declared),
+`class_nested_only` (a type sees only its superclasses' nested types, not an interface's
+nor a companion's; `RawType.static_scope` marks a type declared in a companion),
+`alias_import_hides` (`import p.Money as Coin` hides `Money`), `file_local_copies` (each
+file's private type of one id is that id there), `outside_supers_hide` with
+`outside_member` and `outside_instance_member` (what a supertype or an extension's
+receiver outside the sources has, as far as the language's table knows it) and
+`outside_package_types` (a star import's candidate for a supertype's name is dropped
+when the table knows its package lacks it), and hooks for what a build decides:
+`sees_declaration` (a platform source set sees its own types and the common ones; a type
+of the file's package in another module only), `outside_functions` (star imports that
+bring in functions of any name: Kotlin/Native's platform libraries); a call
+(`@body.ref.call`) draws nothing where a function of the name may be called instead.
 C# adds `block_imports` (an import in a namespace block is looked at with that
 namespace's types, before the namespaces around it; declared relations too),
 `body_aliases` (a name that is an alias the file declares of one project type names it;
