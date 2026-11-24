@@ -185,8 +185,8 @@ checked), an SVG and an HTML viewer — on real projects, tests and generated co
 | C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 366 + 206 body | 194 (1 ambiguous, 193 outside) | 0 |
 | C# | [eShop](docs/e2e/csharp/eshop.md) `src/` | 497 | 506 | 960 + 442 body | 513 (1 ambiguous, 508 outside, 4 unexplained) | 0 |
 | C# | [Serilog](docs/e2e/csharp/serilog.md) `src/Serilog` | 113 | 119 | 566 + 363 body | 23 (23 outside) | 0 |
-| Kotlin | [nowinandroid](docs/e2e/kotlin/nowinandroid.md) | 226 | 237 | 416 + 107 body | 4 (3 outside, 1 unexplained) | 0 |
-| Kotlin | [Ktor](docs/e2e/kotlin/ktor.md) | 1578 | 2137 | 6897 + 2872 body | 586 (49 ambiguous, 537 outside) | 0 |
+| Kotlin | [nowinandroid](docs/e2e/kotlin/nowinandroid.md) | 226 | 237 | 416 + 110 body | 4 (3 outside, 1 unexplained) | 0 |
+| Kotlin | [Ktor](docs/e2e/kotlin/ktor.md) | 1578 | 2137 | 6897 + 2970 body | 586 (49 ambiguous, 537 outside) | 0 |
 | TypeScript | [nest](docs/e2e/typescript/nest.md) `packages/` | 730 | 738 | 2307 + 1117 body | 0 | 0 |
 | TypeScript | [TypeORM](docs/e2e/typescript/typeorm.md) `packages/typeorm/src` | 496 | 694 | 3968 + 2076 body | 1 (1 unexplained) | 0 |
 | Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 + 152 body | 0 | 0 |

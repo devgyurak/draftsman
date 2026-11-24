@@ -109,9 +109,10 @@ nor a companion's; `RawType.static_scope` marks a type declared in a companion),
 `alias_import_hides` (`import p.Money as Coin` hides `Money`), `file_local_copies` (each
 file's private type of one id is that id there), `outside_supers_hide` with
 `outside_member` and `outside_instance_member` (what a supertype or an extension's
-receiver outside the sources has, as far as the language's table knows it) and
-`outside_package_types` (a star import's candidate for a supertype's name is dropped
-when the table knows its package lacks it), and hooks for what a build decides:
+receiver outside the sources has, as far as the language's table knows it),
+`receiver_types` (an extension's receiver that is a type parameter stands for its
+bounds), `member_of` (an accessor on the line after its property, which the grammar puts
+beside it, is the property's), and hooks for what a build decides:
 `sees_declaration` (a platform source set sees its own types and the common ones; a type
 of the file's package in another module only), `outside_functions` (star imports that
 bring in functions of any name: Kotlin/Native's platform libraries); a call

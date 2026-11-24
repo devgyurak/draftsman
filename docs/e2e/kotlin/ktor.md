@@ -8,7 +8,7 @@ An asynchronous client and server framework, Kotlin Multiplatform: common code w
 | Commit | `cc3d345bc2` (2026-11-16) |
 | Extracted | the whole repository without test source sets (`<module>/<platform>/test`), test-support modules (`ktor-server-test-host`, `ktor-client-tests`, ...), the compiler plugin's test data and the Gradle build logic |
 
-Measured on 2026-11-24 with Draftsman after 0.7.0 (at `a51520e`); the declared relations are the same as 0.3.0's.
+Measured on 2026-11-24 with Draftsman after 0.7.0 (at `c90a7d4`); the declared relations are the same as 0.3.0's.
 
 ## Run
 
@@ -44,16 +44,16 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 1578 files, 2137 types, relations: association 1686, dependency 3775, extends 714, implements 722, body dependency 2872, 586 unresolved (49 ambiguous, 537 outside the sources), 0 diagnostics
+draftsman: 1578 files, 2137 types, relations: association 1686, dependency 3775, extends 714, implements 722, body dependency 2970, 586 unresolved (49 ambiguous, 537 outside the sources), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 1578 | 2137 | 1686 | 3775 | 714 | 722 | 2872 | 586 (49 ambiguous, 537 outside) | 0 |
+| 1578 | 2137 | 1686 | 3775 | 714 | 722 | 2970 | 586 (49 ambiguous, 537 outside) | 0 |
 
 Types by kind: 1406 classes, 73 abstract classes, 277 interfaces, 266 objects, 69 enums, 46 annotation classes.
 
-The Mermaid and SVG renders of the view draw 38 boxes and 104 relations (`HttpClientCall` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2137 types, as 1688 boxes with 449 nested types folded into their outer types, and 5275 relations (body relations among them) and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 38 boxes and 104 relations (`HttpClientCall` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2137 types, as 1688 boxes with 449 nested types folded into their outer types, and 5295 relations (body relations among them) and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
@@ -100,7 +100,7 @@ relation).
 
 ## What it covers
 
-- Names in bodies (`evidence: "body"`): 3443 names are drawn as 2872 body dependencies, and each matches what the Kotlin compiler resolves there (`bench/kotlin_oracle`: 1089 compilations of every target a Linux host builds, a file's answer only where all its compilations agree; 0 mismatches). Not checked: 27 names in modules Ktor's build leaves out (ktor-client-tracing and stetho, not in its settings; ktor-client-webrtc-rs, which needs cargo), which the extractor reads as any other; Apple source sets (`darwin/`, `ios/`, ...) draw nothing, as no Linux host compiles them. Code outside every type draws nothing (3967 of the 7600 project type names the compiler finds in bodies; #8).
+- Names in bodies (`evidence: "body"`): 3565 names are drawn as 2970 body dependencies. 3497 of them the Kotlin compiler checks, and each matches what it resolves there (`bench/kotlin_oracle`: 1089 compilations of every target a Linux host builds, a file's answer only where all its compilations agree; 0 mismatches). Not checked: the other 68, in modules Ktor's build leaves out (ktor-client-tracing and stetho, not in its settings; ktor-client-webrtc-rs, which needs cargo), which the extractor reads as any other; Apple source sets (`darwin/`, `ios/`, ...) draw nothing, as no Linux host compiles them. Code outside every type draws nothing (3967 of the 7600 project type names the compiler finds in bodies; #8).
 - Kotlin Multiplatform: `expect` declarations and their `actual`s in other source sets become one type at the `expect`, every member once (56 types carry `expect`).
 - 266 objects, 210 data classes, 59 sealed types, 55 `external` declarations for Kotlin/JS and 46 annotation classes.
 - Library supertypes: with `"externals": true` in the view, the 102
