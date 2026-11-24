@@ -889,7 +889,10 @@ class Resolver:
         return cands or ([] if res.status == UNRESOLVED and res.outside and name else [None])
 
     def _outside_member_of(self, rtype: RawType, name: str, nested_only: bool,
-                           seen: set) -> bool:
+                           seen: set, instance: bool = False) -> bool:
+        """Whether a supertype outside the sources of ``rtype`` or of its project
+        supertypes may have a member ``name``: with ``instance`` an instance property or
+        function only (what a value of the type has: an extension's receiver)."""
         if rtype.qualified_name in seen:
             return False
         seen.add(rtype.qualified_name)
@@ -898,12 +901,14 @@ class Resolver:
             if nested_only and written.kind != "extends":
                 continue   # an interface passes on no nested type
             if sup.status == PROJECT:
-                if self._outside_member_of(self.index[sup.target], name, nested_only, seen):
+                if self._outside_member_of(self.index[sup.target], name, nested_only, seen,
+                                           instance):
                     return True
                 continue
             ref = parse_type(written.text)
             sname = ref.name if isinstance(ref, Named) else ""
-            if any(spec.outside_member(t, name, nested_only) for t in self._outside_candidates(
+            if any(spec.outside_instance_member(t, name) if instance
+                   else spec.outside_member(t, name, nested_only) for t in self._outside_candidates(
                     sname, sup, written.scope or rtype.scope, rtype)):
                 return True
         return False
@@ -1007,9 +1012,14 @@ class Resolver:
             if not isinstance(written, Named):
                 continue
             res = self._in_body(written.name, rtype, ref, 0)
+            if res.status == ALIAS and res.target:   # `fun Cash.ext()`: the class it names
+                aliased = self._alias_type(res.target, written.name, rtype, ref)
+                res = Resolution(PROJECT, aliased) if aliased else res
             if res.status == PROJECT:
                 t = self.index[res.target]
-                if self._has_field(t, name) or self._has_method(t, name, set()):
+                # its own or a project supertype's, or one of a supertype outside
+                if self._has_field(t, name) or self._has_method(t, name, set()) or \
+                        self._outside_member_of(t, name, False, set(), instance=True):
                     return True
             elif any(spec.outside_instance_member(o, name)
                      for o in self._outside_candidates(written.name, res, ref.scope, rtype)):

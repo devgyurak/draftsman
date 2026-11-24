@@ -338,6 +338,17 @@ class LanguageSpec:
         the source (C#'s `value` in a setter, `field` in a property's accessor)."""
         return frozenset()
 
+    def receiver_types(self, node: "ts.Node", text: str, src: bytes) -> list[str]:
+        """The types an extension's receiver (`@body.receiver`, written ``text``) stands
+        for, whose members are names in its body: the type written; Kotlin's type
+        parameter its bounds (`fun <T : Ctx> T.ext()`)."""
+        return [text]
+
+    def member_of(self, node: "ts.Node") -> Optional["ts.Node"]:
+        """The declaration a node outside it belongs to (Kotlin's accessor on the line
+        after its property, which the grammar puts beside it), or None."""
+        return None
+
     def implicit_types(self, root_node: "ts.Node") -> list[str]:
         """Ids of the types a file declares without a declaration (C#'s `Program` of
         top-level statements): one per build project that has such a file."""

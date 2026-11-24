@@ -250,6 +250,30 @@ def test_an_extensions_receiver_hides_a_name_by_a_member_of_it(tmp_path):
     assert _body(ir) == [("shop.R", "shop.Money", 10), ("shop.R", "shop.Part", 9)]
 
 
+def test_an_extensions_receiver_through_bounds_an_alias_and_outside_supertypes(tmp_path):
+    # a type parameter receiver is its bounds (`<T : Ctx>`, `where T : Ctx`, a class's
+    # `U`, a bound that is another type parameter; none: Any's members only), an alias
+    # the class it names, a project receiver passes on its outside supertypes' instance
+    # members, and a library receiver its own as far as the table knows them; never its
+    # statics (Thread's MAX_PRIORITY) (kt9)
+    ir = extract_source(tmp_path, {
+        "shop/A.kt": "package shop\nclass Money(x: Int)\nobject Order\nobject name\nobject MAX_PRIORITY\n"
+                     "class Ctx { fun Money(x: Int) = x; val Order = 1 }\n"
+                     "typealias C2 = Ctx\nopen class Worker : Thread()\n"
+                     "class R<U : Ctx> {\n"
+                     "  fun <T : Ctx> T.a() = Money(2)\n"
+                     "  fun <T> T.b(): Any where T : Ctx = Order\n"
+                     "  fun C2.c() = Money(3)\n"
+                     "  fun Worker.d(): Any = name\n"
+                     "  fun <T : Thread> T.e(): Any = name\n"
+                     "  fun Thread.f(): Any = name\n"
+                     "  fun U.g() = Money(4)\n"
+                     "  fun <T : U> T.h() = Money(5)\n"
+                     "  fun <T> T.i() = Money(6)\n"
+                     "  fun Thread.j(): Any = MAX_PRIORITY\n}\n"})
+    assert _body(ir) == [("shop.R", "shop.MAX_PRIORITY", 19), ("shop.R", "shop.Money", 18)]
+
+
 def test_a_supertype_outside_hides_only_what_a_subclass_sees(tmp_path):
     # the table keeps a library type's public and protected names: Thread's private
     # nested Caches and field eetop, ArrayList's package-private elementData hide nothing
@@ -264,3 +288,18 @@ def test_a_supertype_outside_hides_only_what_a_subclass_sees(tmp_path):
                      "  fun a(): Any = elementData\n  fun b(): Any = modCount\n}\n"})
     assert _body(ir) == [("shop.L", "shop.elementData", 13), ("shop.W", "shop.Caches", 8),
                          ("shop.W", "shop.eetop", 9)]
+
+
+def test_accessors_on_their_own_lines_a_delegate_and_default_values_are_bodies(tmp_path):
+    # a getter or setter on the line after its property is the property's (the grammar
+    # puts it beside the property), `: Face by Proxy` the class's, and a constructor
+    # parameter's default value hides nothing by its name (kt10, kt11, kt12)
+    ir = extract_source(tmp_path, {
+        "shop/A.kt": "package shop\nclass Money { companion object { val ZERO = 1 } }\n"
+                     "object Registry\ninterface Face\nobject Proxy : Face\n"
+                     "class G {\n  val a: Any\n    get() = Money.ZERO\n"
+                     "  var b: Any\n    // the getter\n    get() = Registry\n    set(v) { Money.ZERO }\n}\n"
+                     "class D(val p: Any = Registry) : Face by Proxy {\n  fun a(): Any = Registry\n}\n"})
+    assert _body(ir) == [("shop.D", "shop.Proxy", 14), ("shop.D", "shop.Registry", 14),
+                         ("shop.D", "shop.Registry", 15), ("shop.G", "shop.Money", 8),
+                         ("shop.G", "shop.Money", 12), ("shop.G", "shop.Registry", 11)]

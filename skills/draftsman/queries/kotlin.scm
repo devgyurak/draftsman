@@ -133,7 +133,7 @@
 (statements (function_declaration (simple_identifier) @body.var))
 ; a primary constructor's parameters: in scope in the class's initializers (a `val` one
 ; is a property in every body)
-(class_parameter (simple_identifier) @body.field)
+(class_parameter (simple_identifier) @body.field . ":")
 ; types a member declares: local classes, type parameters
 (statements (class_declaration (type_identifier) @body.type))
 (type_parameter (type_identifier) @body.type)

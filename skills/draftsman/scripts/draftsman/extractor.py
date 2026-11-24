@@ -837,6 +837,9 @@ class Extractor:
                 if cur.id in inits or members_by_node.get(cur.id):
                     anchors[cur.id] = cur
                     break
+                if (decl := self.spec.member_of(cur)) is not None and members_by_node.get(decl.id):
+                    anchors[cur.id] = decl   # a getter on the line after its property
+                    break
                 chain.append(cur)
                 cur = cur.parent
             found = anchors.get(cur.id) if cur is not None else None
@@ -978,12 +981,13 @@ class Extractor:
             if (a := anchor_of(n.parent)) is not None and a.id not in inits:
                 rm = place(a, n.start_byte)[2]
                 if rm is not None:
-                    rm.receivers.append(_text(n, src))
+                    rm.receivers.extend(self.spec.receiver_types(n, _text(n, src), src))
         for position, node in sorted(refs, key=lambda r: r[1].start_byte):
             if node.parent.id in whole:
                 continue   # `Foo` in `p.Foo`: the whole name is recorded
             owner, in_body, around = up(node.parent)
-            a = anchor_of(node.parent)
+            # the name may be the initializer itself: Kotlin's `: Face by Proxy`
+            a = anchor_of(node if node.id in inits else node.parent)
             # the name may be the whole body: `X = Foo.BAR` (TypeScript's field initializer)
             if owner is None or a is None or not (in_body or node.id in regions):
                 continue

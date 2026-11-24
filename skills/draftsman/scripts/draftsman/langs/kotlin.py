@@ -252,6 +252,42 @@ def _outside_names(type_id: str, what: str) -> Optional[frozenset]:
 # source sets every other one of a module sees: Kotlin Multiplatform's common one
 # (`common/src` in Ktor's layout, `src/commonMain/kotlin`), a single-platform module's
 # `src/main`
+def _type_parameter_bounds(start, name: str, src: bytes, depth: int) -> Optional[list[str]]:
+    """The bounds of the type parameter ``name`` of the declaration ``start`` or of one
+    around it (`<T : A>`, `where T : B`; a bound that is another type parameter, its
+    bounds), or None when no declaration around declares it."""
+    def text(n) -> str:
+        return src[n.start_byte:n.end_byte].decode("utf-8", "replace")
+    if not name.isidentifier() or depth > 4:
+        return None
+    cur = start
+    while cur is not None:
+        params = next((c for c in cur.children if c.type == "type_parameters"), None)
+        declared = params is not None and any(
+            p.type == "type_parameter" and any(c.type == "type_identifier" and text(c) == name
+                                               for c in p.children)
+            for p in params.named_children)
+        if declared:
+            written = []
+            for p in params.named_children:
+                kids = p.children
+                if any(c.type == "type_identifier" and text(c) == name for c in kids) \
+                        and any(c.type == ":" for c in kids):
+                    written.append(text(kids[-1]))
+            for cons in (c for c in cur.children if c.type == "type_constraints"):
+                for con in cons.named_children:
+                    kids = con.children
+                    if con.type == "type_constraint" and kids and text(kids[0]) == name:
+                        written.append(text(kids[-1]))
+            out: list[str] = []
+            for b in written:
+                inner = _type_parameter_bounds(start, b.rstrip("?").strip(), src, depth + 1)
+                out.extend(inner if inner is not None else [b])
+            return out
+        cur = cur.parent
+    return None
+
+
 _COMMON_SOURCE_SETS = frozenset({"common", "commonMain", "main"})
 
 
@@ -418,6 +454,24 @@ class KotlinSpec(LanguageSpec):
         if nested_only and super_id in _NESTED:
             return name in _NESTED[super_id]
         return False
+
+    def receiver_types(self, node, text, src):
+        # `fun <T : Ctx> T.ext()`, `fun <T> T.ext() where T : Ctx`: the bounds of a type
+        # parameter of the extension or of a class around it (none: Any's members only)
+        bounds = _type_parameter_bounds(node.parent, text.rstrip("?").strip(), src, 0)
+        return [text] if bounds is None else bounds
+
+    def member_of(self, node):
+        # a getter or setter on the line after its property is the class body's child,
+        # beside the property: it belongs to the property before it
+        if node.type not in ("getter", "setter") or node.parent is None \
+                or node.parent.type == "property_declaration":
+            return None
+        cur = node.prev_named_sibling
+        while cur is not None and cur.type in ("getter", "setter", "line_comment",
+                                               "multiline_comment"):
+            cur = cur.prev_named_sibling
+        return cur if cur is not None and cur.type == "property_declaration" else None
 
     def outside_instance_member(self, type_id, name):
         known = _outside_names(type_id, "instance") if type_id else None
