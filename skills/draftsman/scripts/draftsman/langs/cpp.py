@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
 import re
+from functools import lru_cache
+from pathlib import Path
+from typing import Optional
 
 from .base import LanguageSpec
 
@@ -278,6 +282,28 @@ def _blank_inline_directives(src: bytes) -> bytes:
     return b"\n".join(lines)
 
 
+@lru_cache(maxsize=None)
+def _std() -> dict:
+    """The classes of namespace std a class of the sources may derive from (cpp_std.json,
+    `bench/clang_oracle/oracle.py table`: libstdc++'s public and protected members)."""
+    return json.loads((Path(__file__).parent / "cpp_std.json").read_text())
+
+
+@lru_cache(maxsize=None)
+def _std_names(type_id: str, types_only: bool) -> Optional[frozenset]:
+    """The names a class of std has, its own and its bases' (only its member types with
+    ``types_only``); None for a class the table does not know."""
+    table = _std()
+    type_id = table["aliases"].get(type_id, type_id)
+    entry = table["types"].get(type_id)
+    if entry is None:
+        return None
+    names = set(entry["types" if types_only else "members"])
+    for base in entry["bases"]:
+        names |= _std_names(base, types_only) or set()
+    return frozenset(names)
+
+
 def _template_params(tmpl) -> list[str]:
     """The names of a template declaration's parameters."""
     params = tmpl.child_by_field_name("parameters")
@@ -315,6 +341,14 @@ class CppSpec(LanguageSpec):
     values_hide_types = True
     file_local_bodies = True
     include_visibility = True
+    # a base class of std hides a name by any member the table knows of it (by a member type
+    # only before `::`); one the table does not know, or one written with the class's own
+    # template parameters (`std::vector<T>`), hides nothing
+    outside_supers_hide = True
+
+    def outside_member(self, super_id, name, nested_only):
+        known = _std_names(super_id, nested_only) if super_id else None
+        return known is not None and name in known
 
     def branch_ranges(self, src):
         # every branch of an `#if` group but an include guard (`#ifndef X` / `#define X`

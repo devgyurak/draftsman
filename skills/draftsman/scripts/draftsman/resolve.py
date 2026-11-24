@@ -838,6 +838,16 @@ class Resolver:
         return Resolution(UNRESOLVED, hint="; ".join(hints) or None,
                           candidates=cands, outside=outside)
 
+    def _dependent_base(self, written: str, rtype: RawType) -> bool:
+        """Whether a base class is written with a template parameter of the class (or of a
+        class around it): C++ looks a name up in such a base only once it is instantiated."""
+        params: set[str] = set()
+        cur: Optional[RawType] = rtype
+        while cur is not None:
+            params.update(cur.generics)
+            cur = self.index.get(cur.outer) if cur.outer else None
+        return bool(params) and any(re.search(rf"\b{re.escape(p)}\b", written) for p in params)
+
     def _class_head(self, name: str, rtype: RawType, inherit: bool, nested: bool,
                     spec) -> Optional[Resolution]:
         """C++, in a body: a qualified name whose head is a member type or alias of the
@@ -897,9 +907,12 @@ class Resolver:
                 self._unseen_nested(target, head, rtype, ref) or spec.alias_import_hides
                 and self._imported_under_another_name(res.target, head, ref)):
             return None   # `N` of an interface it implements; `Money` after `import p.Money as M`
+        # a nested type of a superclass outside the sources may be it (Kotlin); C++: any
+        # member of a base, but before `::`, where only types are looked up
+        nested_only = not spec.values_hide_types or qualifier or spec.separator in name
         if target is not None and spec.outside_supers_hide and not self._own_nested(
-                target, rtype) and self._outside_member(rtype, ref, head, True):
-            return None   # a nested type of a superclass outside the sources may be it
+                target, rtype) and self._outside_member(rtype, ref, head, nested_only):
+            return None
         return target
 
     def _method_around(self, name: str, rtype: RawType, ref: RawBodyRef) -> bool:
@@ -1005,8 +1018,10 @@ class Resolver:
         seen.add(rtype.qualified_name)
         spec = LANGUAGES[rtype.language]
         for written, sup in zip(rtype.supers, self.supertypes(rtype)):
-            if nested_only and written.kind != "extends":
-                continue   # an interface passes on no nested type
+            if nested_only and written.kind != "extends" and not spec.values_hide_types:
+                continue   # an interface passes on no nested type (C++ has none)
+            if spec.values_hide_types and self._dependent_base(written.text, rtype):
+                continue   # C++: `std::vector<T>` is looked into only once T is known
             if sup.status == PROJECT:
                 if self._outside_member_of(self.index[sup.target], name, nested_only, seen,
                                            instance):
