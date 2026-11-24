@@ -42,6 +42,9 @@ class RawMember:
     scope: Optional[FileScope] = None               # file it was written in (partial types)
     throws: list[str] = field(default_factory=list)  # Java `throws E`: used, not drawn as a member
     at: int = 0   # start byte of its name: tells the declarators of `int a = x, b = y;` apart
+    # the receiver types of extension functions and properties in it, its own too
+    # (Kotlin's `fun Ctx.ext()`, `@body.receiver`): their members are names in its body
+    receivers: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -123,6 +126,9 @@ class RawType:
     # names a build may declare in the type's #elif/#else branches, in any of its files
     # (LanguageSpec.left_out_names)
     left_out: set[str] = field(default_factory=set)
+    # declared in a static scope of its outer type that is no type itself (Kotlin's
+    # companion object without supertypes), whose id leaves the scope out
+    static_scope: bool = False
 
 
 @dataclass
@@ -496,8 +502,11 @@ class Extractor:
             # walk up: enclosing type, enclosing namespaces, or an opaque node
             outer_raw = None
             ns_parts: list[str] = []
+            in_static = False
             cur = node.parent
             while cur is not None:
+                if cur.type in spec.static_scope_nodes and cur.id not in type_nodes:
+                    in_static = True
                 if cur.id in type_nodes:
                     outer_raw = build(type_nodes[cur.id])
                     if outer_raw is None:
@@ -543,6 +552,7 @@ class Extractor:
                                      for a in caps.get("annotation", [])],
                 conditional=any(a <= node.start_byte < b for a, b in conditional),
                 left_out=set(scope.left_out_names),
+                static_scope=in_static and outer_raw is not None,
             )
             return entry["raw"]
 
@@ -721,7 +731,7 @@ class Extractor:
         regions: set[int] = set()
         inits: dict[int, str] = {}           # initializer block -> its `via`
         classes: dict[int, list[str]] = {}   # body of an anonymous or local class -> supertypes
-        refs, declared = [], []
+        refs, declared, receivers = [], [], []
         unread: set[int] = set()   # type nodes that are no name of the scope
         blind: set[int] = set()    # class bodies whose inherited members are not known
         guarded: set[int] = set()  # blocks only some checkers read (a platform's branch)
@@ -765,6 +775,8 @@ class Extractor:
                         owner.body_fields.update(self.spec.generated_fields(n, src))
                 elif cap == "body.extension":
                     scope.extension_methods.add(_text(n, src))
+                elif cap == "body.receiver":
+                    receivers.append(n)
                 elif cap == "body.function":
                     scope.top_functions.add(self.spec.body_name_text(_text(n, src)))
                 elif cap == "body.value":
@@ -962,6 +974,11 @@ class Extractor:
             p == "type" or self._dotted(n))
             and not any(a <= n.start_byte < b for a, b in unread_ranges)]
         whole = {n.id for _, n in refs}
+        for n in receivers:   # an extension's receiver: in the member it stands in
+            if (a := anchor_of(n.parent)) is not None and a.id not in inits:
+                rm = place(a, n.start_byte)[2]
+                if rm is not None:
+                    rm.receivers.append(_text(n, src))
         for position, node in sorted(refs, key=lambda r: r[1].start_byte):
             if node.parent.id in whole:
                 continue   # `Foo` in `p.Foo`: the whole name is recorded

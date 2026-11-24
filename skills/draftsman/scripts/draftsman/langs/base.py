@@ -203,6 +203,14 @@ class LanguageSpec:
     # Whether, under a base class outside the sources the language's table does not know
     # (C#'s EF Core DbContext), a receiver draws nothing: the base may have any member
     unknown_bases_hide: bool = False
+    # Whether a type sees by simple name the nested types of its superclasses only: not
+    # those of an interface, nor those of a superclass's companion object (Kotlin); bodies
+    # only
+    class_nested_only: bool = False
+    # Whether importing a declaration under another name (`import p.Money as Coin`) hides
+    # its own name in the file, also through a star import and the file's package (Kotlin);
+    # bodies only
+    alias_import_hides: bool = False
     # Whether a file-local type (LanguageSpec.file_local) of one id that several files
     # declare is still that id where one of them names it: Kotlin's `private class` of each
     # platform's file, which ir.json makes one type (C#'s two `file class Local` are not)

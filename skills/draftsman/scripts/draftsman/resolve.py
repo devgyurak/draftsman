@@ -58,11 +58,15 @@ class Resolver:
         # methods that may make a call an instance one (FileScope.extension_methods)
         self.resolver_extensions: set[str] = set().union(*(s.extension_methods for s in scopes)) \
             if scopes else set()
-        # names of functions and properties declared at a file's top (FileScope.top_functions)
-        self.top_functions: set[str] = set().union(*(s.top_functions for s in scopes)) \
-            if scopes else set()
-        self.top_values: set[str] = set().union(*(s.top_values for s in scopes)) \
-            if scopes else set()
+        # language -> names of functions and properties declared at a file's top
+        # (FileScope.top_functions): Kotlin's `val Money` is no name of Java code beside it
+        self.top_functions: dict[str, set[str]] = {}
+        self.top_values: dict[str, set[str]] = {}
+        for s in scopes:
+            if s.top_functions or s.top_values:
+                lang = spec_for_path(s.file).name
+                self.top_functions.setdefault(lang, set()).update(s.top_functions)
+                self.top_values.setdefault(lang, set()).update(s.top_values)
         # namespace -> types the build generates outside the sources (LanguageSpec.build_types)
         self.build_types: dict[str, set[str]] = {}
         for s in scopes:
@@ -806,10 +810,36 @@ class Resolver:
             target = res.target if res.status == PROJECT else None
         spec = LANGUAGES[rtype.language]
         head = name.split(spec.separator, 1)[0]
+        if target is not None and head == name and (
+                self._unseen_nested(target, head, rtype, ref) or spec.alias_import_hides
+                and self._imported_under_another_name(res.target, head, ref)):
+            return None   # `N` of an interface it implements; `Money` after `import p.Money as M`
         if target is not None and spec.outside_supers_hide and not self._own_nested(
                 target, rtype) and self._outside_member(rtype, ref, head, True):
             return None   # a nested type of a superclass outside the sources may be it
         return target
+
+    def _unseen_nested(self, target: str, head: str, rtype: RawType, ref: RawBodyRef) -> bool:
+        """Whether ``head``, resolved to the nested type ``target``, cannot be it: the
+        language passes on no nested type of an interface, nor one of a companion object
+        (LanguageSpec.class_nested_only), so only the type around it, an import of it or a
+        star import of its outer type sees it by simple name."""
+        if not LANGUAGES[rtype.language].class_nested_only:
+            return False
+        t = self.index[target]
+        outer = self.index.get(t.outer) if t.outer else None
+        if t.name != head or outer is None or not (outer.kind == "interface" or t.static_scope):
+            return False
+        if self._own_nested(target, rtype):
+            return False
+        return not any(imp.path == target and imp.local_name == head if not imp.wildcard
+                       else imp.path == t.outer for imp in ref.scope.imports)
+
+    def _imported_under_another_name(self, target: str, head: str, ref: RawBodyRef) -> bool:
+        """Whether the file imports ``target`` under another name than ``head``, its own
+        (LanguageSpec.alias_import_hides: Kotlin then finds no ``head`` through it)."""
+        return any(not imp.wildcard and imp.path == target and imp.local_name != head
+                   and imp.path.rsplit(".", 1)[-1] == head for imp in ref.scope.imports)
 
     def _own_nested(self, target: str, rtype: RawType) -> bool:
         """Whether ``target`` is nested in ``rtype`` or a type around it: found before
@@ -892,6 +922,10 @@ class Resolver:
             res = Resolution(UNRESOLVED)   # a namespace: the name goes on into it
         else:
             res = self._in_body(parts[0], rtype, ref, 0)
+        if res.status == PROJECT and self._unseen_nested(res.target, parts[0], rtype, ref) or (
+                res.status in (PROJECT, ALIAS) and res.target and spec.alias_import_hides
+                and self._imported_under_another_name(res.target, parts[0], ref)):
+            return None   # `N.x` of an interface it implements; `Money` after `import p.Money as M`
         if res.status == ALIAS and res.target:
             aliased = self._alias_type(res.target, parts[0], rtype, ref)
             res = Resolution(PROJECT, aliased) if aliased else Resolution(UNRESOLVED)
@@ -939,6 +973,8 @@ class Resolver:
             return None   # `Foo(1)` may call a function Foo
         if spec.outside_supers_hide and self._outside_member(rtype, ref, parts[0], False):
             return None   # a property, function or nested type of a supertype outside
+        if ref.member is not None and self._receiver_member(parts[0], rtype, ref):
+            return None   # `fun Ctx.ext() = Money(2)`: a member of Ctx
         outer = None
         while n < len(parts) and not self._has_field(self.index[target], parts[n]):
             nested = self._member_type(self.index[target], parts[n], sep,
@@ -952,11 +988,31 @@ class Resolver:
             target, n = outer, n - 1   # `Outer.Inner()` may call Outer's function Inner
         return target, n
 
+    def _receiver_member(self, name: str, rtype: RawType, ref: RawBodyRef) -> bool:
+        """Whether a receiver of an extension the member is or declares (RawMember.receivers)
+        has a property or function ``name``: a project type's own or inherited one, or one
+        an outside type has as far as the language knows it (LanguageSpec.outside_member).
+        Its nested types are no names there."""
+        spec = LANGUAGES[rtype.language]
+        for text in ref.member.receivers:
+            written = parse_type(text)
+            if not isinstance(written, Named):
+                continue
+            res = self._in_body(written.name, rtype, ref, 0)
+            if res.status == PROJECT:
+                t = self.index[res.target]
+                if self._has_field(t, name) or self._has_method(t, name, set()):
+                    return True
+            elif any(spec.outside_member(o, name, False)
+                     for o in self._outside(written.name, res, ref.scope, rtype, True) or [None]):
+                return True
+        return False
+
     def _function_named(self, name: str, rtype: RawType, ref: RawBodyRef) -> bool:
         """Whether a call of ``name`` may be a function's: one declared at a file's top
         anywhere in the sources, or a method of a type around ``ref`` (its own, an outer
         type's, an anonymous or local class's) or of one of their project supertypes."""
-        if name in self.top_functions:
+        if name in self.top_functions.get(rtype.language, ()):
             return True
         for project, _ in self._around(rtype, ref, 0):
             if any(self._has_method(t, name, set()) for t in project):
@@ -1344,7 +1400,7 @@ class Resolver:
         member declares, a field of a class around it (inherited ones too, from the JDK as
         far as its table tells), or one a static import brings in. Fields of other types
         outside the sources are not known (lang-notes.md)."""
-        if name in ref.names.variables or name in self.top_values:
+        if name in ref.names.variables or name in self.top_values.get(rtype.language, ()):
             return True   # a property at a file's top: the sources may name it anywhere
         spec = LANGUAGES[rtype.language]
         if spec.initializers_in_class_scope and ref.member is not None \

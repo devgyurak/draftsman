@@ -251,6 +251,8 @@ class KotlinSpec(LanguageSpec):
     alias_declarations = True
     outside_supers_hide = True
     file_local_copies = True
+    class_nested_only = True
+    alias_import_hides = True
     static_scope_nodes = frozenset({"companion_object"})
     static_scope_names = frozenset({"Companion"})
     annotation_nodes = frozenset({"annotation"})

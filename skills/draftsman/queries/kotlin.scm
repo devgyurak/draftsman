@@ -149,3 +149,7 @@
 ; name may be such a function, any name of it such a property
 (source_file (function_declaration (simple_identifier) @body.function))
 (source_file (property_declaration (variable_declaration (simple_identifier) @body.value)))
+; an extension's receiver (`fun Ctx.ext()`, `val Ctx.prop`): its members are names in the
+; extension's body
+(function_declaration (receiver_type) @body.receiver)
+(property_declaration (receiver_type) @body.receiver)

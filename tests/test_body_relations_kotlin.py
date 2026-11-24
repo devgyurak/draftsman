@@ -71,7 +71,9 @@ def test_body_relations_go_where_the_hand_written_answers_say():
             wrong.append((file, line, answer))
     assert wrong == []
     # every project type recorded is drawn but where a function of the name may be called
-    # instead (`Money(1)`: a function `Money` is declared at a file's top), a type's own
+    # instead (`Money(1)`: a function `Money` is declared at a file's top), a top-level type
+    # of the name of an interface's or a superclass's companion's nested type, which the
+    # extractor finds first and so gives up (`InComp` in Sub), a type's own
     # name (`Order(1)` in Order's companion) and the part of a longer name (`Order` in
     # `Order.Line`)
     recorded = {(raw.path, line, col) for raw in _fixture() for t in raw.types
@@ -81,6 +83,8 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     assert missed == [
         ("shop/Hiding.kt", 34, "shop.Money"), ("shop/Model.kt", 7, "shop.Order"),
         ("shop/Model.kt", 8, "shop.Order"), ("shop/Model.kt", 17, "shop.Money"),
+        ("shop/Nesting.kt", 14, "shop.InComp"), ("shop/Nesting.kt", 15, "shop.InComp"),
+        ("shop/Nesting.kt", 18, "shop.N"), ("shop/Nesting.kt", 19, "shop.N"),
         ("shop/Places.kt", 8, "shop.Money"), ("shop/Places.kt", 15, "shop.Money"),
         ("shop/Places.kt", 21, "shop.Money"), ("shop/Places.kt", 31, "shop.Money"),
         ("shop/Places.kt", 32, "shop.Money"), ("shop/Uses.kt", 13, "shop.Order"),
@@ -217,3 +221,34 @@ def test_a_supertype_outside_the_sources_may_have_a_member_of_the_name(tmp_path)
                   "class N : Plain2() { fun d() { val x: Result? = null; Plain() } }\n"
                   "open class Plain2\n"})
     assert _body(ir) == [("p.N", "p.Plain", 15), ("p.N", "p.Result", 15), ("p.S", "p.Result", 13)]
+
+
+def test_a_kotlin_files_top_level_names_are_no_names_of_java_code_beside_it(tmp_path):
+    # `val Money = 1` at a Kotlin file's top hides nothing in Java (kt8)
+    ir = extract_source(tmp_path, {
+        "j/shop/Money.java": "package shop;\npublic class Money { public static int ZERO = 0; }\n",
+        "j/shop/Use.java": "package shop;\npublic class Use { int f() { return Money.ZERO; } }\n",
+        "shop/D.kt": "package shop\nval Money = 1\nfun Use() = 0\n"})
+    assert _body(ir) == [("shop.Use", "shop.Money", 2)]
+
+
+def test_importing_a_type_under_another_name_hides_its_own(tmp_path):
+    # `Token` is other.Token after `import shop.Token as Tok`, even in package shop (kt7)
+    ir = extract_source(tmp_path, {
+        "shop/Token.kt": "package shop\nclass Token\n",
+        "other/Token.kt": "package other\nclass Token\n",
+        "shop/AH.kt": "package shop\nimport other.*\nimport shop.Token as Tok\n"
+                      "class AH {\n  fun a() = Token()\n  fun b() { val t: Token? = null }\n"
+                      "  fun d() = Tok()\n}\n"})
+    assert _body(ir) == [("shop.AH", "shop.Token", 7)]
+
+
+def test_an_extensions_receiver_hides_a_name_by_a_member_of_it(tmp_path):
+    # in `fun Ctx.ext()` the members of Ctx are names; its nested types are not (kt1, kt7)
+    ir = extract_source(tmp_path, {
+        "shop/A.kt": "package shop\nclass Money(x: Int)\nclass Order\nclass Part\n"
+                     "class Ctx { fun Money(x: Int) = x; val Order = 1; class Part }\n"
+                     "class R {\n  fun Ctx.ext() = Money(2)\n"
+                     "  val Ctx.prop: Any get() = Order.toString()\n"
+                     "  fun Ctx.part(): Any = Part()\n  fun h() = Money(4)\n}\n"})
+    assert _body(ir) == [("shop.R", "shop.Money", 10), ("shop.R", "shop.Part", 9)]
