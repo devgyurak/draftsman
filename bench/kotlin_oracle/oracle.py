@@ -393,7 +393,9 @@ def review(args) -> int:
                 check(d.resolve(), discover(d.resolve(), {"kotlin"}, []), recs, True)
         out = text.getvalue()
         drawn = re.search(r"compare: (\d+) names drawn", out)
-        wrong = re.findall(r"^  mismatch: (\S+)", out, re.M)
+        # a set written by hand compiles with errors on purpose: what is drawn in such a
+        # file is a mismatch there too (the compiler's `error` is an answer)
+        wrong = re.findall(r"^  (?:mismatch|in a file with compile errors): (\S+)", out, re.M)
         places = list(dict.fromkeys(f"{d.name}/{w.rstrip(':')}" for w in wrong))
         seen.update(places)
         fresh = [p for p in places if p not in known]
@@ -409,7 +411,7 @@ def review(args) -> int:
               + (f", fewer than the {counts[d.name]} README.md lists" if fewer else "")
               + (" (scope check failed)" if not drawn else ""))
         for line in out.splitlines():
-            m = re.match(r"  mismatch: (\S+)", line)
+            m = re.match(r"  (?:mismatch|in a file with compile errors): (\S+)", line)
             if m and f"{d.name}/{m.group(1).rstrip(':')}" in fresh:
                 print(line)
     gone = sorted(k for k in known if k.split("/", 1)[0] in {d.name for d in sets} and k not in seen)
