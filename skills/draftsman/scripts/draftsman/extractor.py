@@ -133,7 +133,9 @@ class RawType:
     file_local: bool = False
     # the `#if` branches declaring it, (file, first line, last line) each, or None when a
     # declaration stands outside every one (LanguageSpec.branch_ranges)
-    branches: Optional[list[tuple[str, int, int]]] = None
+    branches: Optional[list[tuple[str, int, int, str]]] = None
+    # an enum whose constants are no names of the scope around it (C++'s `enum class`)
+    scoped: bool = False
 
 
 @dataclass
@@ -372,6 +374,7 @@ class Extractor:
                           left_out_names=spec.left_out_names(original),
                           implicit_types=spec.implicit_types(tree.root_node),
                           build_types=spec.build_types(path, root))
+        scope.branches = [(first, last, cond) for _, _, first, last, cond in branch_ranges]
         raw = RawFile(path=rel, scope=scope)
         unseen: list[tuple[str, Unseen]] = [
             (name, Unseen(rel, line, line, macro))
@@ -571,8 +574,9 @@ class Extractor:
                 left_out=set(scope.left_out_names),
                 static_scope=in_static and outer_raw is not None,
                 file_local=spec.file_local_node(node),
-                branches=next(([(rel, first, last)] for a, b, first, last in branch_ranges
-                               if a <= node.start_byte < b), None),
+                scoped=spec.scoped_enum(node),
+                branches=next(([(rel, first, last, cond)] for a, b, first, last, cond
+                               in branch_ranges if a <= node.start_byte < b), None),
             )
             return entry["raw"]
 
@@ -842,6 +846,17 @@ class Extractor:
                     blind.add(n.id)
                 elif cap == "body.include":
                     scope.includes.append(_text(n, src))
+                elif cap == "body.nsalias":
+                    target = _text(n.parent, src).split("=", 1)[-1].strip().rstrip(";").strip()
+                    scope.namespace_aliases[_text(n, src)] = target.lstrip(":").replace(" ", "")
+                elif cap == "body.forward":
+                    parts, cur = [_text(n, src)], n.parent
+                    while cur is not None:
+                        if cur.id in namespaces:
+                            parts.insert(0, namespaces[cur.id])
+                        cur = cur.parent
+                    scope.forward_types.add(self.spec.separator.join(
+                        p for p in [scope.namespace, *parts] if p))
                 elif cap == "body.guarded":
                     blind.add(n.id)
                     guarded.add(n.id)

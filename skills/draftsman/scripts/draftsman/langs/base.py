@@ -119,6 +119,14 @@ class FileScope:
     # the files the file includes as written (`"Poco/Foo.h"`, `<Poco/Foo.h>`; C++,
     # `@body.include`): LanguageSpec.include_visibility
     includes: list[str] = field(default_factory=list)
+    # the branches of the file's conditional groups: (first line, last line, condition)
+    # (LanguageSpec.branch_ranges)
+    branches: list[tuple[int, int, str]] = field(default_factory=list)
+    # namespace aliases of the file's scope: name -> the namespace (C++'s `namespace fs =
+    # a::inner;`, `@body.nsalias`)
+    namespace_aliases: dict[str, str] = field(default_factory=dict)
+    # the types the file declares without defining them (C++'s `struct Fwd;`, `@body.forward`)
+    forward_types: set[str] = field(default_factory=set)
     # every namespace the file opens a block of, also one declaring no type (C++'s
     # `namespace Keywords { int now(); }`): LanguageSpec.values_hide_types
     declared_namespaces: set[str] = field(default_factory=set)
@@ -303,10 +311,12 @@ class LanguageSpec:
         branch of an `#if`): a type declared there is no certain type for a body."""
         return []
 
-    def branch_ranges(self, src: bytes) -> list[tuple[int, int, int, int]]:
-        """(first byte, end byte, first line, last line) of each branch of a conditional
-        group (C++'s `#if`/`#elif`/`#else`, include guards aside), innermost first: a type
-        declared in one is a candidate for a name in a body of that branch only."""
+    def branch_ranges(self, src: bytes) -> list[tuple[int, int, int, int, str]]:
+        """(first byte, end byte, first line, last line, condition) of each branch of a
+        conditional group (C++'s `#if`/`#elif`/`#else`, include guards aside), innermost
+        first: a type declared in one is a candidate for a name in a body of that branch,
+        or of a branch of the same condition as written (`#if defined(POCO_HAVE_IPv6)`),
+        only."""
         return []
 
     def left_out_types(self, src: bytes) -> set[str]:
@@ -405,6 +415,11 @@ class LanguageSpec:
         type parameters of the definition), or None when it is none (a free function, a
         template specialisation's member)."""
         return None
+
+    def scoped_enum(self, node: "ts.Node") -> bool:
+        """Whether the enum declared at ``node`` keeps its constants to itself (C++'s
+        `enum class`); an unscoped one's are names of the scope around it."""
+        return False
 
     def file_local_node(self, node: "ts.Node") -> bool:
         """Whether a type declared at ``node`` is seen in its file only (C++'s anonymous

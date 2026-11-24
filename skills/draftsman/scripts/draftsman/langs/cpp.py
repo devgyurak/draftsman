@@ -358,26 +358,30 @@ class CppSpec(LanguageSpec):
         for line in lines:
             offsets.append(at)
             at += len(line) + 1
-        out, stack = [], []   # stack: [kind, start line index, guard]
+        out, stack = [], []   # stack: [start line index, guard, conditions so far]
         for i, line in enumerate(lines):
             m = _DIRECTIVE.match(line)
             if not m:
                 continue
             word = m.group(1)
+            # the branch's condition as written: `ifdef X`, `elif B|if A`, `else|if A`
+            text = " ".join(line.decode("utf-8", "replace").split("//")[0].split()).lstrip("# ")
+            text = re.sub(r"^#\s*", "", text)
             if word.startswith(b"if"):
                 guard = b"__cplusplus" in line or (
                     word == b"ifndef" and i + 1 < len(lines)
                     and re.match(rb"\s*#\s*define\s+" + re.escape(line.split()[-1]) + rb"\b",
                                  lines[i + 1]) is not None)
-                stack.append([i, guard])
+                stack.append([i, guard, [text]])
             elif stack:
-                start, guard = stack[-1]
+                start, guard, conds = stack[-1]
                 if not guard:
-                    out.append((offsets[start], offsets[i], start + 1, i + 1))
+                    out.append((offsets[start], offsets[i], start + 1, i + 1, "|".join(conds)))
                 if word == b"endif":
                     stack.pop()
                 else:
                     stack[-1][0] = i
+                    stack[-1][2] = [text.split()[0] if word == b"else" else text] + conds
         out.sort(key=lambda r: r[1] - r[0])   # innermost first
         return out
 
@@ -489,6 +493,10 @@ class CppSpec(LanguageSpec):
         if cur.type == "destructor_name":
             name = "~" + name.lstrip("~").strip()
         return written, name, tparams
+
+    def scoped_enum(self, node):
+        return node.type == "enum_specifier" and any(c.type in ("class", "struct")
+                                                     for c in node.children)
 
     def file_local_node(self, node):
         cur = node.parent

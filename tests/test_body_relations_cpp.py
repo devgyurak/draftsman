@@ -66,14 +66,13 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     # every project type named in a body of a type is drawn but code outside every type (a
     # free function: `useA()`, `macros()`), a specialisation's (`Box<Money>`), the type's
     # own name (`Order` in Order's own bodies), the part of a longer name (`Order` in
-    # `Order::Line`), another program's type of the name the lookup meets first (prog_b's
-    # Utility: prog_a's global one is in no file it includes), the system's type of a name
+    # `Order::Line`), the system's type of a name
     # a branch no build takes declares (`timeval`), and what follows an `#if` that opens a
     # block in each branch (Clock::price)
     missed = sorted({(rel, line, answer) for (rel, line, col), (answer, _) in want.items()
                      if answer in builder.types and (rel, line, col) not in drawn})
     assert missed == [
-        ("prog_b/main.cc", 7, "gen::Utility"), ("shop/anon_a.cc", 11, "shop::State"),
+        ("shop/anon_a.cc", 11, "shop::State"),
         ("shop/anon_b.cc", 11, "shop::State"), ("shop/hiding.cc", 10, "shop::Order"),
         ("shop/hiding.cc", 24, "shop::Base"), ("shop/hiding.cc", 25, "shop::Base"),
         ("shop/hiding.cc", 35, "shop::Money"), ("shop/hiding.cc", 37, "shop::Money"),
@@ -123,13 +122,20 @@ def test_an_anonymous_namespaces_type_is_its_files_only(tmp_path):
     assert _body(ir) == [("s::A", "s::State", 2), ("s::B", "State", 2)]
 
 
-def test_a_type_of_a_file_not_included_draws_nothing(tmp_path):
+def test_a_type_of_a_file_not_included_is_passed_over(tmp_path):
+    # the lookup goes on past another program's Utility to the one `using namespace gen`
+    # brings in; a declaration the file sees (`struct Fwd;`) stops it: the name is that type
     ir = extract_source(tmp_path, {
+        "g.h": "struct Fwd {};\n",
+        "app/fwd.h": "namespace app { struct Fwd {}; }\n",
+        "app/use.cc": '#include "../g.h"\nnamespace app { struct Fwd;\nstruct K { void f(Fwd* p) { Fwd* q = p; } }; }\n'})
+    assert _body(ir) == [("app::K", "app::Fwd", 3)]
+    ir = extract_source(tmp_path / "2", {
         "a/util.h": "struct Utility { static int run(); };\n",
         "b/gen.h": "namespace gen { struct Utility { static int run(); }; }\n",
         "b/main.cc": '#include "gen.h"\nusing namespace gen;\nstruct M { int f() { return Utility::run(); } };\n',
         "a/tool.cc": '#include "util.h"\nstruct T { int f() { return Utility::run(); } };\n'})
-    assert _body(ir) == [("T", "Utility", 2)]
+    assert _body(ir) == [("M", "gen::Utility", 3), ("T", "Utility", 2)]
 
 
 def test_a_type_of_an_if_branch_is_its_branchs_only(tmp_path):
@@ -175,3 +181,50 @@ def test_cpp_and_another_language_name_none_of_each_others_types(tmp_path):
         "app/Far.cs": "namespace Shop { class Far { Helper field; void F() { var h = new Helper(); } } }\n"})
     assert _body(ir) == [("User", "Helper", 2)]
     assert not [r for r in ir.relations if r.from_ == "Shop.Far"]
+
+
+def test_an_unscoped_enums_constant_hides_a_type_where_a_value_may_stand(tmp_path):
+    # of the class (`enum St { Shut }`) and of a namespace around (`enum Kind { Paid }`);
+    # not one of an `enum class`
+    ir = extract_source(tmp_path, {
+        "a.h": "struct Paid {}; struct Shut {}; struct Open {};\n"
+               "namespace s { enum Kind { Paid }; enum class E { Open };\n"
+               "struct Lock { Lock(int) {} Lock(::Paid) {} };\n"
+               "struct O { enum St { Shut };\n"
+               "  void f() { Lock l(Paid); int n = sizeof(Shut) + sizeof(Open); } }; }\n"})
+    assert _body(ir) == [("s::O", "Open", 5), ("s::O", "s::Lock", 5)]
+
+
+def test_a_dependent_base_is_not_looked_into(tmp_path):
+    # `TBase<T>`'s nested types and fields are found once T is known; `TBase<int>`'s now
+    ir = extract_source(tmp_path, {
+        "a.h": "struct Inner {}; struct Helper {};\n"
+               "template <class T> struct TBase { struct Inner {}; int Helper; };\n"
+               "template <class T> struct Vec : TBase<T> { void f() { Inner i; Helper h; } };\n"
+               "struct Fixed : TBase<int> { void f() { Inner i; } };\n"})
+    assert _body(ir) == [("Fixed", "TBase::Inner", 4), ("Vec", "Helper", 3), ("Vec", "Inner", 3)]
+
+
+def test_a_type_of_an_if_branch_is_seen_in_branches_of_its_condition(tmp_path):
+    ir = extract_source(tmp_path, {
+        "a.h": "#if defined(V6)\nstruct Impl6 {};\n#endif\n",
+        "b.cc": '#include "a.h"\nstruct U {\n  void f() {\n#if defined(V6)\n    Impl6 x;\n'
+                "#endif\n  }\n  void g() { Impl6 y; }\n};\n"})
+    assert _body(ir) == [("U", "Impl6", 5)]
+
+
+def test_a_namespace_alias_of_the_files_scope_is_read(tmp_path):
+    ir = extract_source(tmp_path, {
+        "a.cc": "namespace a { namespace inner { struct D {}; } }\nnamespace fs = a::inner;\n"
+                "struct U { void f() { fs::D d; } };\n"})
+    assert _body(ir) == [("U", "a::inner::D", 3)]
+
+
+def test_a_function_without_a_return_type_hides_no_call(tmp_path):
+    # `Money(int c);` an error left at a namespace's scope (a constructor of a specialisation
+    # the grammar lost, POCO's Delegate.h) is no function a call `Money(1)` may be
+    ir = extract_source(tmp_path, {
+        "a.h": "namespace s { struct Money { Money(int) {} };\nMoney(int c);\n"
+               "int Ticket(int n);\nstruct Ticket { Ticket(int) {} };\n"
+               "struct U { void f() { Money(1); Ticket(2); } }; }\n"})
+    assert _body(ir) == [("s::U", "s::Money", 5)]
