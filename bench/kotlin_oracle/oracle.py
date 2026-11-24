@@ -583,6 +583,122 @@ def measure(args) -> int:
     return 0
 
 
+# the table of supertypes outside the sources (`table`): the libraries it is read from,
+# the JDK's packages it reads, and Kotlin's built-in types, which no jar holds as a class
+TABLE = ROOT / "skills" / "draftsman" / "scripts" / "draftsman" / "langs" / "kotlin_outside.json"
+TABLE_JARS = [f"kotlin-stdlib-{KEY_COMPILER}.jar", "kotlinx-coroutines-core-jvm-1.11.0.jar",
+              "kotlinx-serialization-core-jvm-1.11.0.jar", "kotlinx-serialization-json-jvm-1.11.0.jar",
+              "kotlinx-io-core-jvm-0.9.1.jar", "kotlinx-io-bytestring-jvm-0.9.1.jar"]
+TABLE_JDK = {"java.base": {"java/lang", "java/lang/ref", "java/lang/reflect", "java/io", "java/nio",
+                           "java/nio/channels", "java/nio/channels/spi", "java/nio/charset",
+                           "java/nio/file", "java/net", "java/util", "java/util/concurrent",
+                           "java/util/concurrent/atomic", "java/util/concurrent/locks",
+                           "java/util/function", "java/util/stream", "java/util/zip",
+                           "java/security", "java/time", "java/text", "javax/net", "javax/net/ssl"},
+             "java.net.http": {"java/net/http"}}
+TABLE_BUILTINS = ("kotlin/Any kotlin/Nothing kotlin/Comparable kotlin/CharSequence kotlin/Number "
+                  "kotlin/Enum kotlin/Throwable kotlin/Annotation kotlin/collections/Iterable "
+                  "kotlin/collections/MutableIterable kotlin/collections/Collection "
+                  "kotlin/collections/MutableCollection kotlin/collections/List "
+                  "kotlin/collections/MutableList kotlin/collections/Set "
+                  "kotlin/collections/MutableSet kotlin/collections/Map "
+                  "kotlin/collections/MutableMap kotlin/collections/Iterator "
+                  "kotlin/collections/MutableIterator kotlin/collections/ListIterator "
+                  "kotlin/collections/MutableListIterator "
+                  # typealiases, which no jar holds as a class either
+                  "kotlin/Exception kotlin/RuntimeException kotlin/Error kotlin/AssertionError "
+                  "kotlin/IllegalStateException kotlin/IllegalArgumentException "
+                  "kotlin/UnsupportedOperationException kotlin/IndexOutOfBoundsException "
+                  "kotlin/NoSuchElementException kotlin/ArithmeticException "
+                  "kotlin/ClassCastException kotlin/NullPointerException "
+                  "kotlin/NumberFormatException kotlin/ConcurrentModificationException "
+                  "kotlin/AutoCloseable kotlin/Comparator kotlin/collections/ArrayList "
+                  "kotlin/collections/HashMap kotlin/collections/LinkedHashMap "
+                  "kotlin/collections/HashSet kotlin/collections/LinkedHashSet "
+                  "kotlin/collections/AbstractMutableList kotlin/text/StringBuilder "
+                  "kotlin/text/Appendable kotlin/text/CharacterCodingException "
+                  "kotlin/coroutines/cancellation/CancellationException "
+                  "kotlinx/coroutines/CancellationException kotlinx/io/IOException "
+                  "kotlinx/io/EOFException").split()
+
+
+def _getter_names(name: str) -> list[str]:
+    """The property names a Java getter or setter makes (`getEngines` is `engines`,
+    `getURL` `url` and `URL`; `isOpen` stays)."""
+    m = re.match(r"(?:get|set)([A-Z]\w*)$", name)
+    if not m:
+        return []
+    rest = m.group(1)
+    run = re.match(r"[A-Z]+", rest).group(0)
+    smart = rest.lower() if run == rest else (
+        rest[0].lower() + rest[1:] if len(run) == 1 else run[:-1].lower() + rest[len(run) - 1:])
+    return sorted({smart, rest[0].lower() + rest[1:], rest})
+
+
+def table(_args) -> int:
+    """Write the extractor's table of supertypes outside the sources (module docstring)."""
+    image()
+    v = KEY_COMPILER
+    with tempfile.TemporaryDirectory() as tmp:
+        work = Path(tmp)
+        listing = container(["sh", "-c", " ".join(f"unzip -Z1 /opt/kotlin/{j};" for j in TABLE_JARS)
+                             + " jimage list $JAVA_HOME/lib/modules"], {str(work): "/work"},
+                            cwd="/work", capture=True).stdout
+        ids, module = set(TABLE_BUILTINS), None
+        for line in listing.splitlines():
+            if line.startswith("Module: "):
+                module = line.split()[1]
+                continue
+            path = line.strip()
+            if not path.endswith(".class") or "module-info" in path or "package-info" in path \
+                    or re.search(r"\$\d", path):
+                continue
+            pkg = path.rsplit("/", 1)[0]
+            if line.startswith((" ", "\t")):   # a JDK module's class
+                if pkg not in TABLE_JDK.get(module, ()):
+                    continue
+            elif "/internal" in pkg or not pkg.startswith(("kotlin", "kotlinx")):
+                continue
+            ids.add(path[:-len(".class")].replace("$", "."))
+        (work / "req.txt").write_text("".join(i + "\n" for i in sorted(ids)))
+        (work / "X.kt").write_text("package draftsman.table\nclass X\n")
+        cp = ":".join(f"/opt/kotlin/{j}" for j in TABLE_JARS)
+        container(["kotlinc", v, "-no-stdlib", "-no-reflect", "-nowarn", "-cp", cp,
+                   f"-Xplugin=/opt/type-uses/type-uses-{v}.jar",
+                   "-P", "plugin:draftsman.typeuses:out=/work/out",
+                   "-P", "plugin:draftsman.typeuses:table=/work/req.txt",
+                   "-d", "/work/classes", "/work/X.kt"], {str(work): "/work"}, cwd="/work")
+        recs = [json.loads(x) for f in sorted((work / "out").glob("*.jsonl"))
+                for x in f.read_text().splitlines()[1:] if x.strip()]
+    packages: dict[str, set] = defaultdict(set)
+    types, aliases = {}, {}
+    for r in recs:
+        if "alias" in r and r["target"]:
+            aliases[ident(r["alias"])] = ident(r["target"])
+            pkg, _, name = r["alias"].rpartition("/")
+            packages[pkg.replace("/", ".")].add(name)
+        if "type" not in r or r["visibility"] not in ("public", "protected"):
+            continue
+        pkg, _, rel = r["type"].rpartition("/")
+        if "." not in rel:
+            packages[pkg.replace("/", ".")].add(rel)
+        if r["kind"] in ("class", "interface") and r["modality"] in ("open", "abstract"):
+            names = {n for n in r["members"] + r["companion"] + r["statics"] if not n.startswith("<")}
+            names |= {g for n in names for g in _getter_names(n)}
+            types[ident(r["type"])] = {"kind": r["kind"], "supers": [ident(x) for x in r["supers"]],
+                                       "members": sorted(names), "nested": r["nested"]}
+    out = {"read from": {"kotlin": v, "libraries": TABLE_JARS, "jdk": "the image's (temurin 21)",
+                         "jdk packages": sorted(p for ps in TABLE_JDK.values() for p in ps)},
+           "packages": {p: sorted(n) for p, n in sorted(packages.items())},
+           "aliases": dict(sorted(aliases.items())),
+           "types": dict(sorted(types.items()))}
+    TABLE.write_text(json.dumps(out, indent=0, sort_keys=False) + "\n")
+    print(f"{TABLE.relative_to(ROOT)}: {TABLE.stat().st_size // 1024} KB, {len(out['packages'])} "
+          f"packages, {sum(map(len, out['packages'].values()))} type names, {len(types)} "
+          f"supertypes, {len(aliases)} aliases, {sum(1 for r in recs if 'missing' in r)} ids not found")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -622,6 +738,8 @@ def main(argv=None) -> int:
     m.add_argument("--ir", type=Path, help="ir.json of the same sources: count only what it lacks")
     m.add_argument("-v", "--verbose", action="store_true", help="list the splits")
     m.set_defaults(fn=measure)
+    sub.add_parser("table", help="write the extractor's table of supertypes outside the sources"
+                   ).set_defaults(fn=table)
     args = ap.parse_args(argv)
     return args.fn(args)
 

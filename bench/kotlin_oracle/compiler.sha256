@@ -13,3 +13,8 @@ ccb14ff83fabcb11458b798dbc9824748ccdffeec79c9aba789e6ed1cda86b1c  org/jetbrains/
 3277ac102ae17aad10a55abec75ff5696c8d109790396434b496e75087854203  org/jetbrains/kotlin/kotlin-reflect/1.6.10/kotlin-reflect-1.6.10.jar
 9860906a1937490bf5f3b06d2f0e10ef451e65b95b269f22daf68a3d1f5065c5  org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.8.0/kotlinx-coroutines-core-jvm-1.8.0.jar
 ace2a10dc8e2d5fd34925ecac03e4988b2c0f851650c94b8cef49ba1bd111478  org/jetbrains/annotations/13.0/annotations-13.0.jar
+d1d75aa01dffbb4d1c520e67e4c4e7f5f6174718e7cb4632412503f2f0e604fa  org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.11.0/kotlinx-coroutines-core-jvm-1.11.0.jar
+f4a801c647d4351327cd9e1ac4113e2be9ea37a64ab0abae269c25a52e28f35d  org/jetbrains/kotlinx/kotlinx-serialization-core-jvm/1.11.0/kotlinx-serialization-core-jvm-1.11.0.jar
+563a25b4eb5c9128ae9c2479f3d1a5c44dcd176112b91cf03682e906eba5c935  org/jetbrains/kotlinx/kotlinx-serialization-json-jvm/1.11.0/kotlinx-serialization-json-jvm-1.11.0.jar
+765d8851d8ca694706931331b92386844800867e041b720f1f193dbda874d370  org/jetbrains/kotlinx/kotlinx-io-core-jvm/0.9.1/kotlinx-io-core-jvm-0.9.1.jar
+8589de0b7c476bfdd02a24641685f609ade72f5e595cf2909c168acdba7e6ba4  org/jetbrains/kotlinx/kotlinx-io-bytestring-jvm/0.9.1/kotlinx-io-bytestring-jvm-0.9.1.jar

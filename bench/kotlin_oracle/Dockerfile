@@ -14,7 +14,9 @@ RUN mkdir -p $ANDROID_HOME/cmdline-tools && cd /tmp \
  && yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null \
  && $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-37.0" "build-tools;37.0.0" "platforms;android-36" "build-tools;36.0.0" "platform-tools" >/dev/null
 # the compilers (Maven Central, pinned by SHA-256): nowinandroid builds with 2.3.0, Ktor
-# with 2.3.21, and Gradle 9.7.1's kotlin-dsl (nowinandroid's build-logic) with 2.4.0
+# with 2.3.21, and Gradle 9.7.1's kotlin-dsl (nowinandroid's build-logic) with 2.4.0; and
+# the libraries the table of outside supertypes is read from (`oracle.py table`): the
+# kotlinx versions Ktor builds with
 COPY compiler.sha256 /opt/kotlin/
 RUN cd /opt/kotlin && while read sum path; do curl -sSfO "https://repo1.maven.org/maven2/$path"; done < compiler.sha256 \
  && sed 's|  .*/|  |' compiler.sha256 | sha256sum -c --quiet -

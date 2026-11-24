@@ -41,6 +41,9 @@ import org.jetbrains.kotlin.fir.references.FirNamedReference
 import org.jetbrains.kotlin.fir.references.FirResolvedNamedReference
 import org.jetbrains.kotlin.fir.references.FirThisReference
 import org.jetbrains.kotlin.fir.resolve.fullyExpandedType
+import org.jetbrains.kotlin.fir.scopes.unsubstitutedScope
+import org.jetbrains.kotlin.fir.declarations.utils.visibility
+import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.fir.resolve.providers.symbolProvider
 import org.jetbrains.kotlin.fir.scopes.impl.typeAliasConstructorInfo
 import org.jetbrains.kotlin.fir.symbols.FirBasedSymbol
@@ -53,12 +56,17 @@ import java.io.FileOutputStream
 import java.util.UUID
 
 val OUT = CompilerConfigurationKey<String>("draftsman.typeuses.out")
+val TABLE = CompilerConfigurationKey<String>("draftsman.typeuses.table")
 
 class Options : CommandLineProcessor {
     override val pluginId = "draftsman.typeuses"
-    override val pluginOptions = listOf(CliOption("out", "<dir>", "where the records go", required = true))
+    override val pluginOptions = listOf(
+        CliOption("out", "<dir>", "where the records go", required = true),
+        CliOption("table", "<file>", "class ids, one a line: write what a subclass of each sees instead",
+            required = false))
     override fun processOption(option: AbstractCliOption, value: String, configuration: CompilerConfiguration) {
         if (option.optionName == "out") configuration.put(OUT, value)
+        if (option.optionName == "table") configuration.put(TABLE, value)
     }
 }
 
@@ -68,10 +76,13 @@ class Registrar : CompilerPluginRegistrar() {
 
     override fun ExtensionStorage.registerExtensions(configuration: CompilerConfiguration) {
         val out = configuration.get(OUT) ?: return
+        val table = configuration.get(TABLE)
         val sink = Sink(File(out), configuration)
         FirExtensionRegistrarAdapter.registerExtension(object : FirExtensionRegistrar() {
             override fun ExtensionRegistrarContext.configurePlugin() {
-                +FirAdditionalCheckersExtension.Factory { session -> Checkers(session, sink) }
+                +FirAdditionalCheckersExtension.Factory { session ->
+                    if (table != null) TableCheckers(session, sink, File(table)) else Checkers(session, sink)
+                }
             }
         })
     }
@@ -114,6 +125,62 @@ class Checkers(session: FirSession, sink: Sink) : FirAdditionalCheckersExtension
         override val fileCheckers: Set<FirDeclarationChecker<FirFile>> = setOf(file)
     }
 }
+
+class TableCheckers(session: FirSession, sink: Sink, table: File) : FirAdditionalCheckersExtension(session) {
+    private val file = TableChecker(sink, table)
+    override val declarationCheckers = object : DeclarationCheckers() {
+        override val fileCheckers: Set<FirDeclarationChecker<FirFile>> = setOf(file)
+    }
+}
+
+/** The table of types outside the sources (`oracle.py table`): for each class id the file
+ * lists, once, what a subclass of it sees by simple name, as the compiler's scopes have it. */
+@OptIn(org.jetbrains.kotlin.fir.symbols.SymbolInternals::class)
+class TableChecker(private val sink: Sink, private val table: File) : FirDeclarationChecker<FirFile>(MppCheckerKind.Common) {
+    private var done = false
+
+    context(context: CheckerContext, reporter: DiagnosticReporter)
+    override fun check(declaration: FirFile) {
+        if (done) return
+        done = true
+        val session = context.session
+        for (line in table.readLines()) {
+            val id = line.trim().takeIf { it.isNotEmpty() }?.let { ClassId.fromString(it) } ?: continue
+            val found = session.symbolProvider.getClassLikeSymbolByClassId(id)
+            if (found is FirTypeAliasSymbol) {   // `kotlin.Exception` is java.lang.Exception
+                sink.write(obj("alias" to id.asString(), "target" to expandedId(found, session)))
+                continue
+            }
+            val sym = found as? FirRegularClassSymbol
+            if (sym == null) { sink.write(obj("missing" to id.asString())); continue }
+            val scope = sym.unsubstitutedScope(session, context.scopeSession, false, null)
+            val callables = scope.getCallableNames().filter { name ->
+                var seen = false
+                scope.processFunctionsByName(name) { if (it.visibility != Visibilities.Private) seen = true }
+                scope.processPropertiesByName(name) { if (it.visibility != Visibilities.Private) seen = true }
+                seen
+            }.map { it.asString() }.sorted()
+            val companion = sym.resolvedCompanionObjectSymbol?.let { c ->
+                c.unsubstitutedScope(session, context.scopeSession, false, null).getCallableNames().map { it.asString() }.sorted()
+            }.orEmpty()
+            val statics = sym.fir.staticScope(session, context.scopeSession)?.getCallableNames()
+                ?.map { it.asString() }?.sorted().orEmpty()
+            val nested = scope.getClassifierNames().map { it.asString() }.sorted()
+            sink.write(obj(
+                "type" to id.asString(), "kind" to sym.classKind.name.lowercase(),
+                "modality" to sym.resolvedStatus.modality?.name?.lowercase(),
+                "visibility" to sym.resolvedStatus.visibility.name,
+                "supers" to sym.resolvedSuperTypes.mapNotNull { (it.lowerBoundIfFlexible() as? ConeClassLikeType)?.lookupTag?.classId?.asString() },
+                "members" to callables, "companion" to companion, "statics" to statics, "nested" to nested,
+            ))
+        }
+    }
+}
+
+/** The class a typealias stands for, through other aliases (outside any checker context). */
+fun expandedId(alias: FirTypeAliasSymbol, session: FirSession): String? =
+    (alias.resolvedExpandedTypeRef.coneType.fullyExpandedType(session) as? ConeClassLikeType)
+        ?.lookupTag?.classId?.asString()
 
 class FileChecker(private val sink: Sink) : FirDeclarationChecker<FirFile>(MppCheckerKind.Common) {
     context(context: CheckerContext, reporter: DiagnosticReporter)
