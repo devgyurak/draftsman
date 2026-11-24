@@ -204,24 +204,22 @@ def test_a_private_class_of_each_platforms_file_is_its_one_id_there(tmp_path):
 
 
 def test_a_supertype_outside_the_sources_may_have_a_member_of_the_name(tmp_path):
-    # under a superclass outside the sources a type name may be its nested type
-    # (androidx.work's `Result` under CoroutineWorker), and under any outside supertype a
-    # value may be its property or function; CoroutineScope's nested types are known
+    # as far as the table of outside supertypes knows them: Thread's nested State hides
+    # the type of the name in a subclass, CoroutineScope's property coroutineContext the
+    # value; an interface passes on no nested type. Under a supertype the table does not
+    # know (androidx's CoroutineWorker) nothing is hidden, as in Java: a limit
     ir = extract_source(tmp_path, {
-        "p/A.kt": "package p\nimport androidx.work.CoroutineWorker\n"
-                  "import kotlinx.coroutines.CoroutineScope\n"
-                  "class Result { companion object { fun success() = 1 } }\nclass Plain\n"
-                  "class W : CoroutineWorker() {\n"
-                  "  fun a() = Result.success()\n  fun b() = Plain()\n"
-                  "  fun d() { val x: Result? = null } }\n"
+        "p/A.kt": "package p\nimport kotlinx.coroutines.CoroutineScope\n"
+                  "import androidx.work.CoroutineWorker\n"
+                  "class State { companion object { val NEW = 1 } }\nclass Plain\nclass coroutineContext\n"
+                  "class T : Thread() {\n"
+                  "  fun a() = State.NEW\n  fun b() { val x: State? = null }\n  fun c() = Plain() }\n"
                   "class S : CoroutineScope {\n"
-                  "  fun a() = Result.success()\n  fun b() = Plain()\n"
-                  "  fun d() { val x: Result? = null } }\n"
-                  "class Q { fun a() = object : CoroutineWorker() { fun b() = Plain() } }\n"
-                  "class N : Plain2() { fun d() { val x: Result? = null; Plain() } }\n"
-                  "open class Plain2\n"})
-    assert _body(ir) == [("p.N", "p.Plain", 15), ("p.N", "p.Result", 15), ("p.S", "p.Result", 13)]
-
+                  "  fun a() = coroutineContext()\n  fun b() = Plain()\n"
+                  "  fun d() { val x: State? = null } }\n"
+                  "class W : CoroutineWorker() { fun a() = State.NEW; fun b() = Plain() }\n"})
+    assert _body(ir) == [("p.S", "p.Plain", 13), ("p.S", "p.State", 14), ("p.T", "p.Plain", 10),
+                         ("p.W", "p.Plain", 15), ("p.W", "p.State", 15)]
 
 def test_a_kotlin_files_top_level_names_are_no_names_of_java_code_beside_it(tmp_path):
     # `val Money = 1` at a Kotlin file's top hides nothing in Java (kt8)

@@ -375,6 +375,13 @@ class LanguageSpec:
         ``nested_only``, else also a property or function."""
         return False
 
+    def outside_package_types(self, package: str) -> Optional[frozenset[str]]:
+        """The types a package outside the sources declares as far as the language's table
+        of outside supertypes knows them (Kotlin), None when it does not know the package:
+        a star import's candidate for a supertype's name is dropped when its package lacks
+        the name."""
+        return None
+
     def outside_functions(self, scope: FileScope) -> bool:
         """Whether the file's star imports bring in functions of any name, of which a call
         of a class's name may be one (Kotlin/Native's platform libraries, C's functions)."""

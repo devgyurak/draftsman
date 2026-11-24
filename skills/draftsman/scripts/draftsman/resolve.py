@@ -869,7 +869,7 @@ class Resolver:
                 res = self._in_body(written.name, rtype, ref, 0)
                 if res.status != PROJECT and any(
                         spec.outside_member(t, name, nested_only)
-                        for t in self._outside(written.name, res, ref.scope, rtype, True) or [None]):
+                        for t in self._outside_candidates(written.name, res, ref.scope, rtype)):
                     return True
                 if res.status == PROJECT and self._outside_member_of(
                         self.index[res.target], name, nested_only, set()):
@@ -880,6 +880,18 @@ class Resolver:
                 return True
             cur = self.index.get(cur.outer) if cur.outer else None
         return False
+
+    def _outside_candidates(self, name: str, res: Resolution, scope: FileScope,
+                            rtype: RawType) -> list[Optional[str]]:
+        """The types outside the sources a supertype's name may be (_outside), without
+        those of packages the language's table knows to lack the name
+        (LanguageSpec.outside_package_types); [None] when it may be any."""
+        spec = LANGUAGES[rtype.language]
+        sep = spec.separator
+        cands = [c for c in self._outside(name, res, scope, rtype, True)
+                 if (types := spec.outside_package_types(c.rsplit(sep, 1)[0])) is None
+                 or c.rsplit(sep, 1)[-1] in types or res.status in (EXTERNAL, BUILTIN)]
+        return cands or ([] if res.status == UNRESOLVED and res.outside and name else [None])
 
     def _outside_member_of(self, rtype: RawType, name: str, nested_only: bool,
                            seen: set) -> bool:
@@ -896,8 +908,8 @@ class Resolver:
                 continue
             ref = parse_type(written.text)
             sname = ref.name if isinstance(ref, Named) else ""
-            if any(spec.outside_member(t, name, nested_only) for t in self._outside(
-                    sname, sup, written.scope or rtype.scope, rtype, True) or [None]):
+            if any(spec.outside_member(t, name, nested_only) for t in self._outside_candidates(
+                    sname, sup, written.scope or rtype.scope, rtype)):
                 return True
         return False
 
@@ -1004,7 +1016,7 @@ class Resolver:
                 if self._has_field(t, name) or self._has_method(t, name, set()):
                     return True
             elif any(spec.outside_member(o, name, False)
-                     for o in self._outside(written.name, res, ref.scope, rtype, True) or [None]):
+                     for o in self._outside_candidates(written.name, res, ref.scope, rtype)):
                 return True
         return False
 

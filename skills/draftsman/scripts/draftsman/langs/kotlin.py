@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
 import re
+from functools import lru_cache
+from pathlib import Path
+from typing import Optional
 
 from .base import LanguageSpec
 
@@ -212,6 +216,35 @@ for _package, _names in {
         _LIBRARY[_name] = _LIBRARY.get(_name, ()) + (_package,)
 
 
+@lru_cache(maxsize=None)
+def _outside_table() -> dict:
+    """kotlin_outside.json (`bench/kotlin_oracle/oracle.py table`): what a subclass of a
+    library supertype sees by simple name, as the Kotlin compiler has it, for the standard
+    library, kotlinx (coroutines, serialization, io) and the JDK's common packages; the
+    types of their packages; Kotlin's typealiases of JDK types."""
+    return json.loads((Path(__file__).parent / "kotlin_outside.json").read_text())
+
+
+@lru_cache(maxsize=None)
+def _outside_names(type_id: str, nested_only: bool) -> Optional[frozenset]:
+    """The names a subclass of the library type sees by simple name: its nested types
+    (through superclasses only) with ``nested_only``, else also its properties and
+    functions and those of its companion; None for a type the table does not know."""
+    table = _outside_table()
+    type_id = table["aliases"].get(type_id, type_id)
+    t = table["types"].get(type_id)
+    if t is None:
+        return None
+    names = set(t["nested"])
+    if not nested_only:
+        names |= set(t["members"])
+    for sup in t["supers"]:
+        if nested_only and table["types"].get(sup, {}).get("kind") == "interface":
+            continue   # an interface passes on no nested type
+        names |= _outside_names(sup, nested_only) or set()
+    return frozenset(names)
+
+
 # source sets every other one of a module sees: Kotlin Multiplatform's common one
 # (`common/src` in Ktor's layout, `src/commonMain/kotlin`), a single-platform module's
 # `src/main`
@@ -372,11 +405,18 @@ class KotlinSpec(LanguageSpec):
         return [(0, len(src))] if name.startswith(_APPLE_SOURCE_SETS) else []
 
     def outside_member(self, super_id, name, nested_only):
-        # nested types: known of the library supertypes _NESTED lists; members (properties
-        # and functions) of none
+        # what the table knows; of a type it does not know, nothing is taken to hide a
+        # name (as in Java): no member, and nested types only as _NESTED lists them
+        known = _outside_names(super_id, nested_only) if super_id else None
+        if known is not None:
+            return name in known
         if nested_only and super_id in _NESTED:
             return name in _NESTED[super_id]
-        return True
+        return False
+
+    def outside_package_types(self, package):
+        types = _outside_table()["packages"].get(package)
+        return frozenset(types) if types is not None else None
 
     def outside_functions(self, scope):
         # Kotlin/Native's platform libraries (`platform.posix`, `platform.windows`) are C
