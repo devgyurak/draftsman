@@ -279,7 +279,8 @@ class KotlinSpec(LanguageSpec):
     # a name in a body: `Foo.x`, `p.Foo.x`, `Foo::class`; `Box<Cash>`'s arguments are names
     # of their own
     receiver_part_nodes = frozenset({"simple_identifier", "navigation_expression",
-                                     "navigation_suffix", "type_identifier"})
+                                     "navigation_suffix", "type_identifier",
+                                     "interpolated_identifier"})
     type_argument_nodes = frozenset({"type_arguments"})
     alias_declarations = True
     outside_supers_hide = True

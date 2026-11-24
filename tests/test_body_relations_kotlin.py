@@ -47,16 +47,13 @@ def test_body_names_stand_where_the_hand_written_answers_say():
                 elif position != expect:
                     problems.append(f"{where}: {r.position}, the marker says {position}")
     assert problems == []
-    # a type named in code outside every type, a value alone (`listOf(Registry)`), an
-    # annotation in a body, and a name after another (`Ticket.Factory`)
+    # a type named in code outside every type, and an annotation in a body
     missed = sorted((rel, line, answer) for (rel, line, col), (answer, _) in want.items()
                     if answer.startswith(("shop.", "lib.")) and (rel, line, col) not in recorded)
     assert missed == [
         ("shop/Model.kt", 19, "shop.Money"), ("shop/Model.kt", 42, "shop.Order"),
         ("shop/Model.kt", 43, "shop.Customer"), ("shop/Places.kt", 37, "shop.Customer"),
-        ("shop/Places.kt", 38, "shop.Order"), ("shop/Uses.kt", 14, "shop.Mark"),
-        ("shop/Uses.kt", 29, "shop.Order"), ("shop/Uses.kt", 29, "shop.Registry"),
-        ("shop/Uses.kt", 51, "shop.Ticket.Factory")]
+        ("shop/Places.kt", 38, "shop.Order"), ("shop/Uses.kt", 14, "shop.Mark")]
 
 
 def test_body_relations_go_where_the_hand_written_answers_say():
@@ -75,7 +72,7 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     # of the name of an interface's or a superclass's companion's nested type, which the
     # extractor finds first and so gives up (`InComp` in Sub), a type's own
     # name (`Order(1)` in Order's companion) and the part of a longer name (`Order` in
-    # `Order.Line`)
+    # `Order.Line`, `Ticket` in `Ticket.Factory`)
     recorded = {(raw.path, line, col) for raw in _fixture() for t in raw.types
                 for r in t.body_refs for line, col in r.places}
     missed = sorted((rel, line, answer) for (rel, line, col), (answer, _) in want.items()
@@ -89,7 +86,8 @@ def test_body_relations_go_where_the_hand_written_answers_say():
         ("shop/Places.kt", 21, "shop.Money"), ("shop/Places.kt", 31, "shop.Money"),
         ("shop/Places.kt", 32, "shop.Money"), ("shop/Uses.kt", 13, "shop.Order"),
         ("shop/Uses.kt", 21, "shop.Order"), ("shop/Uses.kt", 24, "shop.Order"),
-        ("shop/Uses.kt", 38, "shop.Money"), ("shop/Uses.kt", 40, "shop.Money")]
+        ("shop/Uses.kt", 38, "shop.Money"), ("shop/Uses.kt", 40, "shop.Money"),
+        ("shop/Uses.kt", 51, "shop.Ticket")]
 
 
 def _body(ir) -> list[tuple]:

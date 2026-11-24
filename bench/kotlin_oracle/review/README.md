@@ -8,8 +8,8 @@ not listed below as a known limit, and on fewer names drawn than the table says.
 
 | Set | Names drawn | What it holds |
 |---|---|---|
-| `kt1` | 29 | the pre-check review's probe of name lookup: nested types and companion members inherited from a superclass (not from an interface, nor through an extension receiver), a class and a function of one name (`Money(1)`, `Money(1, 2)`, `Money("s")`), an import alias hiding the name from a star import, a star import before the default imports (`Result`), receiver lambdas, `vararg`, annotations on types. Its compile errors are meant: they show what Kotlin does not find |
-| `kt2` | 68 | typealiases (of an alias, generic, of a function type, of an outer class, of a nested type), companion objects (named, with supertypes, types nested in them), `from` of nested types, accessors, secondary constructors, member extensions, delegation `by`, annotations on local declarations, `when`, `$Registry` in a string, names qualified with their package, backticks. Its 4 compile errors are meant (an alias import in the same package, a type parameter's bound) |
+| `kt1` | 33 | the pre-check review's probe of name lookup: nested types and companion members inherited from a superclass (not from an interface, nor through an extension receiver), a class and a function of one name (`Money(1)`, `Money(1, 2)`, `Money("s")`), an import alias hiding the name from a star import, a star import before the default imports (`Result`), receiver lambdas, `vararg`, annotations on types. Its compile errors are meant: they show what Kotlin does not find |
+| `kt2` | 71 | typealiases (of an alias, generic, of a function type, of an outer class, of a nested type), companion objects (named, with supertypes, types nested in them), `from` of nested types, accessors, secondary constructors, member extensions, delegation `by`, annotations on local declarations, `when`, `$Registry` in a string, names qualified with their package, backticks. Its 4 compile errors are meant (an alias import in the same package, a type parameter's bound) |
 | `kt4` | 30 | a typealias as a type argument, also of a local class's or an anonymous object's supertype (the plugin said no class for it there). Its compile error is meant (`is` with an erased type) |
 | `kt6` | 0 | an import alias hides the original name from a star import and from the file's own package (the compiler: unresolved), where the declared relations still draw `p.Money` (#7) |
 | `kt7` | 43 | the first review of the extractor: an import alias hiding the name in the file's own package, nested types of an interface and of a superclass's companion (not seen in a subclass), a class and a function of one name in calls, member extensions' receivers, receiver lambdas, shadowing locals, type parameters, imports of nested types and enum entries. No compile errors: each wrong candidate has a real rival, so a wrong draw is a mismatch |
@@ -22,3 +22,5 @@ Known limits (mismatches that stay):
 - `kt7/shop/Recv.kt:4:31` a lambda with a receiver (`with(c) { Money(1) }`): which lambda has
   one, and of what type, is the called function's, not the syntax's
 - `kt7/shop/Recv.kt:5:29` the same (`c.run { Order.toString() }`)
+- `kt1/q/Use.kt:42:25` the same (`dsl { Widget(); Registry }`: the value `Registry` is the
+  receiver's property)
