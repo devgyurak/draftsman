@@ -1,0 +1,7 @@
+#!/bin/sh
+# kotlinc VERSION ARGS...: the Kotlin/JVM compiler of VERSION, from the jars the image keeps
+# in /opt/kotlin (compiler.sha256), run on the image's JDK.
+v=$1; shift
+L=/opt/kotlin
+exec java -Xmx3g -cp "$L/kotlin-compiler-embeddable-$v.jar:$L/kotlin-stdlib-$v.jar:$L/kotlin-script-runtime-$v.jar:$L/kotlin-daemon-embeddable-$v.jar:$L/kotlin-reflect-1.6.10.jar:$L/kotlinx-coroutines-core-jvm-1.8.0.jar:$L/annotations-13.0.jar" \
+    org.jetbrains.kotlin.cli.jvm.K2JVMCompiler "$@"

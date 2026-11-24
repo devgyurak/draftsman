@@ -138,11 +138,13 @@ def drawable(r: dict) -> bool:
 
 def compare(drawn: list[tuple[str, int, int, str, str]], recs: list[dict],
             verbose: bool = False, key: str = "the answer key",
-            same: Callable[[dict, str], bool] = lambda r, dst: True) -> int:
+            same: Callable[[dict, str], bool] = lambda r, dst: True,
+            drawable: Callable[[dict], bool] = drawable) -> int:
     """Check every name a body relation is drawn from, (file, line, col, from, to) as
     _Builder.body_uses lists them, against what the key resolved at its place; 1 on any
     mismatch outside the files that did not compile. ``same`` tells whether the key's
-    type of the target's id is the one drawn (C#'s two `Program` classes share an id)."""
+    type of the target's id is the one drawn (C#'s two `Program` classes share an id);
+    ``drawable`` which of the key's names count as not drawn when they are not."""
     broken = {r["file"] for r in recs if "diagnostic" in r}
     uses = {(r["file"], r["line"], r["col"]): r for r in recs if "use" in r}
     problems: Counter = Counter()

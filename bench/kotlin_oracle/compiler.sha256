@@ -1,0 +1,15 @@
+8dbd882fa58c3d17e683a27390288315f8b490f8e3e3b1be4dc3e280d37e285a  org/jetbrains/kotlin/kotlin-compiler-embeddable/2.3.0/kotlin-compiler-embeddable-2.3.0.jar
+887587c91713250ad52fe14ad9166d042c33835049890e9437f355ffc5a195b1  org/jetbrains/kotlin/kotlin-stdlib/2.3.0/kotlin-stdlib-2.3.0.jar
+db826961371d6605318d9c4e4bfcdbfac94c3a0892cdcabd55224870fead57f1  org/jetbrains/kotlin/kotlin-script-runtime/2.3.0/kotlin-script-runtime-2.3.0.jar
+39bcb02d8c293aa678554c8b49d7ff84657021709283c6186e3a40806af9bd10  org/jetbrains/kotlin/kotlin-daemon-embeddable/2.3.0/kotlin-daemon-embeddable-2.3.0.jar
+d3e70fb011675e77ef00f1a68918d3cd91eed26058977d1e3ea2a37a293233af  org/jetbrains/kotlin/kotlin-compiler-embeddable/2.3.21/kotlin-compiler-embeddable-2.3.21.jar
+6f64eac736db9434dd6925b4a518b9d1d17177652320c37916cf9ba3ce7d7d7a  org/jetbrains/kotlin/kotlin-stdlib/2.3.21/kotlin-stdlib-2.3.21.jar
+ec61bf1229c837fa9f4255f34ca69816138b73158e7ae9b8d964cf92ca6dfd2e  org/jetbrains/kotlin/kotlin-script-runtime/2.3.21/kotlin-script-runtime-2.3.21.jar
+222fc10a3c22e74d30369bf8a0ca6c4f9372eac7d4a0081e290c256fa4d30fb2  org/jetbrains/kotlin/kotlin-daemon-embeddable/2.3.21/kotlin-daemon-embeddable-2.3.21.jar
+c2b25e8c1c93ec416ba4327f5e31eaec0f0c8847241b9353e294b8db9dce564f  org/jetbrains/kotlin/kotlin-compiler-embeddable/2.4.0/kotlin-compiler-embeddable-2.4.0.jar
+ccb14ff83fabcb11458b798dbc9824748ccdffeec79c9aba789e6ed1cda86b1c  org/jetbrains/kotlin/kotlin-stdlib/2.4.0/kotlin-stdlib-2.4.0.jar
+196e8ecbf63daf477e34e67c2f871ee232ae7bf8b377432d876d1bbf9d273de3  org/jetbrains/kotlin/kotlin-script-runtime/2.4.0/kotlin-script-runtime-2.4.0.jar
+383093af5e078435b60043d19bfa83eb6191be0f4d13a28fb1c8a0f3ab24fe66  org/jetbrains/kotlin/kotlin-daemon-embeddable/2.4.0/kotlin-daemon-embeddable-2.4.0.jar
+3277ac102ae17aad10a55abec75ff5696c8d109790396434b496e75087854203  org/jetbrains/kotlin/kotlin-reflect/1.6.10/kotlin-reflect-1.6.10.jar
+9860906a1937490bf5f3b06d2f0e10ef451e65b95b269f22daf68a3d1f5065c5  org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.8.0/kotlinx-coroutines-core-jvm-1.8.0.jar
+ace2a10dc8e2d5fd34925ecac03e4988b2c0f851650c94b8cef49ba1bd111478  org/jetbrains/annotations/13.0/annotations-13.0.jar

@@ -1,0 +1,36 @@
+// Injects TypeUses into every Kotlin compile task of a build (and of its included builds),
+// and gives every project a task `typeUses` that runs its compile tasks of main code.
+// /opt/type-uses (or TYPEUSES_JARS) holds the plugin built per compiler version
+// (type-uses-<version>.jar): each task gets the one of its Kotlin Gradle plugin's version
+// (build-logic's kotlin-dsl compiles with Gradle's own Kotlin). TYPEUSES_OUT is where it
+// writes. beforeProject rather than allprojects: nowinandroid isolates its projects.
+def jars = System.getenv("TYPEUSES_JARS") ?: "/opt/type-uses"
+def out = System.getenv("TYPEUSES_OUT")
+
+// a compile task of the Kotlin Gradle plugin (AGP's KMP target names its own
+// `compileAndroidMain`), not a link task (`compileProductionExecutableKotlinJs`)
+def compiles = { t ->
+    def c = t.class
+    while (c.name.endsWith("_Decorated")) c = c.superclass
+    def kotlin = false
+    for (def k = c; k != null; k = k.superclass) kotlin |= k.name.startsWith("org.jetbrains.kotlin.gradle.tasks.")
+    kotlin && t.name.startsWith("compile") && !t.name.contains("Executable") && t.hasProperty("compilerOptions")
+}
+
+gradle.lifecycle.beforeProject { project ->
+    project.tasks.configureEach { t ->
+        if (compiles(t)) {
+            def c = t.class
+            while (c.name.endsWith("_Decorated")) c = c.superclass
+            def m = c.protectionDomain.codeSource.location.path =~ /kotlin-gradle-plugin-([0-9][^-\/]*)/
+            def version = m.find() ? m.group(1) : "unknown"
+            t.compilerOptions.freeCompilerArgs.addAll(["-Xplugin=" + jars + "/type-uses-" + version + ".jar",
+                                                       "-P", "plugin:draftsman.typeuses:out=" + out])
+        }
+    }
+    // main code only: a test compilation's name has `Test` (compileTestKotlinJvm,
+    // compileDebugUnitTestKotlin)
+    project.tasks.register("typeUses") { t ->
+        t.dependsOn(project.tasks.matching { compiles(it) && !it.name.contains("Test") })
+    }
+}
