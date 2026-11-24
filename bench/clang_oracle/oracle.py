@@ -186,38 +186,43 @@ def _utf16_cols(root: Path):
 
 
 class Aliases:
-    """What each alias of the sources names, as Clang resolved its written type."""
+    """What each alias of the sources names, as Clang resolved its written type: by the
+    declaration (id, file, line), as several classes of one id may each declare one."""
 
     def __init__(self):
-        self.names: dict[str, list] = {}
+        self.names: dict[tuple, list] = {}
 
     def add(self, r: dict) -> None:
-        self.names.setdefault(r["aliasdecl"], r["names"])
+        self.names.setdefault((r["aliasdecl"], r["f"], str(r["l"])), r["names"])
 
-    def targets(self, alias: str, scope: set, depth: int = 0, seen=None) -> list[str]:
+    def targets(self, alias: tuple, defined: set, depth: int = 0, seen=None) -> list[str]:
         """The project types an alias names, through other aliases (as _expand_alias)."""
         seen = set() if seen is None else seen
         if alias in seen or depth > 4:
             return []
         seen.add(alias)
         out: list[str] = []
-        for kind, ident, file in self.names.get(alias, ()):
-            if kind == "type" and file in scope:
+        for kind, ident, file, line in self.names.get(alias, ()):
+            if kind == "type" and ident in defined:
                 out.append(ident)
             elif kind == "alias":
-                out += self.targets(ident, scope, depth + 1, seen)
+                out += self.targets((ident, file, line), defined, depth + 1, seen)
         return list(dict.fromkeys(out))
 
 
-def convert(r: dict, scope: set, aliases: Aliases) -> dict:
-    """The key's record of a name TypeUses recorded (module docstring)."""
+def convert(r: dict, defined: set, aliases: Aliases) -> dict:
+    """The key's record of a name TypeUses recorded (module docstring). ``defined``: the ids
+    of the types the sources define (one only declared there, `struct bignum_st;`, is no
+    type of them; one a unit sees only declared, `class PooledThread;`, is)."""
     out = {"use": r["n"], "file": r["f"], "line": r["l"], "col": r["c"], "pos": r["pos"],
            "maximal": bool(r["max"]), "from": r["from"] or None}
     k = r["k"]
     if k == "type":
-        out.update(kind="type", target=r["t"], project=r["tf"] in scope, files=[r["tf"]])
+        out.update(kind="type", target=r["t"], project=r["t"] in defined and r["tf"] != "<macro>",
+                   files=[r["tf"]])
     elif k == "alias":
-        targets = aliases.targets(r["t"], scope)
+        file, _, line = r["tf"].rpartition(":")
+        targets = aliases.targets((r["t"], file, line), defined)
         out.update(kind="type", target=targets[0] if targets else r["t"],
                    project=bool(targets), alias=r["t"], files=[])
         if len(targets) > 1:
@@ -301,6 +306,7 @@ def join(raw: Path, files: list[str], root: Path, headers: set = frozenset()) ->
             else:
                 by[a] = [1, r]
     col = _utf16_cols(root)
+    defined = {ident for ident, _, _ in declared}
     out: list[dict] = [{"units": len(units), "errors": sum(1 for u in units if u["rc"]),
                         "headers failed": len(failed)}]
     for (ident, f, line), d in sorted(declared.items()):
@@ -308,13 +314,13 @@ def join(raw: Path, files: list[str], root: Path, headers: set = frozenset()) ->
                     **({"anonymous": True} if d["anon"] else {})})
     for (ident, f), c in sorted(classes.items()):
         out.append({"class": ident, "file": f, "bases": c["bases"]})
-    for alias, names in sorted(aliases.names.items()):
-        out.append({"alias": alias, "names": names})
+    for (alias, f, line), names in sorted(aliases.names.items()):
+        out.append({"alias": alias, "file": f, "line": int(line), "names": names})
     for place, by in sorted(at.items()):
         f, line, _ = place
         compiling = entered[f] - skipped[(f, line)]
         first = next(iter(by.values()))[1]
-        rec = convert(first, scope, aliases)
+        rec = convert(first, defined, aliases)
         rec["col"] = col(f, line, first["c"])
         rec["units"] = compiling
         if by_header[f] and by_header[f] == entered[f]:
@@ -322,7 +328,7 @@ def join(raw: Path, files: list[str], root: Path, headers: set = frozenset()) ->
         if len(by) > 1 or sum(n for n, _ in by.values()) != compiling:
             said = Counter()
             for n, r in by.values():
-                c = convert(r, scope, aliases)
+                c = convert(r, defined, aliases)
                 said[f"{answer_key.answer(c)} {c['pos']} in {c['from']}"] += n
             missing = compiling - sum(n for n, _ in by.values())
             if missing > 0:
@@ -732,10 +738,16 @@ def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: 
     if in_scope(recs, where, {t.id: t.location.line for t in ir.types if t.language == "cpp"}):
         return 1
     ids = merged(recs)
+    defined = declared_files(recs)
 
     def same(r: dict, dst: str) -> bool:
-        return r["target"] in ids or set(r.get("files", ())) <= builder.part_files.get(dst, set()) \
-            or bool(r.get("targets"))
+        # the file defining the key's type is one of those ir.json makes the id of; a type
+        # only declared there (`class DeclHandler;`) is the id's too
+        files = set(r.get("files", ()))
+        if not r["project"]:
+            return False   # a type outside the sources of the id (a system's `ip_mreq`)
+        return r["target"] in ids or bool(r.get("targets")) or not files & defined.get(r["target"], set()) \
+            or files <= builder.part_files.get(dst, set())
 
     # code outside every type and a template specialisation's draw nothing: no miss
     rc = answer_key.compare(builder.body_uses, recs, verbose, key="Clang", same=same,
@@ -828,7 +840,7 @@ def table(_args) -> int:
     out = {"read from": {"library": f"libstdc++ of GCC {gcc} (Ubuntu 24.04)",
                          "standard": TABLE_STANDARD, "headers": "<bits/stdc++.h>"},
            "aliases": dict(sorted(got["aliases"].items())),
-           "types": {t: {"bases": v["bases"], "members": v["members"]}
+           "types": {t: {"bases": v["bases"], "members": v["members"], "types": v["types"]}
                      for t, v in sorted(got["types"].items())}}
     TABLE.write_text(json.dumps(out, indent=0) + "\n")
     print(f"{TABLE.relative_to(ROOT)}: {TABLE.stat().st_size // 1024} KB, {len(out['types'])} "

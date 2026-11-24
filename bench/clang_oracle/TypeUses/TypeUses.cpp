@@ -184,6 +184,14 @@ static std::string fileOf(const Decl *D) {
   return O.relOf(O.SM->getFileID(L));
 }
 
+// the line a declaration stands on ("" outside the sources): an alias of an id several
+// classes share (POCO's three PollSetImpl) is told by it
+static std::string lineOf(const Decl *D) {
+  SourceLocation L = O.SM->getExpansionLoc(D->getLocation());
+  if (L.isInvalid() || O.relOf(O.SM->getFileID(L)).empty()) return "";
+  return std::to_string(O.SM->getSpellingLineNumber(L));
+}
+
 // a typedef that names an anonymous struct is that struct (`typedef struct {} Point;`)
 static const NamedDecl *throughAnonTypedef(const NamedDecl *D) {
   if (auto *TD = dyn_cast<TypedefNameDecl>(D))
@@ -282,10 +290,10 @@ public:
     if (auto *U = dyn_cast<UsingShadowDecl>(D)) D = U->getTargetDecl();
     D = throughAnonTypedef(D);
     const char *k = kindOf(D);
-    if (!strcmp(k, "type") || !strcmp(k, "alias")) out.push_back({k, idOf(D), fileOf(D)});
+    if (!strcmp(k, "type") || !strcmp(k, "alias")) out.push_back({k, idOf(D), fileOf(D), lineOf(D)});
     return true;
   }
-  std::vector<std::array<std::string, 3>> out;
+  std::vector<std::array<std::string, 4>> out;
 };
 
 // ---- the visitor ----------------------------------------------------------------------
@@ -336,6 +344,18 @@ public:
   bool VisitCXXUnresolvedConstructExpr(CXXUnresolvedConstructExpr *E) {
     if (!E->isListInitialization() && E->getTypeSourceInfo())
       Calls.insert(nameLoc(E->getTypeSourceInfo()->getTypeLoc()).getRawEncoding());
+    return true;
+  }
+  // `sizeof(Money)`: a variable may stand there as well
+  bool VisitUnaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr *E) {
+    if (E->isArgumentType() && E->getArgumentTypeInfo())
+      Calls.insert(nameLoc(E->getArgumentTypeInfo()->getTypeLoc()).getRawEncoding());
+    return true;
+  }
+  // `typeid(Money)`: so too
+  bool VisitCXXTypeidExpr(CXXTypeidExpr *E) {
+    if (E->isTypeOperand() && E->getTypeOperandSourceInfo())
+      Calls.insert(nameLoc(E->getTypeOperandSourceInfo()->getTypeLoc()).getRawEncoding());
     return true;
   }
   // `Lock l(Tag);` in a block, with Tag a type: a function declaration, whose parameters'
@@ -466,13 +486,14 @@ public:
     if (id.empty() || r.empty()) return;
     AliasNames A;
     A.TraverseTypeLoc(TD->getTypeSourceInfo()->getTypeLoc());
-    *O.os << "{\"aliasdecl\":\"" << esc(id) << "\",\"f\":\"" << esc(r) << "\",\"names\":[";
+    *O.os << "{\"aliasdecl\":\"" << esc(id) << "\",\"f\":\"" << esc(r) << "\",\"l\":"
+          << SM.getSpellingLineNumber(L) << ",\"names\":[";
     bool first = true;
     for (auto &n : A.out) {
       if (n[1].empty()) continue;
       if (!first) *O.os << ",";
       first = false;
-      *O.os << "[\"" << n[0] << "\",\"" << esc(n[1]) << "\",\"" << esc(n[2]) << "\"]";
+      *O.os << "[\"" << n[0] << "\",\"" << esc(n[1]) << "\",\"" << esc(n[2]) << "\",\"" << n[3] << "\"]";
     }
     *O.os << "]}\n";
   }
@@ -577,7 +598,10 @@ public:
     D = throughAnonTypedef(D);
     const char *k = kindOf(D);
     bool named = !strcmp(k, "type") || !strcmp(k, "alias");
-    emit(Loc, k, named ? idOf(D) : D->getQualifiedNameAsString(), named ? fileOf(D) : "", pos);
+    // an alias by its declaration too: id@file:line
+    std::string tf = named ? fileOf(D) : "";
+    if (!strcmp(k, "alias")) tf += ":" + lineOf(D);
+    emit(Loc, k, named ? idOf(D) : D->getQualifiedNameAsString(), tf, pos);
   }
   void recKind(SourceLocation Loc, const char *kind, const char *pos) { emit(Loc, kind, "", "", pos); }
 
@@ -592,11 +616,12 @@ public:
 };
 
 // ---- the table of `std` classes ---------------------------------------------------------
-// {"aliases": {id: id}, "types": {id: {"bases": [id...], "members": [name...]}}}: every
+// {"aliases": {id: id}, "types": {id: {"bases", "members", "types"}}}: every
 // class of namespace std (and std's inline namespaces) the translation unit defines, with
 // its public and protected members' names (fields, functions, nested types and aliases,
 // enumerators of unscoped nested enums, using-declarations) and public and protected
-// bases, without reserved names (`_M_x`, `__x`, `_Up`); and the typedefs and `using`
+// bases ("types": the members that are types), without reserved names (`_M_x`, `__x`,
+// `_Up`); and the typedefs and `using`
 // aliases of namespace std that name such a class (`std::ostream`).
 
 static bool reserved(llvm::StringRef n) {
@@ -607,7 +632,11 @@ static bool reserved(llvm::StringRef n) {
 static bool inStd(const DeclContext *DC) {
   for (; DC; DC = DC->getParent()) {
     if (auto *N = dyn_cast<NamespaceDecl>(DC)) {
-      if (N->getName() == "std" && isa<TranslationUnitDecl>(N->getParent())) return true;
+      if (N->getName() == "std") {   // (inside `extern "C++" {}` as well)
+        const DeclContext *P = N->getParent();
+        while (isa<LinkageSpecDecl>(P)) P = P->getParent();
+        return isa<TranslationUnitDecl>(P);
+      }
       if (!N->isInline()) return false;
     } else if (!isa<TagDecl>(DC) && !isa<LinkageSpecDecl>(DC)) {
       return false;
@@ -638,7 +667,7 @@ public:
       if (reserved(cast<TagDecl>(DC)->getName())) return true;
     std::string id = stdId(R);
     if (id.empty() || types.count(id)) return true;
-    std::set<std::string> members;
+    std::set<std::string> members, nested;
     for (Decl *D : R->decls()) {
       auto *N = dyn_cast<NamedDecl>(D);
       if (!N || D->getAccess() == AS_private) continue;
@@ -651,12 +680,20 @@ public:
           || isa<TagDecl>(D) || isa<TypedefNameDecl>(D) || isa<ClassTemplateDecl>(D)
           || isa<TypeAliasTemplateDecl>(D) || isa<UsingDecl>(D) || isa<VarTemplateDecl>(D))
         members.insert(N->getName().str());
+      if (isa<TagDecl>(D) || isa<TypedefNameDecl>(D) || isa<ClassTemplateDecl>(D)
+          || isa<TypeAliasTemplateDecl>(D))
+        nested.insert(N->getName().str());
     }
     std::vector<std::string> bases;
-    for (auto &B : R->bases())
-      if (B.getAccessSpecifier() != AS_private)
-        if (auto *BD = B.getType()->getAsCXXRecordDecl()) bases.push_back(stdId(BD));
-    types[id] = {bases, members};
+    for (auto &B : R->bases()) {
+      if (B.getAccessSpecifier() == AS_private) continue;
+      const NamedDecl *BD = B.getType()->getAsCXXRecordDecl();
+      if (!BD)   // `basic_ios<_CharT, _Traits>`: the template
+        if (auto *TS = B.getType()->getAs<TemplateSpecializationType>())
+          if (auto *TD = TS->getTemplateName().getAsTemplateDecl()) BD = TD;
+      if (BD) bases.push_back(stdId(BD));
+    }
+    types[id] = {bases, members, nested};
     return true;
   }
   bool VisitTypedefNameDecl(TypedefNameDecl *TD) {
@@ -665,7 +702,8 @@ public:
     if (auto *R = TD->getUnderlyingType()->getAsCXXRecordDecl()) aliases[stdId(TD)] = stdId(R);
     return true;
   }
-  std::map<std::string, std::pair<std::vector<std::string>, std::set<std::string>>> types;
+  struct Info { std::vector<std::string> bases; std::set<std::string> members, nested; };
+  std::map<std::string, Info> types;
   std::map<std::string, std::string> aliases;
 };
 
@@ -690,10 +728,13 @@ public:
     first = true;
     for (auto &[id, v] : t.types) {
       *O.os << (first ? "" : ",") << "\n\"" << esc(id) << "\": {\"bases\": [";
-      for (size_t i = 0; i < v.first.size(); ++i) *O.os << (i ? ", " : "") << "\"" << esc(v.first[i]) << "\"";
+      for (size_t i = 0; i < v.bases.size(); ++i) *O.os << (i ? ", " : "") << "\"" << esc(v.bases[i]) << "\"";
       *O.os << "], \"members\": [";
       size_t i = 0;
-      for (auto &m : v.second) *O.os << (i++ ? ", " : "") << "\"" << esc(m) << "\"";
+      for (auto &m : v.members) *O.os << (i++ ? ", " : "") << "\"" << esc(m) << "\"";
+      *O.os << "], \"types\": [";
+      i = 0;
+      for (auto &m : v.nested) *O.os << (i++ ? ", " : "") << "\"" << esc(m) << "\"";
       *O.os << "]}";
       first = false;
     }

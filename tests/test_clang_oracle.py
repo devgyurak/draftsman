@@ -17,6 +17,11 @@ def use(name, line, col, kind="type", target="shop::Money", tf="shop/model.h", p
             "tf": tf, "pos": pos, "max": 1, "from": frm, "spec": 0, "m": "", **extra}
 
 
+# what shop/model.h defines (a type only declared there would be none of the sources')
+DECLS = [{"decl": t, "f": "shop/model.h", "l": 1, "kind": "struct", "anon": 0}
+         for t in ("shop::Money", "lib::AutoPtr", "lib::Channel")]
+
+
 def joined(tmp_path, *units, files=("shop/model.h", "shop/a.cc", "shop/b.cc"), headers=()):
     """The key of shop/model.h, entered by each unit given as (its records, lines it skips)."""
     root = tmp_path / "src"
@@ -28,6 +33,7 @@ def joined(tmp_path, *units, files=("shop/model.h", "shop/a.cc", "shop/b.cc"), h
     for i, (recs, skips) in enumerate(units):
         main = f"/src/shop/{'ab'[i % 2]}.cc" if i < 2 else f"/work/hdr/{i}.cpp"
         lines = [{"inc": "shop/model.h"}] + [{"skip": "shop/model.h", "l1": a, "l2": b} for a, b in skips]
+        lines += DECLS
         lines += recs + [{"tu": main, "ms": 1, "rc": 0}]
         (raw / f"{i}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in lines))
     return oracle.join(raw, list(files), root, set(headers))
@@ -64,19 +70,23 @@ def test_lines_and_files_no_unit_compiles(tmp_path):
 
 
 def test_an_alias_stands_for_the_project_types_it_names(tmp_path):
-    alias = {"aliasdecl": "lib::Channel::Ptr", "f": "shop/model.h",
-             "names": [["type", "lib::AutoPtr", "shop/model.h"], ["type", "lib::Channel", "shop/model.h"],
-                       ["type", "std::string", ""]]}
-    feed = {"aliasdecl": "shop::Feed", "f": "shop/model.h", "names": [["alias", "lib::Channel::Ptr", "shop/model.h"]]}
-    recs = joined(tmp_path, ([alias, feed, use("Feed", 3, 4, kind="alias", target="shop::Feed")], []))
+    alias = {"aliasdecl": "lib::Channel::Ptr", "f": "shop/model.h", "l": 1,
+             "names": [["type", "lib::AutoPtr", "shop/model.h", "2"], ["type", "lib::Channel", "shop/model.h", "3"],
+                       ["type", "std::string", "", ""]]}
+    feed = {"aliasdecl": "shop::Feed", "f": "shop/model.h", "l": 5,
+            "names": [["alias", "lib::Channel::Ptr", "shop/model.h", "1"]]}
+    other = {"aliasdecl": "shop::Feed", "f": "shop/model.h", "l": 9, "names": []}
+    recs = joined(tmp_path, ([alias, other, feed, use("Feed", 3, 4, kind="alias", target="shop::Feed",
+                                                      tf="shop/model.h:5")], []))
     [r] = [r for r in recs if "use" in r]
     assert (r["kind"], r["target"], r["targets"], r["alias"], r["project"]) == \
         ("type", "lib::AutoPtr", ["lib::AutoPtr", "lib::Channel"], "shop::Feed", True)
 
 
 def test_an_alias_of_no_project_type_is_none(tmp_path):
-    alias = {"aliasdecl": "shop::Number", "f": "shop/model.h", "names": []}
-    recs = joined(tmp_path, ([alias, use("Number", 3, 4, kind="alias", target="shop::Number")], []))
+    alias = {"aliasdecl": "shop::Number", "f": "shop/model.h", "l": 2, "names": []}
+    recs = joined(tmp_path, ([alias, use("Number", 3, 4, kind="alias", target="shop::Number",
+                                         tf="shop/model.h:2")], []))
     [r] = [r for r in recs if "use" in r]
     assert (r["kind"], r["project"]) == ("type", False)
 
@@ -89,6 +99,12 @@ def test_a_header_only_a_unit_of_its_own_enters_is_marked(tmp_path):
                   headers={"/src/shop/a.cc"})
     [r] = [r for r in recs if "use" in r]
     assert r.get("header") is True
+
+
+def test_a_type_only_declared_in_the_sources_is_none_of_theirs(tmp_path):
+    recs = joined(tmp_path, ([use("bignum_st", 3, 4, target="bignum_st")], []))
+    [r] = [r for r in recs if "use" in r]
+    assert (r["kind"], r["project"]) == ("type", False)
 
 
 def test_types_several_files_define_under_one_id():
