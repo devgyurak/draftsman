@@ -702,24 +702,36 @@ is that type. Aliases of aliases are followed.
   `Keywords`); `::Foo` is the global one. What is called (`Money(1)`, `ns::Money(1)`,
   `AutoPtr<X>(p)`), a base's initializer (`: Base(1)`), `sizeof(X)`, `typeid(X)` and a
   block-scope function declaration's parameter (`Guard g(Tag);`, a variable Tag when
-  one is in scope) may be a value too; a call draws nothing where a function of the name
-  is declared at a namespace's scope anywhere in the sources or a method of the classes
-  around. An alias stands for every project type its written type names, as a declared
+  one is in scope) may be a value too; there, an enumerator of an unscoped enum of the
+  classes around, their bases or the namespaces around hides the type (`sizeof(Paid)`,
+  `Lock l(Paid);` beside `enum Kind { Paid };`; not an `enum class`'s). A call draws
+  nothing where a function of the name is declared at a namespace's scope anywhere in the
+  sources (with a return type: a constructor an error leaves at a namespace's scope is
+  none) or a method of the classes around. Inside a template, a base written with its
+  parameters (`Vec<T> : TBase<T>`) is not looked into: its member types and fields are
+  found once T is known, so they neither are candidates nor hide one (`TBase<int>` is
+  looked into). A namespace alias of the file's scope (`namespace fs = a::inner;`) is
+  read: `fs::D` is `a::inner::D`. An alias stands for every project type its written type names, as a declared
   relation's (`typedef AutoPtr<Channel> Ptr;`), but an alias template's own parameters
   and a dependent `typename X<T>::Y` name none. What a build decides, read from the
-  sources: a type of an anonymous namespace is a candidate in its file only; a type is
-  drawn only where its file is included by the body's file, directly or through others
-  (another program's global `Utility` is none of RemoteGen's: a quoted path from the
-  file's directory first, else every file whose path ends with the one written); a type
-  declared in an `#if` branch is drawn in that branch only (POCO's `ip_mreq` for HP-UX
-  beside the system's). Bases outside the sources: under a class of `std` that
+  sources: a type of an anonymous namespace is a candidate in its file only; a type is a
+  candidate only where its file is included by the body's file, directly or through
+  others (a quoted path from the file's directory first, else every file whose path ends
+  with the one written), and lookup goes on past one that is not (another program's
+  global `Utility` is none of RemoteGen's, whose `Poco::CodeGeneration::Utility` is meant);
+  where an included file declares the type without defining it (`struct Fwd;`), the name
+  is that type and lookup stops there. A type declared in an `#if` branch is drawn in
+  that branch and in branches of the same condition, in any file (`#if defined(POCO_HAVE_IPv6)`
+  around `IPv6AddressImpl` and its uses; POCO's `ip_mreq` for HP-UX beside the system's
+  is not). Bases outside the sources: under a class of `std` that
   `cpp_std.json` knows (libstdc++'s, as Clang reads it: `bench/clang_oracle/oracle.py
   table`; also through its typedefs, `std::ostream`), a name draws nothing where the base
   has a public or protected member of it (before `::` a member type only); under one it
   does not know, or one written with the class's template parameters (`std::vector<T>`,
   looked into once T is known), nothing is hidden. C++ and the other languages name none
   of each other's types. Checked against Clang (`bench/clang_oracle`): leveldb 877 names,
-  POCO 21,611, no mismatch.
+  POCO 21,908, no mismatch; review sets cpp2 to cpp4 pin the forms
+  (`bench/clang_oracle/review/README.md`).
 - Known limits of bodies. Not drawn: code outside every type (free functions, a
   namespace's variables; #8) and template specialisations (`template <> struct X<int>
   {...}`, `template <> void X<int>::f() {}`), as declared relations skip them; the part of
@@ -728,10 +740,20 @@ is that type. Aliases of aliases are followed.
   follows an `#if` that opens a block in each branch (`#if A if (x) { #else if (y) {
   #endif }`), which the grammar takes for one function holding the next ones; a type
   outside the include graph a path written with a macro or a build's include directory
-  makes. Lost to a rule: a type of an `#if` branch named outside it (POCO 99); a call of
-  a type beside a function of its name declared anywhere (16); a type of a file the body's
-  file includes through a path the suffix match misses (4). A local variable hides its
-  name in the whole member, also before it is declared.
+  makes; a qualified name in a macro's argument the macro makes a string
+  (`STR(Money::Zero)`), read as an expression, and a macro's argument that is an
+  identifier alone (`DECL(Money, d)`, `NEWOF(Money)`), where the parser sees no type; an
+  elaborated name (`struct Channel c`); a member defined out of a class named by a
+  typedef (`int Ord::look()`); a namespace alias of a block (`namespace al = a::inner;`); a
+  type the sources only declare (`struct Fwd;` with no definition); a header with no
+  include of its own, which relies on what its includer included first. Includes are read
+  as a whole: a name above the `#include` of its file counts as included. An include path
+  is matched by its suffix where the quoted path from the file's directory fails, which
+  may take another directory's file of the name (`"sub/deep.h"` for `one/sub/deep.h`
+  besides `sub/deep.h`). Lost to a rule: a type of an `#if` branch named outside every
+  branch of its condition (POCO 3); a type of a file the body's file includes through a
+  path the suffix match misses (1). A local variable hides its name in the whole member,
+  also before it is declared, and a `using namespace` in a function counts for the file.
 - Not handled in declared relations: `#include` graphs (resolution is by name and
   namespace, not by includes; bodies use them, above), template specialisations
   (skipped, see above), private/protected inheritance (drawn as plain `extends`).

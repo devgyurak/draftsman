@@ -180,7 +180,7 @@ scripts/validate.sh diagram.mmd
 | Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 + 152 body | 0 | 0 |
 | Python | [Django](docs/e2e/python/django.md) `django/` | 879 | 1964 | 1865 + 3203 body | 0 | 0 |
 | C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 + 597 body | 2 (2 unexplained) | 8개 파일에 9구간 (5구간은 함수 본문; `extern "C"`, `__has_include`, gMock 매크로, 멤버 함수 포인터 필드 하나) |
-| C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2066 | 9983 + 10785 body | 309 (1 ambiguous, 4 outside, 304 unexplained; 시스템·라이브러리 헤더, POCO의 `#define` 타입) | 121개 파일에 333구간 (`#if` 분기, 멤버 포인터, 명시적 인스턴스화, `typeid`) |
+| C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2066 | 9983 + 10885 body | 309 (1 ambiguous, 4 outside, 304 unexplained; 시스템·라이브러리 헤더, POCO의 `#define` 타입) | 121개 파일에 333구간 (`#if` 분기, 멤버 포인터, 명시적 인스턴스화, `typeid`) |
 
 관계 수는 선언에서 나온 관계와, 그 뒤에 메서드 본문에 적힌 이름(`new Foo()`, `Foo.bar()`)에서 나온
 관계입니다. Java, C#, Kotlin, TypeScript, C++의 열두 프로젝트에서 본문 관계는 모든 자리가 컴파일러의 해석과

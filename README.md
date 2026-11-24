@@ -192,7 +192,7 @@ checked), an SVG and an HTML viewer — on real projects, tests and generated co
 | Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 + 152 body | 0 | 0 |
 | Python | [Django](docs/e2e/python/django.md) `django/` | 879 | 1964 | 1865 + 3203 body | 0 | 0 |
 | C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 + 597 body | 2 (2 unexplained) | 9 spans in 8 files (5 in function bodies; `extern "C"`, `__has_include`, a gMock macro, a pointer-to-member field) |
-| C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2066 | 9983 + 10785 body | 309 (1 ambiguous, 4 outside, 304 unexplained; system and library headers, POCO's `#define` types) | 333 spans in 121 files (`#if` branches, pointers to members, explicit instantiations, `typeid`) |
+| C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2066 | 9983 + 10885 body | 309 (1 ambiguous, 4 outside, 304 unexplained; system and library headers, POCO's `#define` types) | 333 spans in 121 files (`#if` branches, pointers to members, explicit instantiations, `typeid`) |
 
 The relations are the declared ones, then those read from names in method bodies (`new
 Foo()`, `Foo.bar()`), which match what the compiler resolves at every place on the twelve

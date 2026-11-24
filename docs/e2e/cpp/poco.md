@@ -49,12 +49,12 @@ unresolved below.
 `extract.py` prints:
 
 ```text
-draftsman: 2317 files, 2066 types, relations: association 1920, dependency 6989, extends 893, implements 181, body dependency 10785, 309 unresolved (1 ambiguous, 4 outside the sources, 304 unexplained), 333 diagnostics
+draftsman: 2317 files, 2066 types, relations: association 1920, dependency 6989, extends 893, implements 181, body dependency 10885, 309 unresolved (1 ambiguous, 4 outside the sources, 304 unexplained), 333 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 2317 | 2066 | 1920 | 6989 | 893 | 181 | 10785 | 309 (1 ambiguous, 4 outside, 304 unexplained) | 333 |
+| 2317 | 2066 | 1920 | 6989 | 893 | 181 | 10885 | 309 (1 ambiguous, 4 outside, 304 unexplained) | 333 |
 
 Types by kind: 1374 classes, 273 structs, 2 unions, 74 abstract classes, 65 interfaces, 278 enums.
 
@@ -126,7 +126,7 @@ extracted; what is lost is members near a span. By cause:
 
 ## What it covers
 
-- Names in bodies (`evidence: "body"`): 21627 names are drawn as 10785 body dependencies, and each matches what Clang resolves there (`bench/clang_oracle`: 960 translation units configured by CMake with every optional component the image has the libraries of, and 43 headers no unit includes compiled each on its own; a header's answer only where every unit that compiles the line agrees; 0 mismatches). Counted apart: 1160 names in files and `#if` branches no Linux unit compiles (Windows' `NetSSL_Win`, the `*_WIN32`, `*_VX` files), 17 dependent names in templates, one in DNSSD/Bonjour (Avahi's `dns_sd.h` lacks newer calls). Member functions defined out of their class are their class's (most of POCO's body names: 78%); code outside every type (990 names) and template specialisations' bodies (1671) draw nothing (#8).
+- Names in bodies (`evidence: "body"`): 21908 names are drawn as 10885 body dependencies, and each matches what Clang resolves there (`bench/clang_oracle`: 960 translation units configured by CMake with every optional component the image has the libraries of, and 43 headers no unit includes compiled each on its own; a header's answer only where every unit that compiles the line agrees; 0 mismatches). Counted apart: 1179 names in files and `#if` branches no Linux unit compiles (Windows' `NetSSL_Win`, the `*_WIN32`, `*_VX` files), 17 dependent names in templates, one in DNSSD/Bonjour (Avahi's `dns_sd.h` lacks newer calls). Member functions defined out of their class are their class's (most of POCO's body names: 78%); code outside every type (990 names) and template specialisations' bodies (1671) draw nothing (#8).
 - Export macros in mixed case between `class` and the name: more than 1100 header lines
   start with `class Foundation_API Logger: public Channel` and the like (`Net_API`,
   `NetSSL_Win_API`, `DNSSD_Bonjour_API`); also before functions (`Net_API std::ostream&
