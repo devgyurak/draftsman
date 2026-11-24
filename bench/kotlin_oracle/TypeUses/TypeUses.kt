@@ -228,6 +228,13 @@ class Walker(val path: String, val text: String, val session: FirSession, val co
         ClassKind.OBJECT -> if (companion) "companion" else "object"
     }
 
+    /** The class a typealias of ``id`` stands for, through other aliases; null for no alias. */
+    private fun expansion(id: ClassId): String? {
+        val s = session.symbolProvider.getClassLikeSymbolByClassId(id) as? FirTypeAliasSymbol ?: return null
+        return (s.resolvedExpandedTypeRef.coneType.fullyExpandedType(session) as? ConeClassLikeType)
+            ?.lookupTag?.classId?.asString()
+    }
+
     private fun classKind(id: ClassId): String = if (id.isLocal) "local-class" else
         when (val s = session.symbolProvider.getClassLikeSymbolByClassId(id)) {
             is FirRegularClassSymbol -> kindOf(s.classKind, s.isCompanion)
@@ -289,8 +296,11 @@ class Walker(val path: String, val text: String, val session: FirSession, val co
                 for ((i, p) in parts.asReversed().withIndex()) {
                     if (id == null) { part(p, "package", null, "part" to i); continue }
                     val alias = written !== cone && id == written.lookupTag.classId
-                    part(p, classKind(id), id.asString(), "alias" to alias, "part" to i,
-                        "expanded" to if (alias) (cone as? ConeClassLikeType)?.lookupTag?.classId?.asString() else null)
+                    // the class a typealias stands for: the cone's own when it was expanded,
+                    // else the alias's (a type argument of a local class's supertype is not)
+                    val expanded = if (alias) (cone as? ConeClassLikeType)?.lookupTag?.classId?.asString()
+                        else expansion(id)
+                    part(p, classKind(id), id.asString(), "alias" to alias, "part" to i, "expanded" to expanded)
                     val own = p.typeArgumentList.typeArguments
                     own.forEachIndexed { i, a ->
                         if (a is FirTypeProjectionWithVariance) pair(a.typeRef, args.getOrNull(i)?.type)
@@ -339,9 +349,7 @@ class Walker(val path: String, val text: String, val session: FirSession, val co
             if (i < classes && id != null) {
                 val kind = if (i == 0 && q.symbol is FirTypeAliasSymbol) "typealias" else classKind(id!!)
                 val sym = q.symbol
-                val expanded = if (i == 0 && sym is FirTypeAliasSymbol)
-                    (sym.resolvedExpandedTypeRef.coneType.fullyExpandedType(session) as? ConeClassLikeType)?.lookupTag?.classId?.asString()
-                else null
+                val expanded = if (i == 0 && sym is FirTypeAliasSymbol) expansion(sym.classId) else null
                 emit(m.value.trim('`'), at, "value", kind, id!!.asString(),
                     "companion" to (i == 0 && q.resolvedToCompanionObject), "qualifier" to true,
                     "role" to if (i == 0) role else "receiver", "part" to i, "expanded" to expanded)

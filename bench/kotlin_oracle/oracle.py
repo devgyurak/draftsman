@@ -227,8 +227,12 @@ def convert(r: dict, file: str, types: Types) -> Optional[dict]:
         maximal = r.get("part", 0) == 0 and r.get("role") != "outer"
     out = {"use": r["use"], "file": file, "line": r["line"], "col": r["col"], "pos": pos}
     if raw in TYPES:
-        target = types.id(r["expanded"] if r["target"] in types.aliases and r.get("expanded")
-                          else r["target"])
+        if r["target"] in types.aliases and not r.get("expanded"):
+            # the class an alias stands for is the answer: an alias whose class the
+            # plugin did not say is the plugin's mistake, not an answer
+            raise ValueError(f"{file}:{r['line']}:{r['col'] + 1}: typealias {r['target']} "
+                             "without the class it stands for")
+        target = types.id(r["expanded"] if r["target"] in types.aliases else r["target"])
         out.update(kind="type", target=target, project=target in types.ids)
     else:
         kind = KINDS.get(raw, raw)

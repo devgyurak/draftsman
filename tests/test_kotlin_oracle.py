@@ -96,3 +96,15 @@ def test_compilations_need_not_agree_on_which_function_a_name_is():
     [r] = joined([use("append", 4, "function", "kotlin/text/append")],
                  [use("append", 4, "member-function", "java/lang/StringBuilder.append")])
     assert r["kind"] == "function"
+
+
+def test_a_typealias_without_its_class_is_an_error():
+    import pytest
+    global DECLARED
+    keep = DECLARED
+    DECLARED = keep + [{"declared": "p/Cash", "kind": "typealias", "expect": False, "actual": False}]
+    try:
+        with pytest.raises(ValueError, match="without the class"):
+            joined([use("Cash", 4, "typealias", "p/Cash", expanded=None)])
+    finally:
+        DECLARED = keep
