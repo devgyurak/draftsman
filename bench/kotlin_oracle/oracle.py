@@ -8,7 +8,7 @@ bench/answer_key.py gives and joins the compilations each file is in.
     uv run bench/kotlin_oracle/oracle.py selftest
     uv run bench/kotlin_oracle/oracle.py key DIR [-o OUT.jsonl] [--compare] [-v]
     uv run bench/kotlin_oracle/oracle.py review [SET ...]
-    uv run bench/kotlin_oracle/oracle.py run REPO --checkout DIR -o OUT.jsonl
+    uv run bench/kotlin_oracle/oracle.py run REPO --checkout DIR -o OUT.jsonl [--raw DIR [--rejoin]]
     uv run bench/kotlin_oracle/oracle.py scope REPO OUT.jsonl ir.json
     uv run bench/kotlin_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR [-v]
     uv run bench/kotlin_oracle/oracle.py measure OUT.jsonl [--ir ir.json]
@@ -108,16 +108,21 @@ REPOS = {
         "args": []},
     # Every target a Linux host builds (JVM, JS, Wasm, Linux, Windows, Android Native,
     # Android, and the metadata compilations of the source sets between them). Apple
-    # targets are skipped on Linux; ktor-client-tracing and ktor-client-stetho are not in
-    # settings.gradle.kts; ktor-client-webrtc-rs needs cargo, which the image lacks.
+    # targets are skipped on Linux, also with kotlin.native.enableKlibsCrossCompilation
+    # (Ktor turns it off): the cinterops of ktor-io and ktor-utils for Apple targets are
+    # skipped, and so is every Apple compilation. ktor-client-tracing and
+    # ktor-client-stetho are not in settings.gradle.kts; ktor-client-webrtc-rs needs cargo,
+    # which the image lacks.
     "ktor": {
         "commit": "cc3d345bc2",
         "exclude": ["**/test/**", "**/test-*/**", "**/testData/**", "**/*-test/**",
                     "**/*-test-*/**", "**/*-tests/**", "**/build/**", "build-logic/**",
                     "build-settings-logic/**"],
         "tasks": ["typeUses"],
-        # a build scan would be uploaded to develocity.jetbrains.com
-        "args": ["--no-configuration-cache", "--max-workers=4",
+        # a build scan would be uploaded to develocity.jetbrains.com; two workers, as more
+        # (each a Kotlin/Native compiler of up to 2 GB beside Gradle's 6 GB) ran Docker's
+        # 16 GB out of memory
+        "args": ["--no-configuration-cache", "--max-workers=2",
                  "-Pktor.develocity.skipBuildScans=true"]},
 }
 
@@ -187,9 +192,17 @@ class Types:
                         if d["kind"] == "typealias" and ident(d["declared"]) not in self.ids}
 
     def id(self, class_id: str) -> str:
-        while class_id in self.folded:
-            class_id = class_id.rsplit(".", 1)[0]
-        return ident(class_id)
+        """A folded companion is its class, and a type nested in it is nested in its
+        class (`A.Companion.Serializer` is `A.Serializer`)."""
+        package, _, name = class_id.rpartition("/")
+        parts = name.split(".")
+        i = 1
+        while i <= len(parts):
+            if f"{package}/{'.'.join(parts[:i])}" in self.folded:
+                del parts[i - 1]
+            else:
+                i += 1
+        return ident(f"{package}/{'.'.join(parts)}")
 
     def owner(self, owners: list[str]) -> Optional[str]:
         """The named type code is in, ``owners`` the classes around it, innermost last."""
@@ -233,7 +246,10 @@ def convert(r: dict, file: str, types: Types) -> Optional[dict]:
 
 
 def _answer(r: dict) -> tuple:
-    return (r["kind"], r["target"], r["pos"], r["maximal"], r["from"])
+    """What compilations must agree on: a type's id, but only the kind of anything else
+    (`append` is a member on the JVM and an extension elsewhere: no type either way)."""
+    return (r["kind"], r["target"] if r["kind"] == "type" else None, r["pos"], r["maximal"],
+            r["from"])
 
 
 def join(comps: list[dict], raw: dict[str, dict[str, list[dict]]], files: dict[str, str],
@@ -251,6 +267,7 @@ def join(comps: list[dict], raw: dict[str, dict[str, list[dict]]], files: dict[s
                         "sources": len(c["sources"])} for c in comps]
     out += diagnostics
     seen = set()
+    twice = 0   # places with two records in one compilation
     for d in sorted(declared, key=lambda d: (d["declared"], d["file"])):
         key = (d["declared"], d["file"])
         if key not in seen:
@@ -270,9 +287,10 @@ def join(comps: list[dict], raw: dict[str, dict[str, list[dict]]], files: dict[s
             for r in rs:
                 if "use" in r and (k := convert(r, file, types)) is not None:
                     place = (k["line"], k["col"])
-                    # one name, two records: the type of a declaration and a value
-                    # (never seen; the type position wins)
-                    if place not in at or comp not in at[place] or k["pos"] == "type":
+                    # one name, two records (a type and a value): the type position wins
+                    if comp in at.get(place, {}):
+                        twice += 1
+                    if comp not in at.get(place, {}) or k["pos"] == "type":
                         at[place][comp] = k
         compiling = set(raw[path])
         for (line, col), by in sorted(at.items()):
@@ -287,6 +305,8 @@ def join(comps: list[dict], raw: dict[str, dict[str, list[dict]]], files: dict[s
                 said.update({c: "none" for c in compiling - set(by)})
                 out.append({**first, "kind": "split", "target": None, "project": False,
                             "answers": dict(sorted(said.items())), "comps": len(compiling)})
+    if twice:
+        out.append({"twice": twice})
     compiled = {files[p] for p in raw if p in files}
     for file in sorted(set(files.values()) - compiled):
         out.append({"uncompiled": file, "lines": "all"})
@@ -411,35 +431,49 @@ def summary(recs: list[dict], name: str) -> None:
         print(f"  {r['file']}:{r['line']}: {r['diagnostic']}")
     whole = [r["uncompiled"] for r in recs if "uncompiled" in r]
     print(f"not compiled: {len(whole)} files")
+    for r in recs:
+        if "twice" in r:
+            print(f"places with two names in one compilation (the type position kept): {r['twice']}")
 
 
 def run(args) -> int:
     conf = REPOS[args.repo]
-    image()
     checkout = args.checkout.resolve()
     files = {f"/src/{rel}": rel for _, rel in sources(args.repo, checkout)}
     with tempfile.TemporaryDirectory() as tmp:
-        work = Path(tmp)
-        log = work / "gradle.log"
-        mounts = {str(checkout): "/src", str(work): "/work", **VOLUMES}
-        # --rerun-tasks: a task up to date (or from the build cache) compiles nothing
-        done = container(["sh", "-c", "./gradlew --no-daemon --no-watch-fs --continue --rerun-tasks "
-                          "-I /opt/type-uses/typeuses.init.gradle "
-                          + " ".join(conf["args"] + conf["tasks"]) + " > /work/gradle.log 2>&1"],
-                         mounts, env={"TYPEUSES_OUT": "/work/out"}, check=False)
-        text = log.read_text(errors="replace")
-        failed = re.findall(r"^> Task (\S+) FAILED", text, re.M)
-        if args.log:
-            shutil.copy(log, args.log)
-        comps, raw = read_raw(work / "out")
+        raw_dir = args.raw.resolve() if args.raw else Path(tmp, "out")
+        if args.rejoin:
+            config = json.loads((raw_dir / "config.json").read_text())
+        else:
+            image()
+            if raw_dir.exists():
+                shutil.rmtree(raw_dir)
+            raw_dir.mkdir(parents=True)
+            work = Path(tmp)
+            mounts = {str(checkout): "/src", str(raw_dir): "/out", str(work): "/work", **VOLUMES}
+            # --rerun-tasks: a task up to date (or from the build cache) compiles nothing
+            done = container(["sh", "-c", "./gradlew --no-daemon --no-watch-fs --continue --rerun-tasks "
+                              "-I /opt/type-uses/typeuses.init.gradle "
+                              + " ".join(conf["args"] + conf["tasks"]) + " > /work/gradle.log 2>&1"],
+                             mounts, env={"TYPEUSES_OUT": "/out"}, check=False)
+            text = (work / "gradle.log").read_text(errors="replace")
+            if args.log:
+                shutil.copy(work / "gradle.log", args.log)
+            config = {"repo": args.repo, "commit": conf["commit"], "tasks": conf["tasks"],
+                      "args": conf["args"], "exit": done.returncode,
+                      "failed": re.findall(r"^> Task (\S+) FAILED", text, re.M)}
+            (raw_dir / "config.json").write_text(json.dumps(config))
+        comps, raw = read_raw(raw_dir)
     recs = join(comps, raw, files)
-    recs.insert(0, {"config": {"repo": args.repo, "commit": conf["commit"], "tasks": conf["tasks"],
-                               "args": conf["args"], "exit": done.returncode, "failed": failed,
-                               "kotlin": sorted({c["language"] for c in comps})}})
+    recs.insert(0, {"config": {**config, "kotlin": sorted({c["language"] for c in comps})}})
     args.output.write_text("".join(json.dumps(r) + "\n" for r in recs))
     summary(recs, args.repo)
-    print(f"gradle: exit {done.returncode}, failed tasks: {', '.join(failed) or 'none'}")
-    return 0
+    print(f"gradle: exit {config['exit']}, failed tasks: {', '.join(config['failed']) or 'none'}")
+    if config["exit"]:
+        # a task that failed compiled nothing; a daemon that died (out of memory: run one
+        # container at a time) compiled nothing after it
+        print("gradle failed: the key lacks what it did not compile")
+    return 1 if config["exit"] else 0
 
 
 def declared_files(recs: list[dict]) -> dict[str, set[str]]:
@@ -458,11 +492,11 @@ def in_scope(recs: list[dict], ir: dict[str, str]) -> int:
     seen = declared_files(recs)
     flat = [{"declared": t, "file": ir[t] if t in ir and ir[t] in fs else sorted(fs)[0]}
             for t, fs in seen.items()]
-    folded = sorted(r["declared"] for r in recs if r.get("folded"))
+    folded = sorted({r["declared"] for r in recs if r.get("folded")})
     if folded:
         print(f"known: {len(folded)} companion objects without supertypes, folded into their "
               f"classes in ir.json (e.g. {', '.join(folded[:3])})")
-    aliases = sorted(r["declared"] for r in recs if "declared" in r and r.get("alias"))
+    aliases = sorted({r["declared"] for r in recs if "declared" in r and r.get("alias")})
     if aliases:
         print(f"known: {len(aliases)} typealiases, which ir.json resolves through "
               f"(e.g. {', '.join(aliases[:3])})")
@@ -538,6 +572,10 @@ def measure(args) -> int:
                       for r in uses if r["kind"] not in ("type", "split") and r["use"] in names)
     print("names of a project type resolved to something else: "
           + ", ".join(f"{k} {v}" for k, v in shadows.most_common()))
+    other = Counter(r["target"] for r in uses
+                    if r["kind"] == "type" and not r["project"] and r["use"] in names)
+    print(f"names of a project type resolved to a type outside the sources: {sum(other.values())} ("
+          + ", ".join(f"{k} {v}" for k, v in other.most_common(8)) + ")")
     return 0
 
 
@@ -560,6 +598,9 @@ def main(argv=None) -> int:
     r.add_argument("--checkout", type=Path, required=True)
     r.add_argument("-o", "--output", type=Path, required=True)
     r.add_argument("--log", type=Path, help="keep Gradle's output here")
+    r.add_argument("--raw", type=Path, help="keep TypeUses' records in this directory")
+    r.add_argument("--rejoin", action="store_true",
+                   help="join the records --raw keeps again, without building")
     r.set_defaults(fn=run)
     c = sub.add_parser("scope")
     c.add_argument("repo", choices=sorted(REPOS))

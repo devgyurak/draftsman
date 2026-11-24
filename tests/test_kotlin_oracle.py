@@ -82,3 +82,17 @@ def test_a_typealias_is_the_class_it_stands_for_unless_an_expect_class_has_its_i
         assert (r["target"], r["project"]) == ("p.Foo", True)
     finally:
         DECLARED = keep
+
+
+def test_a_type_nested_in_a_folded_companion_is_nested_in_its_class():
+    types = oracle.Types(DECLARED + [{"declared": "p/Uses.Companion.Serializer", "kind": "object",
+                                      "expect": False, "actual": False}])
+    assert types.id("p/Uses.Companion.Serializer") == "p.Uses.Serializer"
+    assert types.id("p/Uses.Companion") == "p.Uses"
+    assert "p.Uses.Serializer" in types.ids
+
+
+def test_compilations_need_not_agree_on_which_function_a_name_is():
+    [r] = joined([use("append", 4, "function", "kotlin/text/append")],
+                 [use("append", 4, "member-function", "java/lang/StringBuilder.append")])
+    assert r["kind"] == "function"
