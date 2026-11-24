@@ -31,7 +31,7 @@ Order* Order::make() {  //> Order=- Order=-
   return static_cast<Order*>(made.release());  //> Order=shop::Order/t
 }
 
-const int Order::kLimit = sizeof(Money);  //> Order=- Money=shop::Money/t
+const int Order::kLimit = sizeof(Money);  //> Order=- Money=shop::Money/r
 
 }  // namespace shop
 

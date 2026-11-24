@@ -192,15 +192,16 @@ SCOPE_RULES = {
         # `Receipt.Companion.Parser`: the types of a plain companion are Receipt's
         "kotlin": ("StripeGateway", "dependency", "Parser"),
     },
-    # a name written in a body (issues #2 and #5); Kotlin and C++ read no bodies yet
-    # (#5). The witness's fourth item is the `evidence` it must carry: a signature added later
-    # would make the same pair without the body rule
+    # a name written in a body (issues #2 and #5). The witness's fourth item is the
+    # `evidence` it must carry: a signature added later would make the same pair without the
+    # body rule
     "name in a body": {
         **_ALL,
         "java": ("StripeGateway", "dependency", "Money", "body"),   # `new Receipt.Money(...)`
         "typescript": ("StripeGateway", "dependency", "Money", "body"),   # `: Receipt.Money`
         "csharp": ("StripeGateway", "dependency", "Money", "body"),   # `new Receipt.Money(...)`
         "kotlin": ("Order", "dependency", "OrderLine", "body"),   # `{ x: OrderLine -> x }`
+        "cpp": ("Order", "dependency", "OrderLine", "body"),   # `[](const OrderLine& l)`
         # `isinstance(self, Auditable)`: the shop's other bodies name classes beside a star
         # import from outside the sources (`from stripe import *`), which may bind them
         "python": ("BaseEntity", "dependency", "Auditable", "body"),

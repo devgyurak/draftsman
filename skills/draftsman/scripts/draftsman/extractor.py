@@ -129,6 +129,11 @@ class RawType:
     # declared in a static scope of its outer type that is no type itself (Kotlin's
     # companion object without supertypes), whose id leaves the scope out
     static_scope: bool = False
+    # seen in its file only (LanguageSpec.file_local_node: C++'s anonymous namespace)
+    file_local: bool = False
+    # the `#if` branches declaring it, (file, first line, last line) each, or None when a
+    # declaration stands outside every one (LanguageSpec.branch_ranges)
+    branches: Optional[list[tuple[str, int, int]]] = None
 
 
 @dataclass
@@ -355,6 +360,7 @@ class Extractor:
         original = path.read_bytes()
         src = spec.preprocess(original)
         conditional = spec.conditional_ranges(original)
+        branch_ranges = spec.branch_ranges(original)
         tree = self.parser.parse(src)
         mod_path = self._module_path(root, rel)
         project, build_imports = spec.project_imports(path, root)
@@ -389,6 +395,7 @@ class Extractor:
         type_matches, member_matches, other, bodies = [], [], [], []
         namespaces: dict[int, str] = {}
         inline: list = []
+        ns_nodes: list = []
         for _, caps in ts.QueryCursor(self.query).matches(tree.root_node):
             if any(k.startswith("body.") for k in caps):
                 bodies.append(caps)   # most matches of a file: read apart (_body_refs)
@@ -400,6 +407,7 @@ class Extractor:
                 name = _first(caps, "namespace.name")
                 if name is not None:
                     namespaces[n.id] = _text(name, src)
+                    ns_nodes.append(n)
                     if n.child_count and n.children[0].type == "inline":
                         inline.append(n)
             else:
@@ -417,6 +425,15 @@ class Extractor:
                 spec.separator.join(parts), [])
             if place not in places:
                 places.append(place)
+        # every namespace a block opens, by its full name (also one declaring no type)
+        for n in ns_nodes:
+            parts, cur = [], n
+            while cur is not None:
+                if cur.id in namespaces:
+                    parts.insert(0, namespaces[cur.id])
+                cur = cur.parent
+            scope.declared_namespaces.add(spec.separator.join(
+                p for p in [scope.namespace, *parts] if p))
         # C++ `inline namespace v1`: its types are also named without it (acme::Versioned)
         for n in inline:
             parts, cur = [], n
@@ -553,6 +570,9 @@ class Extractor:
                 conditional=any(a <= node.start_byte < b for a, b in conditional),
                 left_out=set(scope.left_out_names),
                 static_scope=in_static and outer_raw is not None,
+                file_local=spec.file_local_node(node),
+                branches=next(([(rel, first, last)] for a, b, first, last in branch_ranges
+                               if a <= node.start_byte < b), None),
             )
             return entry["raw"]
 
@@ -628,6 +648,8 @@ class Extractor:
                         scope.block_local[q] = (_line(block), block.end_point[0] + 1)
                     if target:
                         scope.alias_targets[q] = spec.normalize_type(target)
+                    if params := spec.alias_params(n):
+                        scope.alias_tparams[q] = set(params)
                     if spec.block_imports:
                         parts, cur = [], n.parent
                         while cur is not None:
@@ -735,7 +757,13 @@ class Extractor:
         unread: set[int] = set()   # type nodes that are no name of the scope
         blind: set[int] = set()    # class bodies whose inherited members are not known
         guarded: set[int] = set()  # blocks only some checkers read (a platform's branch)
+        # members defined outside their type -> (the type as written, name, type parameters)
+        detached: dict[int, tuple[str, str, list[str]]] = {}
         for caps in matches:
+            if (n := _first(caps, "body.detached")) is not None:
+                if (got := self.spec.detached_owner(n, src)) is not None:
+                    detached[n.id] = got
+                continue
             if (n := _first(caps, "body.init")) is not None:
                 # only a named type's own: a block in an anonymous class is in a body already
                 if self._owner(n, types_by_node)[0] is not None:
@@ -759,7 +787,7 @@ class Extractor:
             for cap, nodes in caps.items():
                 n = nodes[0]
                 if cap.startswith("body.ref."):
-                    position = cap[len("body.ref."):]
+                    position = self.spec.ref_position(n, cap[len("body.ref."):])
                     if position == "receiver" and any(c.type == "super" for c in n.parent.children):
                         continue   # `X.super.m()`: X is in type position, captured as such
                     refs.append((position, n))
@@ -812,6 +840,8 @@ class Extractor:
                             stack.extend(cur.children)
                 elif cap == "body.blind":
                     blind.add(n.id)
+                elif cap == "body.include":
+                    scope.includes.append(_text(n, src))
                 elif cap == "body.guarded":
                     blind.add(n.id)
                     guarded.add(n.id)
@@ -834,7 +864,7 @@ class Extractor:
                 if cur.id in types_by_node:
                     anchors[cur.id] = None
                     break
-                if cur.id in inits or members_by_node.get(cur.id):
+                if cur.id in inits or cur.id in detached or members_by_node.get(cur.id):
                     anchors[cur.id] = cur
                     break
                 if (decl := self.spec.member_of(cur)) is not None and members_by_node.get(decl.id):
@@ -853,7 +883,7 @@ class Extractor:
                 if cur.type in self.spec.annotation_nodes or cur.id in blind:
                     ups[cur.id] = no_type   # an annotation's arguments are no body, even inside one
                     break
-                if cur.id in types_by_node:
+                if cur.id in types_by_node or cur.id in detached:
                     ups[cur.id] = (cur, False, ())
                     break
                 chain.append(cur)
@@ -873,6 +903,8 @@ class Extractor:
             """(node id, via, member) of the member or initializer node ``a``."""
             if a.id in inits:
                 return a.id, inits[a.id], None
+            if a.id in detached:
+                return a.id, detached[a.id][1], None
             members = members_by_node[a.id]
             # several declarators: the one whose name comes last before the name
             rm = max((m for m in members if m.at <= start), key=lambda m: m.at, default=members[0])
@@ -975,7 +1007,15 @@ class Extractor:
         # a receiver is a dotted name, not an expression (`this.x.m()`, `a[0].B.m()`)
         refs = [(p, n) for p, n in refs if n.id not in not_refs and (
             p == "type" or self._dotted(n))
-            and not any(a <= n.start_byte < b for a, b in unread_ranges)]
+            and not any(a <= n.start_byte < b for a, b in unread_ranges)
+            and not self.spec.unreadable(n)]
+        if self.spec.ref_priority:   # one node, one name: the position the language puts first
+            rank = {p: i for i, p in enumerate(self.spec.ref_priority)}
+            best: dict[int, tuple[str, ts.Node]] = {}
+            for p, n in refs:
+                if n.id not in best or rank.get(p, len(rank)) < rank.get(best[n.id][0], len(rank)):
+                    best[n.id] = (p, n)
+            refs = list(best.values())
         whole = {n.id for _, n in refs}
         for n in receivers:   # an extension's receiver: in the member it stands in
             if (a := anchor_of(n.parent)) is not None and a.id not in inits:
@@ -1001,6 +1041,8 @@ class Extractor:
             member_names = names.setdefault(key, BodyNames())
             if key not in seeded:
                 seeded.add(key)
+                if key in detached:   # a definition's own type parameters
+                    member_names.types |= set(detached[key][2])
                 # the namespaces around the outermost type: a nested type's bodies see them
                 top, cur = owner, owner.parent
                 while cur is not None:
@@ -1030,12 +1072,22 @@ class Extractor:
             if implicit := self.spec.implicit_variables(node):   # C#'s `value` in a setter
                 ref_names = BodyNames(ref_names.variables | implicit, ref_names.types)
             after = node.parent.child_by_field_name("name") if position == "receiver" else None
-            types_by_node[owner.id].body_refs.append(RawBodyRef(
-                ".".join(self.spec.body_name_text(_text(n, src)) for n in parts), position,
+            ref = RawBodyRef(
+                self.spec.ref_text(node, self.spec.separator.join(
+                    self.spec.body_name_text(_text(n, src)) for n in parts)),
+                position,
                 [(_line(n), _utf16_col(n, src)) for n in parts], via, ref_scope, rm,
                 ref_names, list(around), [self.spec.arity(n) for n in parts],
                 _text(self._parts(after)[0], src) if after is not None and after.id != node.id
-                else None))
+                else None)
+            if owner.id in detached:
+                # the type is found once every file is read (_Builder): written in the
+                # namespaces around the definition
+                path = namespace_path(owner.parent) or ()
+                scope.detached_refs.append((detached[owner.id][0], self.spec.separator.join(
+                    p for p in [scope.namespace, *path] if p), ref))
+            else:
+                types_by_node[owner.id].body_refs.append(ref)
 
     def _enclosing(self, node: ts.Node, type_ids: set[int]) -> Optional[ts.Node]:
         """The function or the type whose body ``node`` stands in, or None."""

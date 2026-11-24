@@ -85,3 +85,104 @@
 (type_definition
   declarator: (function_declarator
     declarator: (parenthesized_declarator (pointer_declarator declarator: (type_identifier) @alias))))
+
+; ---------------------------------------------------------------- bodies (issue #5)
+; where a name in a body is read: a function's body, a constructor's initializers, a
+; default argument, a default member initializer, an enumerator's value, a variable's
+; initializer (a static member's, defined out of its class)
+(function_definition body: (compound_statement) @body.region)
+(function_definition (field_initializer_list) @body.region)
+(field_declaration default_value: (_) @body.region)
+(optional_parameter_declaration default_value: (_) @body.region)
+(enumerator value: (_) @body.region)
+(init_declarator value: (_) @body.region)
+; a friend function defined in a class: the class's, as written there; and a class's
+; operator or destructor defined in it, which is no member the declarations list
+(friend_declaration (function_definition body: (_) @body.init.region) @body.init)
+(field_declaration_list
+  (function_definition declarator: [(function_declarator declarator: [(operator_name) (destructor_name)])
+                                    (reference_declarator (function_declarator declarator: (operator_name)))
+                                    (pointer_declarator declarator: (function_declarator declarator: (operator_name)))]
+                       body: (_) @body.init.region) @body.init)
+(field_declaration_list (function_definition declarator: (operator_cast) body: (_) @body.init.region) @body.init)
+(field_declaration_list
+  (template_declaration
+    (function_definition declarator: [(function_declarator declarator: (operator_name))
+                                      (reference_declarator (function_declarator declarator: (operator_name)))
+                                      (pointer_declarator declarator: (function_declarator declarator: (operator_name)))]
+                         body: (_) @body.init.region)) @body.init)
+; a member template's parameters, where its body is read apart (an operator's)
+(template_declaration parameters: (template_parameter_list
+  [(type_parameter_declaration (type_identifier) @body.type)
+   (optional_type_parameter_declaration name: (type_identifier) @body.type)]))
+; a member defined outside its class (`void Foo::bar() {}`, `int Foo::x = 1;`): its body
+; is the class's (CppSpec.detached_owner)
+(function_definition) @body.detached
+(declaration declarator: (init_declarator declarator: (qualified_identifier))) @body.detached
+
+; where only a type can stand: a declaration's type, `new`, a cast, a template argument,
+; `sizeof`'s type, an elaborated `struct Foo`; and a qualified name, whose parts are types or
+; namespaces (`Order::Status::Paid`, `A::B::c()`: CppSpec.values_hide_types). A parameter of
+; a block-scope function declaration (`Lock l(Tag);`) may be a variable (CppSpec.ref_position)
+(type_identifier) @body.ref.type
+(template_type) @body.ref.type
+(qualified_identifier) @body.ref.type
+; where a value may stand as well: what is called (`Money(1)`, `ns::Money(1)`,
+; `AutoPtr<Ch>(p)`, which a function may be), a base's initializer (`: Base(1)`, or a
+; member's), `sizeof(Money)`
+(call_expression function: [(identifier) (qualified_identifier) (template_function)] @body.ref.call)
+(field_initializer . [(field_identifier) (qualified_identifier) (template_method)] @body.ref.call)
+(sizeof_expression value: (parenthesized_expression [(identifier) (qualified_identifier)] @body.ref.receiver))
+((call_expression function: (identifier) @_typeid
+   arguments: (argument_list . [(identifier) (qualified_identifier)] @body.ref.receiver .))
+ (#eq? @_typeid "typeid"))
+
+; variables a member declares: parameters, locals (also `Lock l(x);`), `for`, `catch`,
+; lambda captures, structured bindings
+(parameter_declaration declarator: [(identifier) @body.var
+                                    (pointer_declarator declarator: (identifier) @body.var)
+                                    (reference_declarator (identifier) @body.var)
+                                    (array_declarator declarator: (identifier) @body.var)])
+(optional_parameter_declaration declarator: [(identifier) @body.var
+                                             (pointer_declarator declarator: (identifier) @body.var)
+                                             (reference_declarator (identifier) @body.var)])
+(declaration declarator: [(identifier) @body.var
+                          (pointer_declarator declarator: (identifier) @body.var)
+                          (reference_declarator (identifier) @body.var)
+                          (array_declarator declarator: (identifier) @body.var)
+                          (function_declarator declarator: (identifier) @body.var)
+                          (init_declarator declarator: [(identifier) @body.var
+                                                        (pointer_declarator declarator: (identifier) @body.var)
+                                                        (reference_declarator (identifier) @body.var)
+                                                        (array_declarator declarator: (identifier) @body.var)])])
+(for_range_loop declarator: [(identifier) @body.var
+                             (pointer_declarator declarator: (identifier) @body.var)
+                             (reference_declarator (identifier) @body.var)
+                             (structured_binding_declarator (identifier) @body.var)])
+(structured_binding_declarator (identifier) @body.var)
+(lambda_capture_specifier (identifier) @body.var)
+(condition_clause value: (declaration declarator: (identifier) @body.var))
+; types a member declares: local classes, aliases, a local template's parameters
+(compound_statement [(class_specifier name: (type_identifier) @body.type)
+                     (struct_specifier name: (type_identifier) @body.type)
+                     (union_specifier name: (type_identifier) @body.type)
+                     (enum_specifier name: (type_identifier) @body.type)])
+(compound_statement (declaration type: [(class_specifier name: (type_identifier) @body.type body: (_))
+                                        (struct_specifier name: (type_identifier) @body.type body: (_))
+                                        (enum_specifier name: (type_identifier) @body.type body: (_))]))
+(compound_statement (type_definition declarator: (type_identifier) @body.type))
+(compound_statement (alias_declaration name: (type_identifier) @body.type))
+; functions of a namespace, which every file may call: a call of the name may be one
+(translation_unit [(declaration declarator: (function_declarator declarator: (identifier) @body.function))
+                   (function_definition declarator: (function_declarator declarator: (identifier) @body.function))
+                   (declaration declarator: (_ declarator: (function_declarator declarator: (identifier) @body.function)))
+                   (function_definition declarator: (_ declarator: (function_declarator declarator: (identifier) @body.function)))])
+(declaration_list [(declaration declarator: (function_declarator declarator: (identifier) @body.function))
+                   (function_definition declarator: (function_declarator declarator: (identifier) @body.function))
+                   (declaration declarator: (_ declarator: (function_declarator declarator: (identifier) @body.function)))
+                   (function_definition declarator: (_ declarator: (function_declarator declarator: (identifier) @body.function)))])
+([(translation_unit) (declaration_list)]
+ (template_declaration [(declaration declarator: (function_declarator declarator: (identifier) @body.function))
+                        (function_definition declarator: (function_declarator declarator: (identifier) @body.function))]))
+; the files a file includes: a body sees only the types they declare (CppSpec)
+(preproc_include path: [(string_literal) (system_lib_string)] @body.include)

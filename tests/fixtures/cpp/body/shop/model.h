@@ -53,7 +53,7 @@ class Order : public Base {
   Status status_ = Status::New;  //> Status=- Status=shop::Order::Status/t
   Money paid_ = Money(1);  //> Money=- Money=shop::Money/r
   static const int kLimit;
-  enum { kSize = sizeof(Customer) };  //> Customer=shop::Customer/t
+  enum { kSize = sizeof(Customer) };  //> Customer=shop::Customer/r
 };
 
 }  // namespace shop

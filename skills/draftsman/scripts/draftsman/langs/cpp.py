@@ -278,6 +278,21 @@ def _blank_inline_directives(src: bytes) -> bytes:
     return b"\n".join(lines)
 
 
+def _template_params(tmpl) -> list[str]:
+    """The names of a template declaration's parameters."""
+    params = tmpl.child_by_field_name("parameters")
+    out = []
+    for p in (params.named_children if params is not None else ()):
+        for c in p.named_children:
+            if c.type in ("type_identifier", "identifier"):
+                out.append(c.text.decode())
+                break
+            if c.type == "variadic_declarator" and c.named_children:
+                out.append(c.named_children[0].text.decode())
+                break
+    return out
+
+
 class CppSpec(LanguageSpec):
     name = "cpp"
     grammar = "cpp"
@@ -291,6 +306,163 @@ class CppSpec(LanguageSpec):
     modifier_keywords = frozenset({"virtual", "static", "explicit", "inline", "friend"})
     builtins = frozenset(_BUILTINS)
     parent_namespace_lookup = True
+    # bodies (issue #5)
+    type_argument_nodes = frozenset({"template_argument_list"})
+    receiver_part_nodes = frozenset({"identifier", "field_identifier", "type_identifier",
+                                     "namespace_identifier", "qualified_identifier",
+                                     "template_function", "template_method", "template_type"})
+    ref_priority = ("call", "receiver", "type")
+    values_hide_types = True
+    file_local_bodies = True
+    include_visibility = True
+
+    def branch_ranges(self, src):
+        # every branch of an `#if` group but an include guard (`#ifndef X` / `#define X`
+        # around the file) and `#ifdef __cplusplus`, innermost first
+        lines = src.split(b"\n")
+        offsets, at = [], 0
+        for line in lines:
+            offsets.append(at)
+            at += len(line) + 1
+        out, stack = [], []   # stack: [kind, start line index, guard]
+        for i, line in enumerate(lines):
+            m = _DIRECTIVE.match(line)
+            if not m:
+                continue
+            word = m.group(1)
+            if word.startswith(b"if"):
+                guard = b"__cplusplus" in line or (
+                    word == b"ifndef" and i + 1 < len(lines)
+                    and re.match(rb"\s*#\s*define\s+" + re.escape(line.split()[-1]) + rb"\b",
+                                 lines[i + 1]) is not None)
+                stack.append([i, guard])
+            elif stack:
+                start, guard = stack[-1]
+                if not guard:
+                    out.append((offsets[start], offsets[i], start + 1, i + 1))
+                if word == b"endif":
+                    stack.pop()
+                else:
+                    stack[-1][0] = i
+        out.sort(key=lambda r: r[1] - r[0])   # innermost first
+        return out
+
+    def unreadable(self, node):
+        # a function defined inside a block is a parse the grammar could not close (an `#if`
+        # inside a function that swallowed the functions after it): nothing in it is read
+        cur = node.parent
+        while cur is not None:
+            if cur.type == "function_definition":
+                up = cur.parent
+                while up is not None and up.type.startswith("preproc_"):
+                    up = up.parent
+                if up is not None and up.type == "compound_statement":
+                    return True   # (a local class's member functions are in its body)
+            cur = cur.parent
+        return False
+
+    def alias_params(self, node):
+        decl = node.parent
+        tmpl = decl.parent if decl is not None and decl.type == "alias_declaration" else None
+        if tmpl is None or tmpl.type != "template_declaration":
+            return []
+        return _template_params(tmpl)
+
+    def init_via(self, node, src):
+        # a friend function, an operator or a destructor defined in its class: its name
+        # (`operator==`, `~Foo`, `operator bool`)
+        while node.type == "template_declaration":
+            node = next((c for c in node.named_children if c.type == "function_definition"), node)
+            if node.type == "template_declaration":
+                break
+        decl = node.child_by_field_name("declarator")
+        if decl is not None and decl.type == "operator_cast":
+            return " ".join(decl.text.decode().split("(")[0].split())
+        while decl is not None and decl.type != "function_declarator":   # `Foo& operator=(...)`
+            decl = decl.child_by_field_name("declarator") or next(
+                (c for c in decl.named_children if c.type.endswith("declarator")), None)
+        inner = decl.child_by_field_name("declarator") if decl is not None else None
+        return " ".join(inner.text.decode().split()) if inner is not None else None
+
+    def ref_text(self, node, text):
+        if node.type == "qualified_identifier" and node.child_by_field_name("scope") is None:
+            return "::" + text   # `::Helper`
+        return text
+
+    def ref_position(self, node, position):
+        # `Lock l(Tag);` in a block: a declaration of l, a variable initialised with Tag or a
+        # function taking a Tag; a variable Tag hides the type there
+        if position != "type":
+            return position
+        cur = node
+        while cur.parent is not None and cur.parent.type in ("qualified_identifier", "template_type"):
+            cur = cur.parent
+        param = cur.parent
+        if param is None or param.type != "parameter_declaration" \
+                or param.child_by_field_name("type") != cur:
+            return position
+        fn = param.parent.parent if param.parent is not None else None
+        decl = fn.parent if fn is not None and fn.type == "function_declarator" else None
+        if decl is not None and decl.type == "declaration" and decl.parent is not None \
+                and decl.parent.type == "compound_statement":
+            return "receiver"
+        return position
+
+    def detached_owner(self, node, src):
+        # `void Foo::bar() {}`, `Foo::Foo() : ... {}`, `int Foo::x = 1;` at a namespace's scope:
+        # not in a class (a member defined there is the class's already), nor in a body
+        cur = node.parent
+        tparams: list[str] = []
+        while cur is not None and cur.type in ("template_declaration", "preproc_if",
+                                               "preproc_ifdef", "preproc_else", "preproc_elif",
+                                               "preproc_elifdef"):
+            if cur.type == "template_declaration":
+                params = cur.child_by_field_name("parameters")
+                if params is None or not params.named_children:
+                    return None   # `template <>`: a specialisation's member, not read
+                tparams += _template_params(cur)
+            cur = cur.parent
+        if cur is not None and cur.type not in ("translation_unit", "declaration_list",
+                                                "linkage_specification"):
+            return None
+        if self.unreadable(node.child_by_field_name("declarator") or node):
+            return None
+        decl = node.child_by_field_name("declarator")
+        while decl is not None and decl.type in ("pointer_declarator", "reference_declarator",
+                                                 "function_declarator", "init_declarator",
+                                                 "parenthesized_declarator"):
+            nxt = decl.child_by_field_name("declarator")
+            if nxt is None:
+                nxt = next((c for c in decl.named_children
+                            if c.type.endswith("declarator") or c.type == "qualified_identifier"), None)
+            decl = nxt
+        if decl is None or decl.type != "qualified_identifier":
+            return None
+        parts = []
+        cur = decl
+        while cur is not None and cur.type == "qualified_identifier":
+            scope = cur.child_by_field_name("scope")
+            if scope is None:
+                return None   # `::f()`: the global namespace's
+            parts.append(scope)
+            cur = cur.child_by_field_name("name")
+        if cur is None:
+            return None
+        # a template's member: the template (`Vec<T>::push`), not a specialisation of it
+        written = "::".join((p.child_by_field_name("name") or p).text.decode()
+                            if p.type == "template_type" else p.text.decode() for p in parts)
+        name = cur.text.decode()
+        if cur.type == "destructor_name":
+            name = "~" + name.lstrip("~").strip()
+        return written, name, tparams
+
+    def file_local_node(self, node):
+        cur = node.parent
+        while cur is not None:
+            if cur.type == "namespace_definition" and cur.child_by_field_name("name") is None:
+                return True
+            cur = cur.parent
+        return False
 
     def is_builtin(self, name):
         return all(w in self.builtins for w in name.split())

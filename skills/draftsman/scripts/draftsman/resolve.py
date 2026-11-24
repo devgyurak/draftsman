@@ -8,6 +8,7 @@ external type end up in ``IR.unresolved`` for Claude to judge.
 
 from __future__ import annotations
 
+import posixpath
 import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -42,6 +43,10 @@ class Resolver:
         for qname, t in types.items():
             self.by_simple.setdefault(t.name, []).append(qname)
         self.namespaces = {t.namespace for t in types.values() if t.namespace}
+        # every namespace a block of the sources opens (LanguageSpec.values_hide_types)
+        self.opened_namespaces: set[str] = {
+            "::".join(n.split("::")[:k]) for s in scopes for n in s.declared_namespaces
+            for k in range(1, n.count("::") + 2)}   # `namespace a::b {}` opens a too
         self.type_namespaces = set(self.namespaces)   # namespaces with a type declared in them
         self.unseen_types: dict[str, dict[str, list[Unseen]]] = {}   # name -> namespace -> places
         for s in scopes:
@@ -78,6 +83,8 @@ class Resolver:
         # alias -> (the type text it names, the file scope that text is resolved in)
         self.alias_targets: dict[str, tuple[str, FileScope]] = {
             a: (text, s) for s in scopes for a, text in s.alias_targets.items()}
+        self.alias_tparams: dict[str, set[str]] = {
+            a: ps for s in scopes for a, ps in s.alias_tparams.items()}
         # C++ inline namespaces: acme::v1::Versioned is also acme::Versioned
         inline = set().union(*(s.inline_namespaces for s in scopes)) if scopes else set()
         if inline:
@@ -97,6 +104,26 @@ class Resolver:
         self._ancestors_cache: dict[tuple[str, bool], list[str]] = {}
         self._namespace_cache: dict[str, bool] = {}
         self._package_cache: dict[tuple[str, Optional[str]], bool] = {}
+        # LanguageSpec.file_local_bodies: an id -> the files declaring it file-local, and
+        # the ids declared not so somewhere (_Builder fills them)
+        self.local_files: dict[str, set[str]] = {}
+        self.shared_ids: set[str] = set()
+
+    def _elsewhere(self, qname: str, file: Optional[str]) -> bool:
+        """Whether ``qname`` is a type only files other than ``file`` declare, each
+        file-local (LanguageSpec.file_local_bodies): no candidate there."""
+        return file is not None and qname in self.local_files \
+            and qname not in self.shared_ids and file not in self.local_files[qname]
+
+    def detached_owner(self, written: str, namespace: str, scope: FileScope) -> Optional[str]:
+        """The project type a member defined outside it names (`Foo` of `void Foo::bar()`
+        written in ``namespace``), or None."""
+        spec = spec_for_path(scope.file)
+        sep = spec.separator
+        ctx = RawType("", "", "detached", Location(scope.file, 0), scope, spec.name,
+                      namespace=namespace or None)
+        res = self.resolve(written, ctx, None, scope=scope)
+        return res.target if res.status == PROJECT else None
 
     # ------------------------------------------------------------ helpers
 
@@ -539,17 +566,24 @@ class Resolver:
                 inherit: bool = True, scope: Optional[FileScope] = None,
                 arity: Optional[int] = None, strict: bool = False,
                 nested: bool = True, head_arity: Optional[int] = None,
-                at_namespace: Optional[str] = None) -> Resolution:
+                at_namespace: Optional[str] = None, body_file: Optional[str] = None
+                ) -> Resolution:
         """What ``name`` written in ``rtype`` stands for. ``strict``: a name more than one
         wildcard import provides is unresolved, not the first one's. ``nested``: whether
         the nested types of ``rtype`` and the types around it are in scope (in a body,
         LanguageSpec.nested_types_in_bodies). ``head_arity``: how many type arguments the
         first part of a qualified name is written with. ``at_namespace``: written in that
         namespace outside any type (the target of an alias declared there), not in
-        ``rtype``."""
+        ``rtype``. ``body_file``: written in a body of that file, where a file-local type
+        of another file is no candidate (LanguageSpec.file_local_bodies)."""
         spec = LANGUAGES[rtype.language]
         sep = spec.separator
         scope = scope or (member.scope if member and member.scope else None) or rtype.scope
+        # C++ and the other languages name none of each other's types (no interop): in a
+        # directory of both, a C++ `Helper` of the global namespace is no C# `Helper`
+        cpp = spec.name == "cpp"
+        away = (lambda q: (q in self.index and (self.index[q].language == "cpp") != cpp)
+                or (body_file is not None and self._elsewhere(q, body_file)))
         chain = self._namespace_chain(
             rtype.namespace if at_namespace is None else at_namespace, sep,
             spec.parent_namespace_lookup, scope.namespace)
@@ -557,6 +591,10 @@ class Resolver:
         if name in self._type_params(rtype, member) and at_namespace is None:
             return Resolution(TPARAM)
 
+        if sep in name and body_file is not None and spec.values_hide_types and at_namespace is None:
+            found = self._class_head(name, rtype, inherit, nested, spec)
+            if found is not None:
+                return found
         if sep in name:
             first_is = None
             if spec.qualified_heads_in_scope:
@@ -570,7 +608,7 @@ class Resolver:
                     name = first_is + sep + rest   # `Models.Order` is App.Models.Order
             if first_is == "type":
                 pass   # what the type the head names has (`Lib.Order`: Shop.Lib's Order)
-            elif name in self.index:
+            elif name in self.index and not away(name):
                 return Resolution(PROJECT, name)
             elif name in self.inline_names:
                 return Resolution(PROJECT, self.inline_names[name])
@@ -578,7 +616,7 @@ class Resolver:
                 return Resolution(ALIAS, name)
             else:
                 for ns in chain:  # partially qualified: pay::Receipt inside namespace shop
-                    if ns and ns + sep + name in self.index:
+                    if ns and ns + sep + name in self.index and not away(ns + sep + name):
                         return Resolution(PROJECT, ns + sep + name)
                     if ns and ns + sep + name in self.inline_names:
                         return Resolution(PROJECT, self.inline_names[ns + sep + name])
@@ -597,7 +635,7 @@ class Resolver:
                         return (Resolution(EXTERNAL, imp.path + sep + rest) if imp.external
                                 else self._not_found(imp.path + sep + rest, spec))
             first = self.resolve(head, rtype, member, inherit, scope, strict=strict,
-                                 nested=nested, at_namespace=at_namespace)
+                                 nested=nested, at_namespace=at_namespace, body_file=body_file)
             if first.status == PROJECT:
                 found = self._nested_path(first.target, rest, sep, inherit, spec)
                 if found:
@@ -648,7 +686,7 @@ class Resolver:
         def in_namespaces() -> Optional[Resolution]:
             for ns in chain:
                 cand = ns + sep + name if ns else name
-                if not self._sees(rtype, cand):
+                if not self._sees(rtype, cand) or away(cand):
                     pass
                 elif cand in self.index:
                     return Resolution(PROJECT, cand)
@@ -800,15 +838,60 @@ class Resolver:
         return Resolution(UNRESOLVED, hint="; ".join(hints) or None,
                           candidates=cands, outside=outside)
 
-    def body_type(self, name: str, rtype: RawType, ref: RawBodyRef) -> Optional[str]:
+    def _class_head(self, name: str, rtype: RawType, inherit: bool, nested: bool,
+                    spec) -> Optional[Resolution]:
+        """C++, in a body: a qualified name whose head is a member type or alias of the
+        classes around, looked up there first as a simple name is (`Mutex::ScopedLock`
+        after `using Mutex = Poco::FastMutex;` in the class); None when the head is none."""
+        sep = spec.separator
+        head, rest = name.split(sep, 1)
+        found = self._in_types(head, rtype, inherit, nested, spec)
+        if found is not None and found.status == ALIAS and found.target:
+            aliased = self._alias_resolution(found.target, spec, 0)
+            if aliased is None or aliased.status != PROJECT:
+                return Resolution(UNRESOLVED)
+            found = aliased
+        if found is not None and found.status == PROJECT:
+            return self._nested_path(found.target, rest, sep, inherit, spec) or Resolution(UNRESOLVED)
+        return None
+
+    def body_alias(self, name: str, rtype: RawType, ref: RawBodyRef,
+                   qualifier: bool = False) -> Optional[str]:
+        """The alias a name in type position stands for (LanguageSpec.values_hide_types,
+        whose aliases are followed as the declared relations follow them), or None."""
+        res = self._body_resolution(name, rtype, ref, qualifier)
+        return res.target if res is not None and res.status == ALIAS else None
+
+    def _body_resolution(self, name: str, rtype: RawType, ref: RawBodyRef,
+                         qualifier: bool) -> Optional[Resolution]:
+        """``name`` where ``ref`` is written, or None where a value or a namespace of the
+        name may be meant (LanguageSpec.values_hide_types: `int Money;` hides the type
+        Money; `Keywords::now` may be a namespace Keywords's). ``qualifier``: the name stands
+        before `::`, where no variable is looked up."""
+        spec = LANGUAGES[rtype.language]
+        sep = spec.separator
+        if spec.values_hide_types:
+            if not qualifier and sep not in name and (
+                    self._is_variable(name, rtype, ref) or self._method_around(name, rtype, ref)):
+                return None
+            head = name.split(sep, 1)[0]
+            if (qualifier or sep in name) and self._namespace_around(head, rtype) and \
+                    self._in_body(head, rtype, ref, 0).status in (PROJECT, ALIAS):
+                return None   # a type and a namespace of the name: which is nearer is not known
+        return self._in_body(name, rtype, ref, 0)
+
+    def body_type(self, name: str, rtype: RawType, ref: RawBodyRef,
+                  qualifier: bool = False) -> Optional[str]:
         """The project type a name in type position stands for where ``ref`` is written,
         or None: also when a type of the name is declared anywhere in the member."""
-        res = self._in_body(name, rtype, ref, 0)
+        spec = LANGUAGES[rtype.language]
+        res = self._body_resolution(name, rtype, ref, qualifier)
+        if res is None:
+            return None
         if res.status == ALIAS and res.target:
             target = self._alias_type(res.target, name, rtype, ref)
         else:
             target = res.target if res.status == PROJECT else None
-        spec = LANGUAGES[rtype.language]
         head = name.split(spec.separator, 1)[0]
         if target is not None and head == name and (
                 self._unseen_nested(target, head, rtype, ref) or spec.alias_import_hides
@@ -818,6 +901,30 @@ class Resolver:
                 target, rtype) and self._outside_member(rtype, ref, head, True):
             return None   # a nested type of a superclass outside the sources may be it
         return target
+
+    def _method_around(self, name: str, rtype: RawType, ref: RawBodyRef) -> bool:
+        """Whether a type around ``ref`` (the named type, its outer types, a local class
+        around it) or a project supertype of one declares a method ``name``."""
+        for project, _ in self._around(rtype, ref, 0):
+            if any(self._has_method(t, name, set()) for t in project):
+                return True
+        cur: Optional[RawType] = rtype
+        while cur is not None:
+            if self._has_method(cur, name, set()):
+                return True
+            cur = self.index.get(cur.outer) if cur.outer else None
+        return False
+
+    def _namespace_around(self, head: str, rtype: RawType) -> bool:
+        """Whether ``head`` names a namespace of the sources the code around ``rtype``
+        sees by that name: one inside a namespace around it, or a top one."""
+        spec = LANGUAGES[rtype.language]
+        sep = spec.separator
+        for ns in self._namespace_chain(rtype.namespace, sep, spec.parent_namespace_lookup):
+            cand = ns + sep + head if ns else head
+            if cand in self.namespaces or cand in self.opened_namespaces:
+                return True
+        return False
 
     def _unseen_nested(self, target: str, head: str, rtype: RawType, ref: RawBodyRef) -> bool:
         """Whether ``head``, resolved to the nested type ``target``, cannot be it: the
@@ -1289,7 +1396,8 @@ class Resolver:
                 return Resolution(EXTERNAL, found + sep + rest if rest else found)
         res = self.resolve(name, rtype, ref.member, scope=ref.scope, strict=True,
                            nested=spec.nested_types_in_bodies,
-                           head_arity=ref.arities[0] if ref.arities and sep in name else None)
+                           head_arity=ref.arities[0] if ref.arities and sep in name else None,
+                           body_file=ref.scope.file if spec.file_local_bodies else None)
         if res.status == PROJECT and spec.rebinding_hides and (
                 self._rebound(res.target) or self._uncertain_path(name, ref.scope, spec)
                 or sep not in name and any(
@@ -1596,6 +1704,23 @@ class _Builder:
             for t in f.scope.implicit_types:
                 self.projects.setdefault(t, set()).add(f.scope.project)
         self._alias_cache: dict[str, tuple[list, list]] = {}
+        # LanguageSpec.file_local_bodies: an id -> the files declaring it file-local, and
+        # the ids some file declares not so
+        for f in files:
+            for t in f.types:
+                if t.file_local:
+                    self.resolver.local_files.setdefault(t.qualified_name, set()).add(f.path)
+                else:
+                    self.resolver.shared_ids.add(t.qualified_name)
+        # what each file includes (LanguageSpec.include_visibility)
+        self.file_includes = {f.path: f.scope.includes for f in files}
+        self._closures: Optional[dict[str, set[str]]] = None
+        # names in bodies of members defined outside their type: the type's
+        for f in files:
+            for written, ns, ref in f.scope.detached_refs:
+                target = self.resolver.detached_owner(written, ns, f.scope)
+                if target is not None:
+                    self.types[target].body_refs.append(ref)
 
     def _add(self, t: RawType) -> None:
         existing = self.types.get(t.qualified_name)
@@ -1643,6 +1768,8 @@ class _Builder:
         existing.body_refs.extend(t.body_refs)
         existing.body_fields |= t.body_fields
         existing.conditional |= t.conditional
+        existing.branches = None if existing.branches is None or t.branches is None \
+            else existing.branches + t.branches
         existing.left_out |= t.left_out
         existing.hidden_types.update(t.hidden_types)
         existing.generics += [g for g in t.generics if g not in existing.generics]
@@ -1793,43 +1920,123 @@ class _Builder:
     def _body(self, rtype: RawType) -> None:
         """A dependency, `evidence` "body", on the project type each name in a body stands
         for; a name that may mean something else draws nothing, and is never unresolved."""
+        spec = LANGUAGES[rtype.language]
+        sep = spec.separator
         for ref in rtype.body_refs:
-            if ref.position == "type":
+            targets: list[str] = []
+            if spec.values_hide_types and ref.position == "call" and sep not in ref.text and (
+                    self.resolver._function_named(ref.text, rtype, ref)
+                    or spec.outside_functions(ref.scope)):
+                continue   # `Ticket(1)` may call a function Ticket
+            if spec.values_hide_types:
+                # C++: a qualified name is types and namespaces; the longest prefix that is a
+                # project type is drawn (`Order::Status::Paid`: Order::Status), and an alias
+                # stands for every project type it names (as a declared relation's)
+                rooted = ref.text.startswith(sep)   # `::Helper`: the global namespace's
+                parts = ref.text[len(sep):].split(sep) if rooted else ref.text.split(sep)
+                n = 0
+                for k in range(len(parts), 0, -1):
+                    name, qualifier = sep.join(parts[:k]), k < len(parts)
+                    if rooted:
+                        target = name if name in self.types and not self.resolver._elsewhere(
+                            name, ref.scope.file if spec.file_local_bodies else None) else None
+                        alias = name if target is None and name in self.resolver.aliases else None
+                    else:
+                        target = self.resolver.body_type(name, rtype, ref, qualifier)
+                        alias = None if target is not None else \
+                            self.resolver.body_alias(name, rtype, ref, qualifier)
+                    if target is not None:
+                        # an enum's constant is read as the enum (`Status::Paid`): the place
+                        # is the enum's name
+                        while k > 1 and parts[k - 1] != self.types[target].name:
+                            k -= 1
+                        targets, n = [target], k
+                        break
+                    if alias is not None:
+                        targets, n = self._expand_alias(alias, body=True)[1], k
+                        break
+            elif ref.position == "type":
                 target, n = self.resolver.body_type(ref.text, rtype, ref), len(ref.places)
+                targets = [target] if target else []
             else:
                 target, n = self.resolver.body_receiver(ref, rtype) or (None, 0)
-            if target is None or target == rtype.qualified_name:
-                continue
-            # a type declared in code a build may leave out, or a name some build declares
-            # a type of where the parser saw none: no one type for every build
-            sep = LANGUAGES[rtype.language].separator
-            if self.types[target].conditional or any(
-                    p in self.left_out or p in ref.scope.left_out_names or p in rtype.left_out
-                    for p in ref.text.split(sep)[:n]):
-                continue
-            spec = LANGUAGES[rtype.language]
-            if spec.file_local(self.types[target].modifiers) and (
-                    ref.scope.file not in self.part_files.get(target, set()) if spec.file_local_copies
-                    else self.part_files.get(target, set()) != {ref.scope.file}):
-                continue   # a C# `file` type is seen in its file only, and is one type there
-            if len(self.projects.get(target, ())) > 1:
-                continue   # one id, a type in each of several projects
-            if any(imp.conditional for imp in ref.scope.imports) and target != self._without(
-                    ref, rtype, n):
-                continue   # through an import some build leaves out
-            if not self._visible(target, ref.scope.project, LANGUAGES[rtype.language]):
-                continue   # declared in a project the file's project does not reference
-            if not spec.sees_declaration(ref.scope, target, self.types[target].namespace, [
-                    (f, self.file_projects.get(f)) for f in sorted(self.part_files.get(target, ()))]):
-                continue   # declared in a platform's source set the file's does not see
-            if ref.arities and ref.arities[n - 1] is not None \
-                    and ref.arities[n - 1] not in self.types[target].arities:
-                continue   # `Repo<int>` is no Repo: another type of the name, further out
-            line, col = ref.places[n - 1]
-            self.body_uses.append((ref.scope.file, line, col, rtype.qualified_name, target))
-            self.relations.append(Relation(rtype.qualified_name, target, "dependency",
-                                           Location(ref.scope.file, line), via=ref.via,
-                                           evidence="body"))
+                targets = [target] if target else []
+            for target in targets:
+                if target != rtype.qualified_name:
+                    self._draw(rtype, ref, target, n)
+
+    def _draw(self, rtype: RawType, ref: RawBodyRef, target: str, n: int) -> None:
+        """The body relation of ``ref``'s first ``n`` parts to ``target``, unless a build
+        may see another type there."""
+        # a type declared in code a build may leave out, or a name some build declares
+        # a type of where the parser saw none: no one type for every build
+        sep = LANGUAGES[rtype.language].separator
+        if self.types[target].conditional or any(
+                p in self.left_out or p in ref.scope.left_out_names or p in rtype.left_out
+                for p in ref.text.split(sep)[:n]):
+            return
+        spec = LANGUAGES[rtype.language]
+        if spec.file_local(self.types[target].modifiers) and (
+                ref.scope.file not in self.part_files.get(target, set()) if spec.file_local_copies
+                else self.part_files.get(target, set()) != {ref.scope.file}):
+            return   # a C# `file` type is seen in its file only, and is one type there
+        if len(self.projects.get(target, ())) > 1:
+            return   # one id, a type in each of several projects
+        branches = self.types[target].branches
+        if branches is not None and not any(
+                f == ref.scope.file and first <= ref.places[0][0] <= last
+                for f, first, last in branches):
+            return   # declared in an `#if` branch, used outside it: another type may be meant
+        if spec.include_visibility and not self.part_files.get(target, set()) & \
+                self._included(ref.scope.file):
+            return   # declared in a file the body's file does not include (another program's)
+        if any(imp.conditional for imp in ref.scope.imports) and target != self._without(
+                ref, rtype, n):
+            return   # through an import some build leaves out
+        if not self._visible(target, ref.scope.project, LANGUAGES[rtype.language]):
+            return   # declared in a project the file's project does not reference
+        if not spec.sees_declaration(ref.scope, target, self.types[target].namespace, [
+                (f, self.file_projects.get(f)) for f in sorted(self.part_files.get(target, ()))]):
+            return   # declared in a platform's source set the file's does not see
+        if ref.arities and ref.arities[n - 1] is not None \
+                and ref.arities[n - 1] not in self.types[target].arities:
+            return   # `Repo<int>` is no Repo: another type of the name, further out
+        line, col = ref.places[n - 1]
+        self.body_uses.append((ref.scope.file, line, col, rtype.qualified_name, target))
+        self.relations.append(Relation(rtype.qualified_name, target, "dependency",
+                                       Location(ref.scope.file, line), via=ref.via,
+                                       evidence="body"))
+
+    def _included(self, file: str) -> set[str]:
+        """The file and the files it includes, directly or through others
+        (LanguageSpec.include_visibility): a quoted path from the file's directory first,
+        else every file of the sources whose path ends with the one written."""
+        if self._closures is None:
+            self._closures = {}
+            self._by_tail: dict[str, list[str]] = {}
+            for path in self.file_includes:
+                parts = path.split("/")
+                for k in range(len(parts)):
+                    self._by_tail.setdefault("/".join(parts[k:]), []).append(path)
+        if file in self._closures:
+            return self._closures[file]
+        seen, todo = {file}, [file]
+        while todo:
+            cur = todo.pop()
+            for written in self.file_includes.get(cur, ()):
+                path = written.strip()[1:-1].strip()
+                found = []
+                if written.startswith('"'):
+                    near = posixpath.normpath(posixpath.join(posixpath.dirname(cur), path))
+                    if near in self.file_includes:
+                        found = [near]
+                found = found or self._by_tail.get(posixpath.normpath(path), [])
+                for f in found:
+                    if f not in seen:
+                        seen.add(f)
+                        todo.append(f)
+        self._closures[file] = seen
+        return seen
 
     def _without(self, ref: RawBodyRef, rtype: RawType, n: int) -> Optional[str]:
         """What ``ref`` resolves to (its first ``n`` parts) without the file's conditional
@@ -1932,16 +2139,22 @@ class _Builder:
             if res.status == UNRESOLVED and name not in values:
                 self._unresolved(rtype, name, res, loc, via=m.name)
 
-    def _expand_alias(self, alias: str, depth: int = 0) -> tuple[list, list]:
+    def _expand_alias(self, alias: str, depth: int = 0, body: bool = False) -> tuple[list, list]:
         """What a type alias names, resolved where the alias is declared:
         ([(project type, multiplicity, ownership)] it points at as a field type would,
-        [every project type it mentions]). Aliases of aliases are followed."""
-        if alias in self._alias_cache:
-            return self._alias_cache[alias]
+        [every project type it mentions]). Aliases of aliases are followed. ``body``: for
+        a name in a body, where the alias's own type parameters name no type (`Hash` of
+        `template <class K, class Hash> using M = map<K, Hash>`)."""
+        key = (alias, body) if body else alias
+        if key in self._alias_cache:
+            return self._alias_cache[key]
         entry = self.resolver.alias_targets.get(alias)
         if entry is None or depth > 4:
             return [], []
-        self._alias_cache[alias] = ([], [])   # a cycle expands to nothing
+        self._alias_cache[key] = ([], [])   # a cycle expands to nothing
+        own = self.resolver.alias_tparams.get(alias, set()) if body else set()
+        if body and entry[0].lstrip().startswith("typename "):
+            return [], []   # `typename NObserver<C, N>::Ptr`: known once instantiated
         text, scope = entry
         spec = spec_for_path(scope.file)
         sep = spec.separator
@@ -1954,21 +2167,27 @@ class _Builder:
         leaves: list = []
         for leaf in self.wrappers.leaves(ref, self._is_project(ctx, None),
                                          track_ownership=spec.name == "cpp"):
-            res = self.resolver.resolve(leaf.name, ctx, None, arity=len(leaf.args))
+            if leaf.name.split(sep, 1)[0] in own:
+                continue
+            res = self.resolver.resolve(leaf.name, ctx, None, arity=len(leaf.args),
+                                        body_file=scope.file if body else None)
             if res.status == PROJECT:
                 leaves.append((res.target, leaf.multiplicity, leaf.ownership))
             elif res.status == ALIAS and res.target:
-                for target, mult, own in self._expand_alias(res.target, depth + 1)[0]:
-                    leaves.append((target, combine(leaf.multiplicity, mult), own or leaf.ownership))
+                for target, mult, owner in self._expand_alias(res.target, depth + 1, body)[0]:
+                    leaves.append((target, combine(leaf.multiplicity, mult), owner or leaf.ownership))
         names: list = []
         for name, arity in named_refs(ref, self._is_project(ctx, None)):
-            res = self.resolver.resolve(name, ctx, None, arity=arity)
+            if name.split(sep, 1)[0] in own:
+                continue
+            res = self.resolver.resolve(name, ctx, None, arity=arity,
+                                        body_file=scope.file if body else None)
             if res.status == PROJECT:
                 names.append(res.target)
             elif res.status == ALIAS and res.target and res.target != alias:
-                names += self._expand_alias(res.target, depth + 1)[1]
-        self._alias_cache[alias] = (leaves, list(dict.fromkeys(names)))
-        return self._alias_cache[alias]
+                names += self._expand_alias(res.target, depth + 1, body)[1]
+        self._alias_cache[key] = (leaves, list(dict.fromkeys(names)))
+        return self._alias_cache[key]
 
     def _finalize_relations(self) -> list[Relation]:
         # keep every fact: one relation per (from, to, kind, via). Collapsing

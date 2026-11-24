@@ -112,6 +112,18 @@ class FileScope:
     # a syntax error)
     unseen_types: dict[str, dict[str, list[Unseen]]] = field(default_factory=dict)
     project: Optional[str] = None   # build project the file compiles in (C#: its .csproj)
+    # names in bodies of members defined outside their type (C++'s `void Foo::bar() {}`,
+    # `@body.detached`): (the type as written, the namespace the definition stands in, the
+    # name), each the type's once the types are known
+    detached_refs: list = field(default_factory=list)
+    # the files the file includes as written (`"Poco/Foo.h"`, `<Poco/Foo.h>`; C++,
+    # `@body.include`): LanguageSpec.include_visibility
+    includes: list[str] = field(default_factory=list)
+    # every namespace the file opens a block of, also one declaring no type (C++'s
+    # `namespace Keywords { int now(); }`): LanguageSpec.values_hide_types
+    declared_namespaces: set[str] = field(default_factory=set)
+    # alias -> its own type parameters (C++'s `template <class K> using M = map<K, Hash>`)
+    alias_tparams: dict[str, set[str]] = field(default_factory=dict)
 
 
 class LanguageSpec:
@@ -215,6 +227,24 @@ class LanguageSpec:
     # declare is still that id where one of them names it: Kotlin's `private class` of each
     # platform's file, which ir.json makes one type (C#'s two `file class Local` are not)
     file_local_copies: bool = False
+    # Whether a type declared file-local (LanguageSpec.file_local_node: C++'s anonymous
+    # namespace) is a candidate for a name in a body of its file only: elsewhere the lookup
+    # goes on past it (bodies only)
+    file_local_bodies: bool = False
+    # Whether a variable, a parameter, a field or a method of a type around hides a type of
+    # its name also where only a type may stand (C++: one scope for both), and the parts of
+    # a qualified name are types or namespaces only (`A::B::c`: no variable is looked up
+    # before `::`), of which the longest prefix that is a project type is drawn; a call of
+    # a qualified name is read so too. A qualifier that a namespace around may be draws
+    # nothing
+    values_hide_types: bool = False
+    # Whether a type is a candidate for a name in a body only where its file is included,
+    # directly or through others, by the body's file (C++: a translation unit sees what it
+    # includes; another program's class of the name is none). Bodies only
+    include_visibility: bool = False
+    # When one node is captured as names of several positions, the one kept, by position
+    # (C++: what is called before what only a type may be)
+    ref_priority: tuple[str, ...] = ()
     # Whether a supertype outside the sources may hide a name in a body by a member of it
     # (LanguageSpec.outside_member): a value (`Foo(`, `Foo.x`) under any such supertype, a
     # type under a superclass, whose nested types the class sees (Kotlin)
@@ -271,6 +301,12 @@ class LanguageSpec:
     def conditional_ranges(self, src: bytes) -> list[tuple[int, int]]:
         """Byte ranges of the code preprocess keeps that a build may leave out (C#'s first
         branch of an `#if`): a type declared there is no certain type for a body."""
+        return []
+
+    def branch_ranges(self, src: bytes) -> list[tuple[int, int, int, int]]:
+        """(first byte, end byte, first line, last line) of each branch of a conditional
+        group (C++'s `#if`/`#elif`/`#else`, include guards aside), innermost first: a type
+        declared in one is a candidate for a name in a body of that branch only."""
         return []
 
     def left_out_types(self, src: bytes) -> set[str]:
@@ -343,6 +379,37 @@ class LanguageSpec:
         for, whose members are names in its body: the type written; Kotlin's type
         parameter its bounds (`fun <T : Ctx> T.ext()`)."""
         return [text]
+
+    def unreadable(self, node: "ts.Node") -> bool:
+        """Whether a name a `@body.ref.*` captures stands where the parse cannot be trusted
+        (C++: a function definition inside a block, an `#if` the grammar could not close)."""
+        return False
+
+    def alias_params(self, node: "ts.Node") -> list[str]:
+        """The type parameters of the alias whose name is ``node`` (C++'s alias template)."""
+        return []
+
+    def ref_text(self, node: "ts.Node", text: str) -> str:
+        """The name a `@body.ref.*` capture is, its parts joined by the separator (C++'s
+        `::Helper` keeps its `::`: the global namespace's)."""
+        return text
+
+    def ref_position(self, node: "ts.Node", position: str) -> str:
+        """The position of a name a `@body.ref.*` captures (C++: a block-scope function
+        declaration's parameter types, `Lock l(Tag);`, where a variable may stand)."""
+        return position
+
+    def detached_owner(self, node: "ts.Node", src: bytes) -> Optional[tuple[str, str, list[str]]]:
+        """For a member defined outside its type (`@body.detached`: C++'s `void
+        Foo::bar() {}`, `int Foo::x = 1;`): (the type as written, the member's name, the
+        type parameters of the definition), or None when it is none (a free function, a
+        template specialisation's member)."""
+        return None
+
+    def file_local_node(self, node: "ts.Node") -> bool:
+        """Whether a type declared at ``node`` is seen in its file only (C++'s anonymous
+        namespace; LanguageSpec.file_local_bodies)."""
+        return False
 
     def member_of(self, node: "ts.Node") -> Optional["ts.Node"]:
         """The declaration a node outside it belongs to (Kotlin's accessor on the line
