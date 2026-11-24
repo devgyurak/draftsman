@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.20)
+project(type-uses CXX)
+find_package(Clang REQUIRED CONFIG)
+set(CMAKE_CXX_STANDARD 17)
+add_executable(type-uses TypeUses.cpp)
+target_include_directories(type-uses PRIVATE ${CLANG_INCLUDE_DIRS} ${LLVM_INCLUDE_DIRS})
+target_compile_options(type-uses PRIVATE -fno-rtti)
+target_link_libraries(type-uses PRIVATE clangTooling clangFrontend clangAST clangUnifiedSymbolResolution clangLex clangBasic)

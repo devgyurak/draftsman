@@ -31,7 +31,7 @@ import json
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Optional
 
 
 def read(path: Path) -> list[dict]:
@@ -139,13 +139,19 @@ def drawable(r: dict) -> bool:
 def compare(drawn: list[tuple[str, int, int, str, str]], recs: list[dict],
             verbose: bool = False, key: str = "the answer key",
             same: Callable[[dict, str], bool] = lambda r, dst: True,
-            drawable: Callable[[dict], bool] = drawable, uncompiled: set = frozenset()) -> int:
+            drawable: Callable[[dict], bool] = drawable, uncompiled=frozenset(),
+            apart: Callable[[dict], Optional[str]] = lambda r: None) -> int:
     """Check every name a body relation is drawn from, (file, line, col, from, to) as
     _Builder.body_uses lists them, against what the key resolved at its place; 1 on any
     mismatch outside the files that did not compile. ``same`` tells whether the key's
     type of the target's id is the one drawn (C#'s two `Program` classes share an id);
     ``drawable`` which of the key's names count as not drawn when they are not;
-    ``uncompiled`` files no compilation compiles, whose names the key cannot answer."""
+    ``uncompiled`` files no compilation compiles, whose names the key cannot answer (a set,
+    or a dict of a file to "all" or the lines no compilation compiles); ``apart`` the
+    reason a key's answer that differs is counted apart, not as a mismatch (C++: a place
+    translation units answer differently, a dependent name). A key's answer may name
+    several types (`targets`: a C++ alias of `AutoPtr<Channel>`), each of which may be
+    drawn."""
     broken = {r["file"] for r in recs if "diagnostic" in r}
     uses = {(r["file"], r["line"], r["col"]): r for r in recs if "use" in r}
     problems: Counter = Counter()
@@ -156,7 +162,7 @@ def compare(drawn: list[tuple[str, int, int, str, str]], recs: list[dict],
             why = f"{key} resolved no name there"
         elif r["kind"] != "type":
             why = f"{key}: {r['kind']}"
-        elif r["target"] != dst:
+        elif r["target"] != dst and dst not in r.get("targets", ()):
             why = f"{key}: {r['target']}"
         elif not same(r, dst):
             why = f"{key}: {r['target']} of {', '.join(r.get('files', ()))}"
@@ -164,15 +170,20 @@ def compare(drawn: list[tuple[str, int, int, str, str]], recs: list[dict],
             why = f"{key} draws it from {r['from']}"
         else:
             continue
+        skipped = uncompiled.get(file, ()) if isinstance(uncompiled, dict) else \
+            ("all" if file in uncompiled else ())
         where = ("in a file with compile errors" if file in broken else
-                 "in a file no compilation compiles" if file in uncompiled else "mismatch")
+                 "in a file no compilation compiles" if skipped == "all" else
+                 "in lines no compilation compiles" if line in skipped else
+                 (r is not None and apart(r)) or "mismatch")
         problems[where] += 1
         shown.append(f"  {where}: {file}:{line}:{col + 1} {src} -> {dst}; {why}")
 
     at = {(f, line, col) for f, line, col, _, _ in drawn}
     missed = Counter(r["pos"] for k, r in uses.items() if drawable(r) and k not in at)
     pairs = {(s_, d) for *_, s_, d in drawn}
-    want = {(r["from"], r["target"]) for r in uses.values() if drawable(r)}
+    want = {(r["from"], t) for r in uses.values() if drawable(r)
+            for t in r.get("targets") or [r["target"]]}
     print(f"compare: {len(drawn)} names drawn as body relations ({len(pairs)} pairs); "
           + (", ".join(f"{k} {v}" for k, v in sorted(problems.items())) or "0 mismatches"))
     print(f"  {key}'s project types not drawn: "
