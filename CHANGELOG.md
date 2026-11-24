@@ -7,6 +7,9 @@ Notes for anyone with `view.json` files written against a development build:
 - **0.3.0**: the entries below on nested types and annotations change the default
   focus diagram and the relations in `ir.json`; results measured with 0.2.0 (the
   benchmark's runs among them) are not comparable with 0.3.0 ones.
+- **After 0.8.0**: C++'s `ir.json` gains the relations read from names in bodies
+  (below); results measured with 0.8.0 are not comparable on what C++ bodies relate.
+  C++'s declared relations and every other language's `ir.json` are the same.
 - **0.8.0**: Kotlin's `ir.json` gains the relations read from names in bodies
   (below); results measured with 0.7.0 are not comparable with 0.8.0 ones on what Kotlin
   bodies relate.
@@ -114,6 +117,37 @@ Notes for anyone with `view.json` files written against a development build:
   (`Field`). Django extracts in about 2.5 s instead of 1.0 s. jsoup's, petclinic's,
   Netty's, TypeORM's and nest's `ir.json` are byte for byte the same; the C#, Kotlin and
   C++ e2e projects were not run again.
+- **Names in C++ bodies are relations** (#5). A project type a member function's body
+  names is a dependency marked `evidence: "body"`, also in a member defined out of its
+  class (`void Foo::bar() {}`, a constructor's initializers, `int Foo::x = ...;`: the
+  class's, looked up in the class, its bases and the namespaces around the class: 78% of
+  POCO's body names), a friend function, an operator or a destructor defined in the class,
+  a default argument or member initializer, an enumerator's value, and a lambda or a local
+  class inside them. C++ has one scope for types and values: a variable, a field or a
+  method hides a type of its name also where only a type stands; a qualified name's parts
+  are types or namespaces (its longest project-type prefix is drawn, a head a namespace
+  around may be draws nothing, a head is looked up in the classes around first); a call
+  (`Money(1)`) draws nothing beside a function of the name; an alias stands for every
+  project type it names, as a declared relation's (not an alias template's own
+  parameters, nor a dependent `typename X<T>::Y`). What a build decides, read from the
+  sources: a type of an anonymous namespace is its file's; a type is drawn only where the
+  body's file includes its file (another program's global `Utility` is no RemoteGen's:
+  132 wrong names kept out at a cost of 5); a type declared in an `#if` branch only in
+  that branch (2 kept out, 102 lost); a function the grammar nests in a block (an `#if`
+  that opens a block in each branch) is not read. Under a base class of std, only what
+  `langs/cpp_std.json` knows hides a name (libstdc++'s public and protected members, as
+  Clang reads them: `oracle.py table`, 81 KB); a base it does not know, or one written
+  with the class's template parameters, hides nothing. Clang is the answer key:
+  `bench/clang_oracle` runs a libTooling tool (TypeUses, built against LLVM 23.1.6 in a
+  container) on each translation unit CMake configures, and on each header no unit
+  includes as a unit of its own; a header has an answer only where every unit that
+  compiles the line agrees. leveldb: 877 names drawn, POCO 21627, 0 mismatches. Not drawn:
+  code outside every type (#8: 220 of leveldb's 1027 project type names in bodies, 990 of
+  POCO's 21100) and template specialisations (1671 of POCO's). A fixture of 77 names and
+  review set cpp1 pin the forms. leveldb gains 597 body dependencies and POCO 10785.
+  Declared relations are unchanged, but C++ and the other languages no longer name each
+  other's types in a directory of both (a C# `Helper` took a C++ global struct); the
+  lookup rules above apply to bodies only (#7 lists where declared relations differ).
 - **Names in Kotlin bodies are relations** (#5, 0.8.0). A project type a body
   names where only a type stands (a local's or parameter's type, `is`, `as`, type
   arguments, `catch`, a local class's or anonymous object's supertypes), where a member is

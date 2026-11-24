@@ -20,8 +20,8 @@ project.
 | TypeScript | [TypeORM](typescript/typeorm.md) | `d5b143dd7e` (2026-11-16) | 496 | 694 | 3968 + 2076 body | 1 (1 unexplained) | 0 |
 | Python | [httpx](python/httpx.md) | `7cff5f79bc` (2026-11-16) | 23 | 87 | 283 + 152 body | 0 | 0 |
 | Python | [Django](python/django.md) | `d3954c9813` (2026-11-16) | 879 | 1964 | 1865 + 3203 body | 0 | 0 |
-| C++ | [leveldb](cpp/leveldb.md) | `29465588d3` (2026-11-12) | 102 | 161 | 885 | 2 (2 unexplained) | 9 |
-| C++ | [POCO](cpp/poco.md) | `2ef5cec8a9` (2026-11-17) | 2317 | 2066 | 9983 | 309 (1 ambiguous, 4 outside, 304 unexplained) | 333 |
+| C++ | [leveldb](cpp/leveldb.md) | `29465588d3` (2026-11-12) | 102 | 161 | 885 + 597 body | 2 (2 unexplained) | 9 |
+| C++ | [POCO](cpp/poco.md) | `2ef5cec8a9` (2026-11-17) | 2317 | 2066 | 9983 + 10785 body | 309 (1 ambiguous, 4 outside, 304 unexplained) | 333 |
 
 Unresolved references are split by reason as `extract.py` prints them: ambiguous, outside
 (the sources), unexplained; see [`ir-schema.md`](../../skills/draftsman/references/ir-schema.md#unresolved).

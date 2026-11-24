@@ -685,6 +685,53 @@ is that type. Aliases of aliases are followed.
   `Q_DECL_...`), and the `signals:` / `public slots:` sections are blanked or read as access
   sections before parsing (signals are public). Other `Q_` names (`Q_FIRST = 1,`) are left
   alone.
-- Not handled: `#include` graphs (resolution is by name and namespace, not by includes),
-  template specialisations (skipped, see above), private/protected inheritance (drawn as
-  plain `extends`).
+- Names in bodies (`evidence: "body"`; a member function's body, also one defined out of
+  its class (`void Foo::bar() {}`, `Foo::Foo() : Base(1) {}`, `int Foo::x = ...;`: the
+  class's, looked up in the class, its bases, the namespaces around the class, then the
+  file's `using`s), a constructor's initializers, a default argument or member
+  initializer, an enumerator's value, a friend function, an operator or a destructor
+  defined in the class, and what is inside them: lambdas and local classes, which are the
+  function's around them). Where only a type stands (a declaration's type, `new`, a cast,
+  a template argument) the name is looked up among types; a variable, a parameter, a
+  field or a method of the classes around hides a type of its name there too, as C++ has
+  one scope for both. A qualified name's parts are types or namespaces (no variable is
+  looked up before `::`): the longest prefix that is a project type is drawn
+  (`Order::Status::Paid` draws Order::Status, `A::B::c()` A::B), the head looked up in
+  the classes around first (`Mutex::ScopedLock` after `using Mutex = FastMutex;`), and a
+  head that a namespace around may be draws nothing (`Keywords::now()` beside a type
+  `Keywords`); `::Foo` is the global one. What is called (`Money(1)`, `ns::Money(1)`,
+  `AutoPtr<X>(p)`), a base's initializer (`: Base(1)`), `sizeof(X)`, `typeid(X)` and a
+  block-scope function declaration's parameter (`Guard g(Tag);`, a variable Tag when
+  one is in scope) may be a value too; a call draws nothing where a function of the name
+  is declared at a namespace's scope anywhere in the sources or a method of the classes
+  around. An alias stands for every project type its written type names, as a declared
+  relation's (`typedef AutoPtr<Channel> Ptr;`), but an alias template's own parameters
+  and a dependent `typename X<T>::Y` name none. What a build decides, read from the
+  sources: a type of an anonymous namespace is a candidate in its file only; a type is
+  drawn only where its file is included by the body's file, directly or through others
+  (another program's global `Utility` is none of RemoteGen's: a quoted path from the
+  file's directory first, else every file whose path ends with the one written); a type
+  declared in an `#if` branch is drawn in that branch only (POCO's `ip_mreq` for HP-UX
+  beside the system's). Bases outside the sources: under a class of `std` that
+  `cpp_std.json` knows (libstdc++'s, as Clang reads it: `bench/clang_oracle/oracle.py
+  table`; also through its typedefs, `std::ostream`), a name draws nothing where the base
+  has a public or protected member of it (before `::` a member type only); under one it
+  does not know, or one written with the class's template parameters (`std::vector<T>`,
+  looked into once T is known), nothing is hidden. C++ and the other languages name none
+  of each other's types. Checked against Clang (`bench/clang_oracle`): leveldb 877 names,
+  POCO 21,611, no mismatch.
+- Known limits of bodies. Not drawn: code outside every type (free functions, a
+  namespace's variables; #8) and template specialisations (`template <> struct X<int>
+  {...}`, `template <> void X<int>::f() {}`), as declared relations skip them; the part of
+  a longer name (`Order` in `Order::Line`); a member access's member (`x.Foo`); a macro's
+  argument the preprocessing blanks (`POCO_IMPLEMENT_EXCEPTION(E, Base, ...)`); what
+  follows an `#if` that opens a block in each branch (`#if A if (x) { #else if (y) {
+  #endif }`), which the grammar takes for one function holding the next ones; a type
+  outside the include graph a path written with a macro or a build's include directory
+  makes. Lost to a rule: a type of an `#if` branch named outside it (POCO 99); a call of
+  a type beside a function of its name declared anywhere (16); a type of a file the body's
+  file includes through a path the suffix match misses (4). A local variable hides its
+  name in the whole member, also before it is declared.
+- Not handled in declared relations: `#include` graphs (resolution is by name and
+  namespace, not by includes; bodies use them, above), template specialisations
+  (skipped, see above), private/protected inheritance (drawn as plain `extends`).

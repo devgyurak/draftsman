@@ -11,7 +11,7 @@ exception classes.
 | Commit | `2ef5cec8a9` (2026-11-17) |
 | Extracted | the whole repository without tests (`testsuite/`, `Data/DataTest`, `CppUnit/`), `samples/`, `fuzzing/`, `Benchmark/` and the bundled third-party code (`dependencies/`, `Data/SQLParser`) |
 
-Measured on 2026-11-20 with Draftsman 0.3.0.
+Measured on 2026-11-24 with Draftsman after 0.8.0 (at `81ecfac`); the declared relations are the same as 0.3.0's.
 
 ## Run
 
@@ -49,16 +49,16 @@ unresolved below.
 `extract.py` prints:
 
 ```text
-draftsman: 2317 files, 2066 types, relations: association 1920, dependency 6989, extends 893, implements 181, 309 unresolved (1 ambiguous, 4 outside the sources, 304 unexplained), 333 diagnostics
+draftsman: 2317 files, 2066 types, relations: association 1920, dependency 6989, extends 893, implements 181, body dependency 10785, 309 unresolved (1 ambiguous, 4 outside the sources, 304 unexplained), 333 diagnostics
 ```
 
-| Files | Types | association | dependency | extends | implements | Unresolved | Diagnostics |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 2317 | 2066 | 1920 | 6989 | 893 | 181 | 309 (1 ambiguous, 4 outside, 304 unexplained) | 333 |
+| Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 2317 | 2066 | 1920 | 6989 | 893 | 181 | 10785 | 309 (1 ambiguous, 4 outside, 304 unexplained) | 333 |
 
 Types by kind: 1374 classes, 273 structs, 2 unions, 74 abstract classes, 65 interfaces, 278 enums.
 
-The Mermaid and SVG renders of the view draw 35 boxes and 87 relations (`Poco::Logger` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2066 types, as 1626 boxes with 440 nested types folded into their outer types, and 4833 relations and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 50 boxes and 126 relations (`Poco::Logger` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2066 types, as 1626 boxes with 440 nested types folded into their outer types, and 7426 relations (body relations among them) and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
@@ -126,6 +126,7 @@ extracted; what is lost is members near a span. By cause:
 
 ## What it covers
 
+- Names in bodies (`evidence: "body"`): 21627 names are drawn as 10785 body dependencies, and each matches what Clang resolves there (`bench/clang_oracle`: 960 translation units configured by CMake with every optional component the image has the libraries of, and 43 headers no unit includes compiled each on its own; a header's answer only where every unit that compiles the line agrees; 0 mismatches). Counted apart: 1160 names in files and `#if` branches no Linux unit compiles (Windows' `NetSSL_Win`, the `*_WIN32`, `*_VX` files), 17 dependent names in templates, one in DNSSD/Bonjour (Avahi's `dns_sd.h` lacks newer calls). Member functions defined out of their class are their class's (most of POCO's body names: 78%); code outside every type (990 names) and template specialisations' bodies (1671) draw nothing (#8).
 - Export macros in mixed case between `class` and the name: more than 1100 header lines
   start with `class Foundation_API Logger: public Channel` and the like (`Net_API`,
   `NetSSL_Win_API`, `DNSSD_Bonjour_API`); also before functions (`Net_API std::ostream&

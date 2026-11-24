@@ -68,6 +68,8 @@ a body is, which names it writes, and what may hide them there.
 | `@body.global` | – | a variable of the file's top scope wherever it stands (Python `global Foo` in a function) |
 | `@body.guarded` | – | a block only some resolvers read (a branch of Python's `if sys.platform == ...`, which mypy decides for one platform): no name in it is recorded, and a class statement in it at the file's top is rebound (below) |
 | `@body.class` + `@body.class.super` | – | the body of an anonymous or local class and one supertype it names; the members it inherits are in scope inside it. Not for `o.new Inner() { }`, whose supertype is a member of o's type |
+| `@body.detached` | – | a member defined outside its type (C++'s `void Foo::bar() {}`, `Foo::Foo() : Base(1) {}`, `int Foo::x = 1;`): `LanguageSpec.detached_owner` says the type as written, the member's name and the definition's type parameters (none for a specialisation's member); the names in its body are that type's, found once every file is read, from the namespaces around the definition (`FileScope.detached_refs`) |
+| `@body.include` | – | a file the file includes as written (C++'s `#include "Poco/Foo.h"`): `LanguageSpec.include_visibility` |
 
 A `@body.ref.*` belongs to the nearest enclosing named type, across opaque nodes (a name
 in a lambda or an anonymous class is the named type's), `via` the member or initializer
@@ -150,6 +152,21 @@ a package the file's build project references, or a project it references passes
 setter, `field` in a property's accessor) and `declaration_read` (whether a declaration
 `@body.declared_type` captures is one where it stands: C#'s `out` arguments and
 deconstructions, not `F(Order < b, Customer > d)`). Each of them draws less where a build may differ, never more.
+C++ adds `values_hide_types` (a variable, a field or a method of the classes around
+hides a type also where only a type stands; a qualified name's parts are types or
+namespaces, its longest project-type prefix drawn, a head that a namespace around may be,
+`FileScope.declared_namespaces`, drawing nothing, a head looked up in the classes around
+first; an alias followed as a declared relation's, not through its own template parameters,
+`FileScope.alias_tparams`, nor a dependent `typename X<T>::Y`), `ref_priority` (one node
+captured in several positions is read in the first), `file_local_bodies` with
+`file_local_node` (a type of an anonymous namespace is a candidate in its file only),
+`include_visibility` (a type is drawn only where the body's file includes its file,
+directly or through others), `branch_ranges` (a type declared in an `#if` branch is drawn
+in that branch only, `RawType.branches`), `ref_text` (`::Foo` is the global one's),
+`ref_position` (a block-scope function declaration's parameter may be a variable),
+`unreadable` (nothing is read in a function the grammar nests in a block), `alias_params`
+and `detached_owner` (above); `outside_supers_hide` with `outside_member` reads
+`cpp_std.json`. C++ and the other languages name none of each other's types.
 
 ## Ownership
 

@@ -27,8 +27,8 @@ number. Draftsman is a skill that splits the work the same way: a parser measure
 the agent only decides what to show, and a renderer draws it.
 
 - **Facts from a parser** — classes, members, inheritance, field associations with
-  multiplicity, and dependencies from signatures, annotations and (Java, C#, Kotlin,
-  TypeScript, Python) the type names method bodies write, each with a source location.
+  multiplicity, and dependencies from signatures, annotations and the type names
+  method bodies write, each with a source location.
 - **Edited, not invented** — the agent can hide, group and annotate. A relation the parser
   did not find can only be added as an *inferred* edge with a rationale, drawn dotted.
 - **Readable at any size** — focus on one class and its neighbours *N* hops away; hide
@@ -191,12 +191,12 @@ checked), an SVG and an HTML viewer — on real projects, tests and generated co
 | TypeScript | [TypeORM](docs/e2e/typescript/typeorm.md) `packages/typeorm/src` | 496 | 694 | 3968 + 2076 body | 1 (1 unexplained) | 0 |
 | Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 + 152 body | 0 | 0 |
 | Python | [Django](docs/e2e/python/django.md) `django/` | 879 | 1964 | 1865 + 3203 body | 0 | 0 |
-| C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 | 2 (2 unexplained) | 9 spans in 8 files (5 in function bodies; `extern "C"`, `__has_include`, a gMock macro, a pointer-to-member field) |
-| C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2066 | 9983 | 309 (1 ambiguous, 4 outside, 304 unexplained; system and library headers, POCO's `#define` types) | 333 spans in 121 files (`#if` branches, pointers to members, explicit instantiations, `typeid`) |
+| C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 + 597 body | 2 (2 unexplained) | 9 spans in 8 files (5 in function bodies; `extern "C"`, `__has_include`, a gMock macro, a pointer-to-member field) |
+| C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2066 | 9983 + 10785 body | 309 (1 ambiguous, 4 outside, 304 unexplained; system and library headers, POCO's `#define` types) | 333 spans in 121 files (`#if` branches, pointers to members, explicit instantiations, `typeid`) |
 
-Java's, C#'s, Kotlin's, TypeScript's and Python's relations are the declared ones, then
-those read from names in method bodies (`new Foo()`, `Foo.bar()`), which match what the
-compiler resolves at every place on the ten Java, C#, Kotlin and TypeScript projects: javac for Java
+The relations are the declared ones, then those read from names in method bodies (`new
+Foo()`, `Foo.bar()`), which match what the compiler resolves at every place on the twelve
+Java, C#, Kotlin, TypeScript and C++ projects: javac for Java
 (`bench/javac_oracle`; jsoup without its 22 in `org.jsoup.examples`, which the benchmark
 leaves out), Roslyn for C# (`bench/roslyn_oracle`, in a container with the SDK each
 repository pins; every compilation of a file, one per target framework and project, must
@@ -204,7 +204,9 @@ agree; eShop's MAUI apps for plain `net11.0`, their platform code not), the Kotl
 compiler for Kotlin (`bench/kotlin_oracle`, a compiler plugin in each repository's own
 Gradle build, in a container; every compilation of a file, one per target, must agree;
 Apple targets, which no Linux host builds, not), the TypeScript compiler for TypeScript
-(`bench/tsc_oracle`). Python has no
+(`bench/tsc_oracle`), Clang for C++ (`bench/clang_oracle`, each translation unit as
+CMake configures it, in a container; every unit that compiles a line must agree; Windows
+and other platforms' files not). Python has no
 compiler, so the answer is where mypy, pyright and ty name the same declaration
 (`bench/py_oracle`; a checker that names nothing where it marks the code unreachable
 abstains, and the others decide): every name drawn in httpx and in Django (4065) matches
@@ -220,11 +222,12 @@ the exact commands, and what every unresolved name and diagnostic is.
 
 - **It doesn't guess relations.** Anything not in `ir.json` is rejected unless it is an
   inferred edge between known or unresolved names — and those are drawn dotted.
-- **It reads only the type names in method bodies, and only in Java, C#, Kotlin, TypeScript and Python.**
+- **It reads only the type names in method bodies.**
   `new Foo()`, `Foo.bar()`, casts and local variable types become dependencies marked as
-  read from a body; what a call on a value reaches (`order.total()`) does not, and the
-  other languages' bodies are not read yet ([#5](https://github.com/devgyurak/draftsman/issues/5)). It is
-  not a call graph or a sequence diagram tool.
+  read from a body; what a call on a value reaches (`order.total()`) does not, nor does
+  code outside every type (free functions, top-level functions;
+  [#8](https://github.com/devgyurak/draftsman/issues/8)). It is not a call graph or a
+  sequence diagram tool.
 - **It doesn't tell composition from aggregation** — syntax cannot — except C++ ownership
   (values and `unique_ptr` versus pointers, references and `shared_ptr`).
 - **It doesn't run or upload your code.** Everything runs locally; the only network use is
