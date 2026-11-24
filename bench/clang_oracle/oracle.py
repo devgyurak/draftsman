@@ -308,6 +308,7 @@ def join(raw: Path, files: list[str], root: Path, headers: set = frozenset()) ->
     col = _utf16_cols(root)
     defined = {ident for ident, _, _ in declared}
     out: list[dict] = [{"units": len(units), "errors": sum(1 for u in units if u["rc"]),
+                        "failed": sorted(u["tu"] for u in units if u["rc"]),
                         "headers failed": len(failed)}]
     for (ident, f, line), d in sorted(declared.items()):
         out.append({"declared": ident, "file": f, "line": line, "kind": d["kind"],
@@ -451,13 +452,11 @@ def key_dir(directory: Path, out: Path) -> list[dict]:
         (work / "names.txt").write_text("\n".join(type_names(directory, discover(directory, {"cpp"}, []))))
         text = ""
         if units:
-            (work / "compile_commands.json").write_text(json.dumps(db))
-            text += run_units(units, mounts, "/work/names.txt")
+            text += run_units(units, db, mounts, "/work/names.txt", "units")
         entries, hdrs = _header_units(_unincluded(directory, files, work / "raw"), work,
                                       lambda f: ("/src", args))
         if hdrs:   # (one that fails is left out, and so are its errors)
-            (work / "compile_commands.json").write_text(json.dumps(db + entries))
-            run_units(hdrs, mounts, "/work/names.txt")
+            run_units(hdrs, db + entries, mounts, "/work/names.txt", "headers")
         recs = join(work / "raw", files, directory, set(hdrs))
     recs[:0] = [{"config": {"directory": str(directory), "flags": KEY_FLAGS}}]
     recs += diagnostics(text)
@@ -465,17 +464,22 @@ def key_dir(directory: Path, out: Path) -> list[dict]:
     return recs
 
 
-def run_units(units: list[str], mounts: dict[str, str], names: Optional[str]) -> str:
+def run_units(units: list[str], entries: list[dict], mounts: dict[str, str],
+              names: Optional[str], tag: str) -> str:
+    """TypeUses on ``units`` with the compile commands ``entries``, into /work/raw; Clang's
+    messages. Each run's files have names of their own (``tag``): Docker Desktop's bind
+    mount may show a file the host rewrote in part, which cut a compile database and a
+    list of units short (`key` on review/cpp3 ran a unit `/work/hdr`)."""
     work = next(Path(h) for h, c in mounts.items() if c == "/work")
-    """TypeUses on ``units`` with /work/compile_commands.json, into /work/raw; Clang's
-    messages."""
-    args = ["/opt/type-uses/type-uses", "-p", "/work", "-root", "/src", "-out", "/work/raw",
-            '"--extra-arg=-resource-dir=$(clang -print-resource-dir)"']
+    (work / f"db-{tag}").mkdir(exist_ok=True)
+    (work / f"db-{tag}" / "compile_commands.json").write_text(json.dumps(entries))
+    (work / f"units-{tag}.txt").write_text("".join(u + "\n" for u in units))
+    args = ["/opt/type-uses/type-uses", "-p", f"/work/db-{tag}", "-root", "/src", "-out",
+            "/work/raw", '"--extra-arg=-resource-dir=$(clang -print-resource-dir)"']
     args += ["-names", names] if names else ["-all"]
-    (work / "units.txt").write_text("".join(u + "\n" for u in units))
-    container(["bash", "-c", f"xargs -P {JOBS} -n 8 {' '.join(args)} < /work/units.txt "
-                             "2> /work/stderr.log; exit 0"], mounts)
-    return (work / "stderr.log").read_text(errors="replace")
+    container(["bash", "-c", f"xargs -P {JOBS} -n 8 {' '.join(args)} < /work/units-{tag}.txt "
+                             f"2> /work/stderr-{tag}.log; exit 0"], mounts)
+    return (work / f"stderr-{tag}.log").read_text(errors="replace")
 
 
 def selftest(_args) -> int:
@@ -575,6 +579,8 @@ def summary(recs: list[dict], name: str) -> None:
     print(f"{name}: {head['units']} translation units ({head['errors']} with errors), "
           f"{len(errors)} compile errors in the sources ({len({r['file'] for r in errors})} files); "
           "names: " + ", ".join(f"{k} {v}" for k, v in uses.most_common()))
+    for unit in head.get("failed", ()):
+        print(f"  with errors: {unit}")
     for r in errors[:20]:
         print(f"  {r['file']}:{r['line']}: {r['diagnostic']}")
     unc = [r for r in recs if "uncompiled" in r]
@@ -621,9 +627,8 @@ def run(args) -> int:
                                 "output": e["output"].replace(like.rsplit("/", 1)[-1],
                                                               extra.rsplit("/", 1)[-1])})
             units = sorted({e["file"] for e in entries})
-            (work / "compile_commands.json").write_text(json.dumps(entries))
             (work / "names.txt").write_text("\n".join(type_names(checkout, sources(args.repo, checkout))))
-            text = run_units(units, mounts, "/work/names.txt")
+            text = run_units(units, entries, mounts, "/work/names.txt", "units")
 
             def flags_of(header: str):
                 # the flags of a unit of the same component (the path before include/, src/)
@@ -644,8 +649,7 @@ def run(args) -> int:
                 return e["directory"], cut
             hdr_entries, hdrs = _header_units(_unincluded(checkout, files, raw), work, flags_of)
             if hdrs:   # (one that fails is left out, and so are its errors)
-                (work / "compile_commands.json").write_text(json.dumps(entries + hdr_entries))
-                run_units(hdrs, mounts, "/work/names.txt")
+                run_units(hdrs, entries + hdr_entries, mounts, "/work/names.txt", "headers")
             (work / "stderr.txt").write_text(text)
             (work / "headers.json").write_text(json.dumps(hdrs))
             config = {"repo": args.repo, "commit": conf["commit"], "configure": conf["configure"],
