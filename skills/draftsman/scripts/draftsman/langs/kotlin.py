@@ -226,22 +226,26 @@ def _outside_table() -> dict:
 
 
 @lru_cache(maxsize=None)
-def _outside_names(type_id: str, nested_only: bool) -> Optional[frozenset]:
-    """The names a subclass of the library type sees by simple name: its nested types
-    (through superclasses only) with ``nested_only``, else also its properties and
-    functions and those of its companion; None for a type the table does not know."""
+def _outside_names(type_id: str, what: str) -> Optional[frozenset]:
+    """The names the library type passes on, None for a type the table does not know:
+    "nested", the nested types a subclass sees (through superclasses only); "subclass",
+    all a subclass sees (those, properties and functions, its companion's and Java's
+    static members); "instance", the properties and functions of a value of it (what an
+    extension's receiver passes on)."""
     table = _outside_table()
     type_id = table["aliases"].get(type_id, type_id)
     t = table["types"].get(type_id)
     if t is None:
         return None
-    names = set(t["nested"])
-    if not nested_only:
-        names |= set(t["members"])
+    names = set(t["members"]) if what != "nested" else set()
+    if what != "instance":
+        names |= set(t["nested"])
+    if what == "subclass":
+        names |= set(t["statics"])
     for sup in t["supers"]:
-        if nested_only and table["types"].get(sup, {}).get("kind") == "interface":
+        if what == "nested" and table["types"].get(sup, {}).get("kind") == "interface":
             continue   # an interface passes on no nested type
-        names |= _outside_names(sup, nested_only) or set()
+        names |= _outside_names(sup, what) or set()
     return frozenset(names)
 
 
@@ -408,12 +412,16 @@ class KotlinSpec(LanguageSpec):
     def outside_member(self, super_id, name, nested_only):
         # what the table knows; of a type it does not know, nothing is taken to hide a
         # name (as in Java): no member, and nested types only as _NESTED lists them
-        known = _outside_names(super_id, nested_only) if super_id else None
+        known = _outside_names(super_id, "nested" if nested_only else "subclass") if super_id else None
         if known is not None:
             return name in known
         if nested_only and super_id in _NESTED:
             return name in _NESTED[super_id]
         return False
+
+    def outside_instance_member(self, type_id, name):
+        known = _outside_names(type_id, "instance") if type_id else None
+        return known is not None and name in known
 
     def outside_package_types(self, package):
         types = _outside_table()["packages"].get(package)

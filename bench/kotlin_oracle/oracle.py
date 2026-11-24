@@ -16,7 +16,7 @@ bench/answer_key.py gives and joins the compilations each file is in.
 `selftest` checks the key against the hand-written answers in tests/fixtures/kotlin/body
 (tests/fixtures/java/body/README.md gives the marker format). `key` answers for any
 directory: its `.kt` files are compiled together for the JVM, with the standard library
-alone on the classpath, and `--compare` checks the extractor's body relations of the same
+and kotlinx (coroutines, serialization, io: the libraries of `table`) on the classpath, and `--compare` checks the extractor's body relations of the same
 files against it; `review` does that for every set of sources reviews wrote by hand
 (review/, one directory each) and fails on a mismatch review/README.md does not list as a
 known limit. `run` builds a repository's main code with its own Gradle build, the plugin
@@ -328,7 +328,7 @@ DIAGNOSTIC = re.compile(r"^(?:/src/)?(.+?\.kt):(\d+):(\d+): error: (.*)$")
 
 def key_dir(directory: Path, out: Path) -> list[dict]:
     """The key for any directory: its .kt files compiled together for the JVM, the
-    standard library alone on the classpath."""
+    standard library and kotlinx (coroutines, serialization, io) on the classpath."""
     image()
     directory = directory.resolve()
     files = [rel for _, rel in discover(directory, {"kotlin"}, [])]
@@ -338,7 +338,7 @@ def key_dir(directory: Path, out: Path) -> list[dict]:
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
         done = container(["kotlinc", v, "-no-stdlib", "-no-reflect", "-nowarn",
-                          "-cp", f"/opt/kotlin/kotlin-stdlib-{v}.jar",
+                          "-cp", ":".join(f"/opt/kotlin/{j}" for j in TABLE_JARS),
                           f"-Xplugin=/opt/type-uses/type-uses-{v}.jar",
                           "-P", "plugin:draftsman.typeuses:out=/work/out", "-d", "/work/classes",
                           *(f"/src/{f}" for f in files)],
@@ -624,7 +624,7 @@ TABLE_BUILTINS = ("kotlin/Any kotlin/Nothing kotlin/Comparable kotlin/CharSequen
 
 def _getter_names(name: str) -> list[str]:
     """The property names a Java getter or setter makes (`getEngines` is `engines`,
-    `getURL` `url` and `URL`; `isOpen` stays)."""
+    `getURL` `url`, and `uRL` for good measure; `isOpen` stays)."""
     m = re.match(r"(?:get|set)([A-Z]\w*)$", name)
     if not m:
         return []
@@ -632,7 +632,7 @@ def _getter_names(name: str) -> list[str]:
     run = re.match(r"[A-Z]+", rest).group(0)
     smart = rest.lower() if run == rest else (
         rest[0].lower() + rest[1:] if len(run) == 1 else run[:-1].lower() + rest[len(run) - 1:])
-    return sorted({smart, rest[0].lower() + rest[1:], rest})
+    return sorted({smart, rest[0].lower() + rest[1:]})
 
 
 def table(_args) -> int:
@@ -683,10 +683,15 @@ def table(_args) -> int:
         if "." not in rel:
             packages[pkg.replace("/", ".")].add(rel)
         if r["kind"] in ("class", "interface") and r["modality"] in ("open", "abstract"):
-            names = {n for n in r["members"] + r["companion"] + r["statics"] if not n.startswith("<")}
-            names |= {g for n in names for g in _getter_names(n)}
+            def names(*lists):
+                own = {n for ns in lists for n in ns if not n.startswith("<")}
+                return sorted(own | {g for n in own for g in _getter_names(n)})
+            # members: an instance's, which an extension's receiver passes on too; statics:
+            # its companion's and Java's static ones, which only a subclass sees
             types[ident(r["type"])] = {"kind": r["kind"], "supers": [ident(x) for x in r["supers"]],
-                                       "members": sorted(names), "nested": r["nested"]}
+                                       "members": names(r["members"]),
+                                       "statics": names(r["companion"], r["statics"]),
+                                       "nested": r["nested"]}
     out = {"read from": {"kotlin": v, "libraries": TABLE_JARS, "jdk": "the image's (temurin 21)",
                          "jdk packages": sorted(p for ps in TABLE_JDK.values() for p in ps)},
            "packages": {p: sorted(n) for p, n in sorted(packages.items())},

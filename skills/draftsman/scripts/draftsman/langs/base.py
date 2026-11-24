@@ -375,6 +375,11 @@ class LanguageSpec:
         ``nested_only``, else also a property or function."""
         return False
 
+    def outside_instance_member(self, type_id: Optional[str], name: str) -> bool:
+        """Whether a value of a type outside the sources (an extension's receiver) has a
+        property or function ``name`` as far as the language knows the type."""
+        return False
+
     def outside_package_types(self, package: str) -> Optional[frozenset[str]]:
         """The types a package outside the sources declares as far as the language's table
         of outside supertypes knows them (Kotlin), None when it does not know the package:

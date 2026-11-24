@@ -1003,7 +1003,8 @@ class Resolver:
     def _receiver_member(self, name: str, rtype: RawType, ref: RawBodyRef) -> bool:
         """Whether a receiver of an extension the member is or declares (RawMember.receivers)
         has a property or function ``name``: a project type's own or inherited one, or one
-        an outside type has as far as the language knows it (LanguageSpec.outside_member).
+        an outside type has as far as the language knows it
+        (LanguageSpec.outside_instance_member).
         Its nested types are no names there."""
         spec = LANGUAGES[rtype.language]
         for text in ref.member.receivers:
@@ -1015,7 +1016,7 @@ class Resolver:
                 t = self.index[res.target]
                 if self._has_field(t, name) or self._has_method(t, name, set()):
                     return True
-            elif any(spec.outside_member(o, name, False)
+            elif any(spec.outside_instance_member(o, name)
                      for o in self._outside_candidates(written.name, res, ref.scope, rtype)):
                 return True
         return False
