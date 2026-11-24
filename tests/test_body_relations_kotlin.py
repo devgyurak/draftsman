@@ -198,3 +198,22 @@ def test_a_private_class_of_each_platforms_file_is_its_one_id_there(tmp_path):
         "io/js/src/p/C.kt": "package p\nclass C { fun a() = Impl() }\n"})
     assert _body(ir) == [("p.A", "p.Impl", 3), ("p.B", "p.Impl", 3)]
 
+
+def test_a_supertype_outside_the_sources_may_have_a_member_of_the_name(tmp_path):
+    # under a superclass outside the sources a type name may be its nested type
+    # (androidx.work's `Result` under CoroutineWorker), and under any outside supertype a
+    # value may be its property or function; CoroutineScope's nested types are known
+    ir = extract_source(tmp_path, {
+        "p/A.kt": "package p\nimport androidx.work.CoroutineWorker\n"
+                  "import kotlinx.coroutines.CoroutineScope\n"
+                  "class Result { companion object { fun success() = 1 } }\nclass Plain\n"
+                  "class W : CoroutineWorker() {\n"
+                  "  fun a() = Result.success()\n  fun b() = Plain()\n"
+                  "  fun d() { val x: Result? = null } }\n"
+                  "class S : CoroutineScope {\n"
+                  "  fun a() = Result.success()\n  fun b() = Plain()\n"
+                  "  fun d() { val x: Result? = null } }\n"
+                  "class Q { fun a() = object : CoroutineWorker() { fun b() = Plain() } }\n"
+                  "class N : Plain2() { fun d() { val x: Result? = null; Plain() } }\n"
+                  "open class Plain2\n"})
+    assert _body(ir) == [("p.N", "p.Plain", 15), ("p.N", "p.Result", 15), ("p.S", "p.Result", 13)]

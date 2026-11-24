@@ -249,6 +249,7 @@ class KotlinSpec(LanguageSpec):
                                      "navigation_suffix", "type_identifier"})
     type_argument_nodes = frozenset({"type_arguments"})
     alias_declarations = True
+    outside_supers_hide = True
     file_local_copies = True
     static_scope_nodes = frozenset({"companion_object"})
     static_scope_names = frozenset({"Companion"})
@@ -367,6 +368,13 @@ class KotlinSpec(LanguageSpec):
         rel = path.resolve().relative_to(root.resolve()).as_posix()
         name = _source_set(rel, module).lower()
         return [(0, len(src))] if name.startswith(_APPLE_SOURCE_SETS) else []
+
+    def outside_member(self, super_id, name, nested_only):
+        # nested types: known of the library supertypes _NESTED lists; members (properties
+        # and functions) of none
+        if nested_only and super_id in _NESTED:
+            return name in _NESTED[super_id]
+        return True
 
     def outside_functions(self, scope):
         # Kotlin/Native's platform libraries (`platform.posix`, `platform.windows`) are C

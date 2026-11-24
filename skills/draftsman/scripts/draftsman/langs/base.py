@@ -207,6 +207,10 @@ class LanguageSpec:
     # declare is still that id where one of them names it: Kotlin's `private class` of each
     # platform's file, which ir.json makes one type (C#'s two `file class Local` are not)
     file_local_copies: bool = False
+    # Whether a supertype outside the sources may hide a name in a body by a member of it
+    # (LanguageSpec.outside_member): a value (`Foo(`, `Foo.x`) under any such supertype, a
+    # type under a superclass, whose nested types the class sees (Kotlin)
+    outside_supers_hide: bool = False
     # Whether a field or property whose type has its name (C#'s `Order Order`) leaves the
     # name a type before a static member (`Order.Create()`), and a variable before any
     # other (`Order.Total`): C#'s "Color Color" rule
@@ -356,6 +360,12 @@ class LanguageSpec:
         ``declared`` ([(file, project)]): Kotlin Multiplatform's platform source sets see
         their own declarations and the common ones, not one another's."""
         return True
+
+    def outside_member(self, super_id: Optional[str], name: str, nested_only: bool) -> bool:
+        """Whether a supertype outside the sources (its id, None when not known) may have a
+        member ``name`` (LanguageSpec.outside_supers_hide): a nested type with
+        ``nested_only``, else also a property or function."""
+        return False
 
     def outside_functions(self, scope: FileScope) -> bool:
         """Whether the file's star imports bring in functions of any name, of which a call

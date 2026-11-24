@@ -801,8 +801,75 @@ class Resolver:
         or None: also when a type of the name is declared anywhere in the member."""
         res = self._in_body(name, rtype, ref, 0)
         if res.status == ALIAS and res.target:
-            return self._alias_type(res.target, name, rtype, ref)
-        return res.target if res.status == PROJECT else None
+            target = self._alias_type(res.target, name, rtype, ref)
+        else:
+            target = res.target if res.status == PROJECT else None
+        spec = LANGUAGES[rtype.language]
+        head = name.split(spec.separator, 1)[0]
+        if target is not None and spec.outside_supers_hide and not self._own_nested(
+                target, rtype) and self._outside_member(rtype, ref, head, True):
+            return None   # a nested type of a superclass outside the sources may be it
+        return target
+
+    def _own_nested(self, target: str, rtype: RawType) -> bool:
+        """Whether ``target`` is nested in ``rtype`` or a type around it: found before
+        what any supertype has."""
+        outer = self.index[target].outer
+        cur: Optional[RawType] = rtype
+        while cur is not None:
+            if outer == cur.qualified_name:
+                return True
+            cur = self.index.get(cur.outer) if cur.outer else None
+        return False
+
+    def _outside_member(self, rtype: RawType, ref: RawBodyRef, name: str,
+                        nested_only: bool) -> bool:
+        """Whether a supertype outside the sources of the type, of a type around it, or of
+        an anonymous or local class around ``ref`` may have a member ``name``
+        (LanguageSpec.outside_member): with ``nested_only`` a nested type, which a class
+        sees through its superclasses only, else any member."""
+        spec = LANGUAGES[rtype.language]
+        for supers in ref.classes:
+            for sup in supers:
+                # (an anonymous or local class's supertypes are not told apart: an
+                # interface's are taken for a superclass's too)
+                written = parse_type(sup)
+                if not isinstance(written, Named):
+                    continue
+                res = self._in_body(written.name, rtype, ref, 0)
+                if res.status != PROJECT and any(
+                        spec.outside_member(t, name, nested_only)
+                        for t in self._outside(written.name, res, ref.scope, rtype, True) or [None]):
+                    return True
+                if res.status == PROJECT and self._outside_member_of(
+                        self.index[res.target], name, nested_only, set()):
+                    return True
+        cur: Optional[RawType] = rtype
+        while cur is not None:
+            if self._outside_member_of(cur, name, nested_only, set()):
+                return True
+            cur = self.index.get(cur.outer) if cur.outer else None
+        return False
+
+    def _outside_member_of(self, rtype: RawType, name: str, nested_only: bool,
+                           seen: set) -> bool:
+        if rtype.qualified_name in seen:
+            return False
+        seen.add(rtype.qualified_name)
+        spec = LANGUAGES[rtype.language]
+        for written, sup in zip(rtype.supers, self.supertypes(rtype)):
+            if nested_only and written.kind != "extends":
+                continue   # an interface passes on no nested type
+            if sup.status == PROJECT:
+                if self._outside_member_of(self.index[sup.target], name, nested_only, seen):
+                    return True
+                continue
+            ref = parse_type(written.text)
+            sname = ref.name if isinstance(ref, Named) else ""
+            if any(spec.outside_member(t, name, nested_only) for t in self._outside(
+                    sname, sup, written.scope or rtype.scope, rtype, True) or [None]):
+                return True
+        return False
 
     def body_receiver(self, ref: RawBodyRef, rtype: RawType) -> Optional[tuple[str, int]]:
         """(project type, how many parts of the name it covers) a receiver starts with
@@ -870,6 +937,8 @@ class Resolver:
         if ref.position == "call" and len(parts) == 1 and (
                 self._function_named(parts[0], rtype, ref) or spec.outside_functions(ref.scope)):
             return None   # `Foo(1)` may call a function Foo
+        if spec.outside_supers_hide and self._outside_member(rtype, ref, parts[0], False):
+            return None   # a property, function or nested type of a supertype outside
         outer = None
         while n < len(parts) and not self._has_field(self.index[target], parts[n]):
             nested = self._member_type(self.index[target], parts[n], sep,
