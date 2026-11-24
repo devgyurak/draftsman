@@ -176,6 +176,9 @@ static std::string fileOf(const Decl *D) {
   if (auto *CT = dyn_cast<ClassTemplateDecl>(D)) D = CT->getTemplatedDecl();
   if (auto *T = dyn_cast<TagDecl>(D))
     if (auto *Def = T->getDefinition()) D = Def;
+  // a type a macro declares (gMock's MATCHER, POCO_DECLARE_EXCEPTION) is no type the
+  // extractor sees: none of the sources' then
+  if (D->getLocation().isMacroID()) return "<macro>";
   SourceLocation L = O.SM->getExpansionLoc(D->getLocation());
   if (L.isInvalid()) return "";
   return O.relOf(O.SM->getFileID(L));
@@ -431,7 +434,7 @@ public:
 
   // ---- output ----------------------------------------------------------------------
   void recDecl(TagDecl *D) {
-    if (isa<ClassTemplateSpecializationDecl>(D)) return;
+    if (isa<ClassTemplateSpecializationDecl>(D) || D->getLocation().isMacroID()) return;
     std::string id = idOf(D);
     SourceLocation L = SM.getExpansionLoc(D->getLocation());
     std::string r = O.relOf(SM.getFileID(L));

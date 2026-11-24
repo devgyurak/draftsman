@@ -249,15 +249,20 @@ def join(raw: Path, files: list[str], root: Path, headers: set = frozenset()) ->
     at: dict[tuple, dict] = {}             # place -> answer -> [count, record]
     declared: dict[tuple, dict] = {}
     classes: dict[tuple, dict] = {}
-    units, twice = [], 0
+    units, failed, twice = [], [], 0
     for path in sorted(raw.glob("*.jsonl")):
         recs = [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
         tu = next((r for r in recs if "tu" in r), None)
         if tu is None:
             continue
+        is_header = tu["tu"] in headers
+        if is_header and tu["rc"]:
+            # a header that does not compile on its own (Windows', a sketch of a port)
+            # is no more compiled than before
+            failed.append(Path(tu["tu"]).name)
+            continue
         units.append(tu)
         main = tu["tu"][len("/src/"):] if tu["tu"].startswith("/src/") else None
-        is_header = tu["tu"] in headers
         enter = {r["inc"] for r in recs if "inc" in r}
         if main in scope:
             enter.add(main)
@@ -296,7 +301,8 @@ def join(raw: Path, files: list[str], root: Path, headers: set = frozenset()) ->
             else:
                 by[a] = [1, r]
     col = _utf16_cols(root)
-    out: list[dict] = [{"units": len(units), "errors": sum(1 for u in units if u["rc"])}]
+    out: list[dict] = [{"units": len(units), "errors": sum(1 for u in units if u["rc"]),
+                        "headers failed": len(failed)}]
     for (ident, f, line), d in sorted(declared.items()):
         out.append({"declared": ident, "file": f, "line": line, "kind": d["kind"],
                     **({"anonymous": True} if d["anon"] else {})})
@@ -342,14 +348,12 @@ def expected(root: Path) -> dict[tuple[str, int, int], tuple[str, str]]:
 
 # -- a directory ----------------------------------------------------------------------------
 
-def _header_units(files: list[str], entered: set, work: Path, flags_of) -> tuple[list, list]:
-    """A translation unit of its own for each header no unit enters: (compile entries, unit
-    paths in the container), with the flags ``flags_of(header)`` gives (None: none)."""
+def _header_units(headers: list[str], work: Path, flags_of) -> tuple[list, list]:
+    """A translation unit of its own for each of ``headers``: (compile entries, unit paths
+    in the container), with the flags ``flags_of(header)`` gives (None: none)."""
     entries, units = [], []
     (work / "hdr").mkdir(exist_ok=True)
-    for f in files:
-        if not f.endswith(HEADERS) or f in entered:
-            continue
+    for f in headers:
         got = flags_of(f)
         if got is None:
             continue
@@ -362,16 +366,65 @@ def _header_units(files: list[str], entered: set, work: Path, flags_of) -> tuple
     return entries, units
 
 
-def _entered(raw: Path) -> set[str]:
-    out = set()
+INCLUDE = re.compile(r'^[ \t]*#[ \t]*include[ \t]*[<"]([^>"]+)[>"]', re.M)
+
+
+def _included(root: Path, files: list[str]) -> dict[str, list[tuple[str, int]]]:
+    """Where each header of ``files`` is included in them: (file, line)s, by the path
+    written matched as a suffix (`"Poco/Mutex_VX.h"`)."""
+    headers = [f for f in files if f.endswith(HEADERS)]
+    by_tail: dict[str, list[str]] = defaultdict(list)
+    for h in headers:
+        parts = h.split("/")
+        for k in range(len(parts)):
+            by_tail["/".join(parts[k:])].append(h)
+    out: dict[str, list[tuple[str, int]]] = defaultdict(list)
+    for f in files:
+        text = (root / f).read_text(errors="replace")
+        for m in INCLUDE.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            for h in by_tail.get(m.group(1), ()):
+                out[h].append((f, line))
+    return out
+
+
+def _skipped(raw: Path) -> tuple[set[str], dict[str, set[int]]]:
+    """The files the units below ``raw`` enter, and per file the lines every unit that
+    enters it skips."""
+    entered: Counter = Counter()
+    skipped: Counter = Counter()
     for path in raw.glob("*.jsonl"):
+        enter, skips = set(), set()
         for line in path.read_text().splitlines():
-            if line.startswith('{"inc"'):
-                out.add(json.loads(line)["inc"])
-            elif line.startswith('{"tu"'):
-                tu = json.loads(line)["tu"]
-                if tu.startswith("/src/"):
-                    out.add(tu[len("/src/"):])
+            r = json.loads(line)
+            if "inc" in r:
+                enter.add(r["inc"])
+            elif "tu" in r and r["tu"].startswith("/src/"):
+                enter.add(r["tu"][len("/src/"):])
+            elif "skip" in r:
+                skips.update((r["skip"], n) for n in range(r["l1"], r["l2"] + 1))
+        entered.update(enter)
+        skipped.update(skips)
+    lines: dict[str, set[int]] = defaultdict(set)
+    for (f, n), k in skipped.items():
+        if k >= entered[f]:
+            lines[f].add(n)
+    return set(entered), lines
+
+
+def _unincluded(root: Path, files: list[str], raw: Path) -> list[str]:
+    """The headers no unit entered and no compiled line includes: a header of a platform
+    is included in an `#if` branch no unit takes (`Mutex_VX.h`), and stays not compiled;
+    one nobody includes (a template only tests use) is compiled on its own."""
+    entered, skipped = _skipped(raw)
+    sites = _included(root, files)
+    out = []
+    for f in files:
+        if not f.endswith(HEADERS) or f in entered:
+            continue
+        if any(g not in entered or n in skipped.get(g, ()) for g, n in sites.get(f, ())):
+            continue   # included where nothing is compiled
+        out.append(f)
     return out
 
 
@@ -394,11 +447,11 @@ def key_dir(directory: Path, out: Path) -> list[dict]:
         if units:
             (work / "compile_commands.json").write_text(json.dumps(db))
             text += run_units(units, mounts, "/work/names.txt")
-        entries, hdrs = _header_units(files, _entered(work / "raw"), work,
+        entries, hdrs = _header_units(_unincluded(directory, files, work / "raw"), work,
                                       lambda f: ("/src", args))
-        if hdrs:
+        if hdrs:   # (one that fails is left out, and so are its errors)
             (work / "compile_commands.json").write_text(json.dumps(db + entries))
-            text += run_units(hdrs, mounts, "/work/names.txt")
+            run_units(hdrs, mounts, "/work/names.txt")
         recs = join(work / "raw", files, directory, set(hdrs))
     recs[:0] = [{"config": {"directory": str(directory), "flags": KEY_FLAGS}}]
     recs += diagnostics(text)
@@ -523,8 +576,9 @@ def summary(recs: list[dict], name: str) -> None:
     lines = sum(len(r["lines"]) for r in unc if r["lines"] != "all")
     print(f"not compiled: {len(whole)} files, and {lines} lines in {len(unc) - len(whole)} files")
     header = {r["file"] for r in recs if r.get("header")}
-    if header:
-        print(f"entered only by a translation unit of their own: {len(header)} headers")
+    if header or head.get("headers failed"):
+        print(f"entered only by a translation unit of their own: {len(header)} headers; "
+              f"such units that do not compile, left out: {head.get('headers failed', 0)}")
     for r in recs:
         if "twice" in r:
             print(f"places with two names in one translation unit (the type kept): {r['twice']}")
@@ -550,8 +604,10 @@ def run(args) -> int:
                        + " ".join(CMAKE + conf["configure"]) + " > /work/cmake.log 2>&1"], mounts)
             db = json.loads((work / "build" / "compile_commands.json").read_text())
             scope = set(files)
-            entries = [e for e in db if e["file"].startswith("/src/")
-                       and e["file"][len("/src/"):] in scope]
+            # one command per file: a file two targets compile (leveldb's util/ in the
+            # library and in the tests) is one unit, with its first command
+            entries = list({e["file"]: e for e in reversed(db) if e["file"].startswith("/src/")
+                            and e["file"][len("/src/"):] in scope}.values())
             for extra, like in conf["extra"].items():
                 e = next(e for e in db if e["file"] == f"/src/{like}")
                 entries.append({**e, "file": f"/src/{extra}",
@@ -562,12 +618,12 @@ def run(args) -> int:
             (work / "compile_commands.json").write_text(json.dumps(entries))
             (work / "names.txt").write_text("\n".join(type_names(checkout, sources(args.repo, checkout))))
             text = run_units(units, mounts, "/work/names.txt")
-            entered = _entered(raw)
 
             def flags_of(header: str):
                 # the flags of a unit of the same component (the path before include/, src/)
                 part = re.split(r"/(?:include|src)/", header)[0]
-                like = [e for e in entries if e["file"][len("/src/"):].startswith(part + "/")] \
+                like = [e for e in entries if e["file"][len("/src/"):].startswith(part + "/src/")] \
+                    or [e for e in entries if e["file"][len("/src/"):].startswith(part + "/")] \
                     or entries
                 e = like[0]
                 args_ = e.get("arguments") or e["command"].split()
@@ -580,10 +636,10 @@ def run(args) -> int:
                     elif a != e["file"]:
                         cut.append(a)
                 return e["directory"], cut
-            hdr_entries, hdrs = _header_units(files, entered, work, flags_of)
-            if hdrs:
+            hdr_entries, hdrs = _header_units(_unincluded(checkout, files, raw), work, flags_of)
+            if hdrs:   # (one that fails is left out, and so are its errors)
                 (work / "compile_commands.json").write_text(json.dumps(entries + hdr_entries))
-                text += run_units(hdrs, mounts, "/work/names.txt")
+                run_units(hdrs, mounts, "/work/names.txt")
             (work / "stderr.txt").write_text(text)
             (work / "headers.json").write_text(json.dumps(hdrs))
             config = {"repo": args.repo, "commit": conf["commit"], "configure": conf["configure"],
@@ -611,26 +667,37 @@ def merged(recs: list[dict]) -> dict[str, set[str]]:
     return {t: fs for t, fs in declared_files(recs).items() if len(fs) > 1}
 
 
-def in_scope(recs: list[dict], ir: dict[str, str]) -> int:
+def in_scope(recs: list[dict], ir: dict[str, str], lines: dict[str, int] = {}) -> int:
     """answer_key.in_scope, a type of several files (types of one id) taken as declared in
     any of them: ir.json gives one file for an id. Types declared in a file or in lines no
     translation unit compiles are not seen, and listed as such."""
     seen = declared_files(recs)
-    flat = [{"declared": t, "file": ir[t] if t in ir and ir[t] in fs else sorted(fs)[0]}
-            for t, fs in seen.items()]
+    whole = {r["uncompiled"] for r in recs if "uncompiled" in r and r["lines"] == "all"}
+    # ir.json's file for an id may be one no unit compiles (port_example.h's Mutex, beside
+    # port_stdcxx.h's): the type of the compiled one is the same id's
+    flat = [{"declared": t, "file": ir[t] if t in ir and (ir[t] in fs or ir[t] in whole)
+             else sorted(fs)[0]} for t, fs in seen.items()]
+    for t, fs in sorted(seen.items()):
+        if t in ir and ir[t] in whole and ir[t] not in fs:
+            print(f"known: {t}: ir.json's file {ir[t]} no unit compiles; Clang's is "
+                  f"{', '.join(sorted(fs))}")
     for t, fs in sorted(merged(recs).items()):
         print(f"{len(fs)} types of one id: {t}: {', '.join(sorted(fs))}"
               + (f" (ir.json: one type, at {ir[t]})" if t in ir else ""))
-    whole = {r["uncompiled"] for r in recs if "uncompiled" in r and r["lines"] == "all"}
     unseen = {t: f"declared in {f}, which no translation unit compiles"
               for t, f in ir.items() if f in whole and t not in seen}
+    skipped = {r["uncompiled"]: set(r["lines"]) for r in recs
+               if "uncompiled" in r and r["lines"] != "all"}
+    unseen.update({t: f"declared in lines of {f} no translation unit compiles (line {lines[t]})"
+                   for t, f in ir.items() if t not in seen and t in lines
+                   and lines[t] in skipped.get(f, ())})
     return answer_key.in_scope(flat, ir, unseen, language="C++")
 
 
 def scope(args) -> int:
-    ir = {t["id"]: t["location"]["file"] for t in json.loads(args.ir.read_text())["types"]
-          if t["language"] == "cpp"}
-    return in_scope(answer_key.read(args.oracle), ir)
+    types = [t for t in json.loads(args.ir.read_text())["types"] if t["language"] == "cpp"]
+    return in_scope(answer_key.read(args.oracle), {t["id"]: t["location"]["file"] for t in types},
+                    {t["id"]: t["location"]["line"] for t in types})
 
 
 def uncompiled(recs: list[dict]) -> dict:
@@ -662,7 +729,7 @@ def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: 
     builder = _Builder(str(root), raw, Wrappers.load())
     ir = builder.build()
     where = {t.id: t.location.file for t in ir.types if t.language == "cpp"}
-    if in_scope(recs, where):
+    if in_scope(recs, where, {t.id: t.location.line for t in ir.types if t.language == "cpp"}):
         return 1
     ids = merged(recs)
 
