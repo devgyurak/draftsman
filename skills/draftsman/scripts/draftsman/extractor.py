@@ -70,7 +70,8 @@ class RawBodyRef:
     type around it."""
 
     text: str          # a dotted name (`Util.Helper`), type arguments and comments left out
-    position: str      # "type": only a type can stand there; "receiver": a variable can too
+    position: str      # "type": only a type can stand there; "receiver": a variable can
+    # too; "call": what is called (Kotlin's `Foo(1)`), which a function may be as well
     # (line, column) of each part of the name: 1-based lines, 0-based columns in UTF-16 code
     # units (javac's)
     places: list[tuple[int, int]]
@@ -764,6 +765,10 @@ class Extractor:
                         owner.body_fields.update(self.spec.generated_fields(n, src))
                 elif cap == "body.extension":
                     scope.extension_methods.add(_text(n, src))
+                elif cap == "body.function":
+                    scope.top_functions.add(self.spec.body_name_text(_text(n, src)))
+                elif cap == "body.value":
+                    scope.top_values.add(self.spec.body_name_text(_text(n, src)))
                 elif cap in ("body.hidden_type", "body.hidden_tparam"):
                     kind = "type" if cap == "body.hidden_type" else "tparam"
                     if (owner := self._owner(n, types_by_node)[0]) is not None:
@@ -954,7 +959,7 @@ class Extractor:
         not_refs = {n.id for n, _ in declared} | unread
         # a receiver is a dotted name, not an expression (`this.x.m()`, `a[0].B.m()`)
         refs = [(p, n) for p, n in refs if n.id not in not_refs and (
-            p != "receiver" or self._dotted(n))
+            p == "type" or self._dotted(n))
             and not any(a <= n.start_byte < b for a, b in unread_ranges)]
         whole = {n.id for _, n in refs}
         for position, node in sorted(refs, key=lambda r: r[1].start_byte):

@@ -95,6 +95,11 @@ class FileScope:
     # methods that extend a type (C#'s `this` parameter, `extension(T t)` blocks): a call of
     # one of these names may be an instance call on any value (`@body.extension`)
     extension_methods: set[str] = field(default_factory=set)
+    # functions and properties the file declares at its top, which other files may name
+    # (Kotlin's top-level declarations; `@body.function`, `@body.value`): a call of such a
+    # function's name may be that function, and any name of such a property that property
+    top_functions: set[str] = field(default_factory=set)
+    top_values: set[str] = field(default_factory=set)
     # aliases declared in code a build may leave out (LanguageSpec.conditional_ranges)
     conditional_aliases: set[str] = field(default_factory=set)
     implicit_types: list[str] = field(default_factory=list)          # LanguageSpec.implicit_types
@@ -198,6 +203,10 @@ class LanguageSpec:
     # Whether, under a base class outside the sources the language's table does not know
     # (C#'s EF Core DbContext), a receiver draws nothing: the base may have any member
     unknown_bases_hide: bool = False
+    # Whether a file-local type (LanguageSpec.file_local) of one id that several files
+    # declare is still that id where one of them names it: Kotlin's `private class` of each
+    # platform's file, which ir.json makes one type (C#'s two `file class Local` are not)
+    file_local_copies: bool = False
     # Whether a field or property whose type has its name (C#'s `Order Order`) leaves the
     # name a type before a static member (`Order.Create()`), and a variable before any
     # other (`Order.Total`): C#'s "Color Color" rule
@@ -206,6 +215,11 @@ class LanguageSpec:
     # (C#'s `using O = Shop.Order;`) draws a relation to that type; a TypeScript alias
     # draws nothing in a body
     body_aliases: bool = False
+    # Whether a type alias is a declaration every file may name, as a type is (Kotlin's
+    # `typealias`): a name of it in a body draws a relation to the class it names directly
+    # (`typealias Cash = Money`), looked up where the alias is declared; one of a generic
+    # type or a function type draws nothing
+    alias_declarations: bool = False
     # Whether an import in a namespace block belongs to that namespace (C#'s `namespace A {
     # using B; }`): looked at after A's types and before the namespaces around A
     block_imports: bool = False
@@ -334,6 +348,19 @@ class LanguageSpec:
         in that type's generated part (C#'s `X.razor` `@inject`, `X.xaml` `x:Name` for
         `X.razor.cs`, `X.xaml.cs`): they hide a type in its bodies as fields do."""
         return {}
+
+    def sees_declaration(self, scope: FileScope, target: str, namespace: Optional[str],
+                         declared: list[tuple[str, Optional[str]]]) -> bool:
+        """Whether code of the file ``scope`` is, which the name ``target`` (a project
+        type of ``namespace``) was resolved for, surely sees that type, declared in the files
+        ``declared`` ([(file, project)]): Kotlin Multiplatform's platform source sets see
+        their own declarations and the common ones, not one another's."""
+        return True
+
+    def outside_functions(self, scope: FileScope) -> bool:
+        """Whether the file's star imports bring in functions of any name, of which a call
+        of a class's name may be one (Kotlin/Native's platform libraries, C's functions)."""
+        return False
 
     def project_references(self, project: str) -> Optional[frozenset[str]]:
         """The build projects whose types code of ``project`` (FileScope.project) sees: it

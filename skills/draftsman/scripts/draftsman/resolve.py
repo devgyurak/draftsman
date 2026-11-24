@@ -58,6 +58,11 @@ class Resolver:
         # methods that may make a call an instance one (FileScope.extension_methods)
         self.resolver_extensions: set[str] = set().union(*(s.extension_methods for s in scopes)) \
             if scopes else set()
+        # names of functions and properties declared at a file's top (FileScope.top_functions)
+        self.top_functions: set[str] = set().union(*(s.top_functions for s in scopes)) \
+            if scopes else set()
+        self.top_values: set[str] = set().union(*(s.top_values for s in scopes)) \
+            if scopes else set()
         # namespace -> types the build generates outside the sources (LanguageSpec.build_types)
         self.build_types: dict[str, set[str]] = {}
         for s in scopes:
@@ -862,14 +867,46 @@ class Resolver:
                 return None   # `models.base.ModelBase`: a submodule the file did not import
         if self.index[target].kind in spec.type_only_kinds:
             return None   # the value of the name is another declaration's
+        if ref.position == "call" and len(parts) == 1 and (
+                self._function_named(parts[0], rtype, ref) or spec.outside_functions(ref.scope)):
+            return None   # `Foo(1)` may call a function Foo
+        outer = None
         while n < len(parts) and not self._has_field(self.index[target], parts[n]):
             nested = self._member_type(self.index[target], parts[n], sep,
                                        spec.inherited_member_types, set())
             if nested is None or self.index[nested].kind in spec.type_only_kinds or (
                     spec.rebinding_hides and self._rebound(nested)):
                 break   # `Foo.Cond` where Foo's body binds Cond twice: Foo alone
-            target, n = nested, n + 1
+            outer, target, n = target, nested, n + 1
+        if ref.position == "call" and n == len(parts) and outer is not None and \
+                self._has_method(self.index[outer], parts[-1], set()):
+            target, n = outer, n - 1   # `Outer.Inner()` may call Outer's function Inner
         return target, n
+
+    def _function_named(self, name: str, rtype: RawType, ref: RawBodyRef) -> bool:
+        """Whether a call of ``name`` may be a function's: one declared at a file's top
+        anywhere in the sources, or a method of a type around ``ref`` (its own, an outer
+        type's, an anonymous or local class's) or of one of their project supertypes."""
+        if name in self.top_functions:
+            return True
+        for project, _ in self._around(rtype, ref, 0):
+            if any(self._has_method(t, name, set()) for t in project):
+                return True
+        cur: Optional[RawType] = rtype
+        while cur is not None:
+            if self._has_method(cur, name, set()):
+                return True
+            cur = self.index.get(cur.outer) if cur.outer else None
+        return False
+
+    def _has_method(self, rtype: RawType, name: str, seen: set) -> bool:
+        """Whether the project type or a project supertype declares a method ``name``."""
+        if rtype.qualified_name in seen:
+            return False
+        seen.add(rtype.qualified_name)
+        return any(rm.member.name == name and rm.member.kind == "method" for rm in rtype.members) \
+            or any(self._has_method(self.index[s.target], name, seen)
+                   for s in self.supertypes(rtype) if s.status == PROJECT)
 
     def _receiver_head(self, head: str, rtype: RawType, ref: RawBodyRef,
                        spec) -> Optional[str]:
@@ -973,6 +1010,8 @@ class Resolver:
         around declares a type of the name, which C# looks at before the file's aliases."""
         spec = LANGUAGES[rtype.language]
         entry = self.alias_targets.get(alias)
+        if spec.alias_declarations:
+            return self._declared_alias_type(alias, spec, 0)
         if not spec.body_aliases or entry is None or entry[1].file != ref.scope.file \
                 or alias in entry[1].conditional_aliases or not isinstance(
                     written := parse_type(entry[0]), Named) or written.args:
@@ -987,6 +1026,29 @@ class Resolver:
         # from that namespace)
         res = self.resolve(written.name, rtype, None, scope=entry[1], strict=True,
                            at_namespace=entry[1].alias_blocks.get(alias, ""))
+        return res.target if res.status == PROJECT else None
+
+    def _declared_alias_type(self, alias: str, spec, depth: int) -> Optional[str]:
+        """The project class a type alias that is a declaration names directly
+        (LanguageSpec.alias_declarations: Kotlin's `typealias Cash = Money`; also through
+        another alias), resolved where it is declared; None for one of a generic type or a
+        function type."""
+        entry = self.alias_targets.get(alias)
+        if entry is None or depth > 4:
+            return None
+        text, scope = entry
+        written = parse_type(text)
+        if not isinstance(written, Named) or written.args:
+            return None
+        sep = spec.separator
+        owner = alias.rsplit(sep, 1)[0] if sep in alias else None
+        ctx = RawType(alias, alias.rsplit(sep, 1)[-1], "alias", Location(scope.file, 0), scope,
+                      spec.name, namespace=self.index[owner].namespace if owner in self.index
+                      else owner or scope.namespace,
+                      outer=owner if owner in self.index else None)
+        res = self.resolve(written.name, ctx, None, strict=True)
+        if res.status == ALIAS and res.target and res.target != alias:
+            return self._declared_alias_type(res.target, spec, depth + 1)
         return res.target if res.status == PROJECT else None
 
     def _binds(self, head: str, rtype: RawType, ref: RawBodyRef) -> bool:
@@ -1213,8 +1275,8 @@ class Resolver:
         member declares, a field of a class around it (inherited ones too, from the JDK as
         far as its table tells), or one a static import brings in. Fields of other types
         outside the sources are not known (lang-notes.md)."""
-        if name in ref.names.variables:
-            return True
+        if name in ref.names.variables or name in self.top_values:
+            return True   # a property at a file's top: the sources may name it anywhere
         spec = LANGUAGES[rtype.language]
         if spec.initializers_in_class_scope and ref.member is not None \
                 and ref.member.member.kind in ("field", "enum_constant") and (
@@ -1375,6 +1437,7 @@ class _Builder:
         # a project declares implicitly (LanguageSpec.implicit_types)
         self.projects: dict[str, set] = {}
         self.part_files: dict[str, set[str]] = {}   # type id -> the files declaring a part
+        self.file_projects = {f.path: f.scope.project for f in files}
         for f in files:
             for t in f.types:
                 self.projects.setdefault(t.qualified_name, set()).add(f.scope.project)
@@ -1594,8 +1657,9 @@ class _Builder:
                     for p in ref.text.split(sep)[:n]):
                 continue
             spec = LANGUAGES[rtype.language]
-            if spec.file_local(self.types[target].modifiers) and \
-                    self.part_files.get(target, set()) != {ref.scope.file}:
+            if spec.file_local(self.types[target].modifiers) and (
+                    ref.scope.file not in self.part_files.get(target, set()) if spec.file_local_copies
+                    else self.part_files.get(target, set()) != {ref.scope.file}):
                 continue   # a C# `file` type is seen in its file only, and is one type there
             if len(self.projects.get(target, ())) > 1:
                 continue   # one id, a type in each of several projects
@@ -1604,6 +1668,9 @@ class _Builder:
                 continue   # through an import some build leaves out
             if not self._visible(target, ref.scope.project, LANGUAGES[rtype.language]):
                 continue   # declared in a project the file's project does not reference
+            if not spec.sees_declaration(ref.scope, target, self.types[target].namespace, [
+                    (f, self.file_projects.get(f)) for f in sorted(self.part_files.get(target, ()))]):
+                continue   # declared in a platform's source set the file's does not see
             if ref.arities and ref.arities[n - 1] is not None \
                     and ref.arities[n - 1] not in self.types[target].arities:
                 continue   # `Repo<int>` is no Repo: another type of the name, further out

@@ -212,6 +212,27 @@ for _package, _names in {
         _LIBRARY[_name] = _LIBRARY.get(_name, ()) + (_package,)
 
 
+# source sets every other one of a module sees: Kotlin Multiplatform's common one
+# (`common/src` in Ktor's layout, `src/commonMain/kotlin`), a single-platform module's
+# `src/main`
+_COMMON_SOURCE_SETS = frozenset({"common", "commonMain", "main"})
+
+
+_APPLE_SOURCE_SETS = ("ios", "macos", "tvos", "watchos", "darwin", "apple")
+
+
+def _source_set(file: str, module) -> str:
+    """The source set of a file of the module (a path below the extraction root): Ktor's
+    `<module>/<set>/src/...`, Gradle's `<module>/src/<set>/kotlin/...`, else `main`."""
+    rel = file[len(module) + 1:] if module else file
+    parts = rel.split("/")
+    if parts[0] == "src":
+        return parts[1] if len(parts) > 3 and parts[2] in ("kotlin", "java") else "main"
+    if len(parts) > 2 and parts[1] == "src":
+        return parts[0]
+    return "main"
+
+
 class KotlinSpec(LanguageSpec):
     name = "kotlin"
     grammar = "kotlin"
@@ -222,6 +243,13 @@ class KotlinSpec(LanguageSpec):
         "enum_entry", "getter", "setter", "anonymous_initializer", "statements",
         "control_structure_body",
     })
+    # a name in a body: `Foo.x`, `p.Foo.x`, `Foo::class`; `Box<Cash>`'s arguments are names
+    # of their own
+    receiver_part_nodes = frozenset({"simple_identifier", "navigation_expression",
+                                     "navigation_suffix", "type_identifier"})
+    type_argument_nodes = frozenset({"type_arguments"})
+    alias_declarations = True
+    file_local_copies = True
     static_scope_nodes = frozenset({"companion_object"})
     static_scope_names = frozenset({"Companion"})
     annotation_nodes = frozenset({"annotation"})
@@ -304,6 +332,51 @@ class KotlinSpec(LanguageSpec):
 
     def default_visibility(self, owner_kind, member_kind):
         return "public"
+
+    def project_imports(self, path, root):
+        # the Gradle module a file is in: the nearest directory with a build script
+        root = root.resolve()
+        cur = path.resolve().parent
+        while cur != root and root in cur.parents:
+            if (cur / "build.gradle.kts").is_file() or (cur / "build.gradle").is_file():
+                return cur.relative_to(root).as_posix(), []
+            cur = cur.parent
+        return None, []
+
+    def sees_declaration(self, scope, target, namespace, declared):
+        # a platform's source set (jvm, posix, a flavor) sees its own and the common ones;
+        # which others it depends on (jvm on jvmAndPosix) the build says, not the sources
+        mine = _source_set(scope.file, scope.project)
+        if not any((s := _source_set(f, p)) in _COMMON_SOURCE_SETS or s == mine
+                   for f, p in declared):
+            return False
+        # a type of the file's package in other modules only is seen if the file's module
+        # depends on one of them, which the build says: not where a star import or a default
+        # import may bring in the name instead (the file's package comes before them)
+        name = target.rsplit(".", 1)[-1]
+        if namespace == scope.namespace and scope.project not in {p for _, p in declared} \
+                and not any(i.local_name == name for i in scope.imports if not i.wildcard):
+            return not any(i.wildcard for i in scope.imports) and self.default_import(name) is None
+        return True
+
+    def unbuilt_ranges(self, src, path, root):
+        # an Apple target's source set (ios, macos, tvos, watchos, darwin, apple; Ktor's
+        # `darwin/src`, Gradle's `src/iosMain`): only a macOS host builds it, which no
+        # answer key here can
+        module, _ = self.project_imports(path, root)
+        rel = path.resolve().relative_to(root.resolve()).as_posix()
+        name = _source_set(rel, module).lower()
+        return [(0, len(src))] if name.startswith(_APPLE_SOURCE_SETS) else []
+
+    def outside_functions(self, scope):
+        # Kotlin/Native's platform libraries (`platform.posix`, `platform.windows`) are C
+        # APIs: functions of any name, `WinHttpConnect` beside a class of the name
+        return any(imp.wildcard and imp.path.startswith("platform.") for imp in scope.imports)
+
+    def file_local(self, modifiers):
+        # a private top-level class is seen in its file only (a private nested one in its
+        # outer class, which is in one file too)
+        return "private" in modifiers
 
     def is_static(self, owner_kind, member_kind, modifiers):
         return member_kind == "enum_constant" or "const" in modifiers

@@ -89,3 +89,63 @@
 
 ; ---------------------------------------------------------------- aliases
 (type_alias (type_identifier) @alias "=" . (_) @alias.type)
+
+; ---------------------------------------------------------------- bodies (issue #5)
+; where a name in a body is read: a function's body, a property's initializer, delegate
+; and accessors, a default argument, a secondary constructor's delegation and block, an
+; enum entry's arguments and body
+(function_declaration (function_body) @body.region)
+(property_declaration "=" . (_) @body.region)
+(property_declaration (property_delegate) @body.region)
+(getter (function_body) @body.region)
+(setter (function_body) @body.region)
+(function_value_parameters "=" . (_) @body.region)
+(class_parameter "=" . (_) @body.region)
+(secondary_constructor (constructor_delegation_call) @body.region)
+(secondary_constructor (statements) @body.region)
+(enum_entry (value_arguments) @body.region)
+(enum_entry (class_body) @body.region)
+; bodies of no listed member: `init {}`, a superclass's constructor arguments
+; (`: Base(Foo.x)`) and a delegate's expression (`: Action by Action(...)`)
+(anonymous_initializer) @body.init
+(delegation_specifier (constructor_invocation (value_arguments) @body.init))
+(explicit_delegation "by" . (_) @body.init)
+
+; where only a type can stand: a type (a local's, a parameter's, `is`, `as`, a type
+; argument, `catch`, a local class's or an object's supertype, `super<Foo>`)
+(user_type) @body.ref.type
+
+; where a value may stand as well: the head of a member access (`Foo.x`, `Foo.Line.x`,
+; `Outer.Inner::class`), a class literal or callable reference's receiver (`Foo::class`,
+; `Foo::bar`, which a variable may be too)
+(navigation_expression . [(simple_identifier) (navigation_expression)] @body.ref.receiver)
+(callable_reference . (type_identifier) @body.ref.receiver)
+; what is called (`Foo(1)`, `Outer.Inner()`, `Foo.create()`), or referred to as a function
+; (`::Foo`): a function of the name may be called instead (KotlinSpec)
+(call_expression . [(simple_identifier) (navigation_expression)] @body.ref.call)
+(callable_reference . (simple_identifier) @body.ref.call)
+
+; variables a member declares: parameters, locals, lambda parameters, destructured names,
+; `for`, `catch` and `when` subjects; local functions (their calls are theirs)
+(parameter (simple_identifier) @body.var)
+(variable_declaration (simple_identifier) @body.var)
+(catch_block (simple_identifier) @body.var)
+(statements (function_declaration (simple_identifier) @body.var))
+; a primary constructor's parameters: in scope in the class's initializers (a `val` one
+; is a property in every body)
+(class_parameter (simple_identifier) @body.field)
+; types a member declares: local classes, type parameters
+(statements (class_declaration (type_identifier) @body.type))
+(type_parameter (type_identifier) @body.type)
+; the supertypes of an anonymous object and of a local class: their members are in
+; scope in its body
+(object_literal
+  (delegation_specifier [(constructor_invocation (user_type) @body.class.super) (user_type) @body.class.super])
+  (class_body) @body.class)
+(class_declaration
+  (delegation_specifier [(constructor_invocation (user_type) @body.class.super) (user_type) @body.class.super])
+  (class_body) @body.class)
+; functions and properties at a file's top, which every file may name: a call of the
+; name may be such a function, any name of it such a property
+(source_file (function_declaration (simple_identifier) @body.function))
+(source_file (property_declaration (variable_declaration (simple_identifier) @body.value)))
