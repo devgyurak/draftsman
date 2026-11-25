@@ -10,6 +10,7 @@ holds what the answer keys of the other languages share.
     uv run bench/javac_oracle/oracle.py run REPO --checkout DIR -o OUT.jsonl
     uv run bench/javac_oracle/oracle.py scope REPO OUT.jsonl ir.json
     uv run bench/javac_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR [-v]
+    uv run bench/javac_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR --declared [--save F]
     uv run bench/javac_oracle/oracle.py measure OUT.jsonl [--ir ir.json]
     uv run bench/javac_oracle/oracle.py jdk
 
@@ -21,7 +22,9 @@ classpath. `scope` fails unless the oracle saw the same Java types, declared
 in the same files, as ir.json of those sources: every comparison with ir.json rests on
 it. `compare` extracts the same sources and checks every name a body relation is drawn
 from against what javac resolved at its place; it fails on any mismatch outside the files
-javac could not compile (after `scope`, on the IR it builds). `measure` prints the counts
+javac could not compile (after `scope`, on the IR it builds); with `--declared` it checks
+the names declared relations are drawn from instead (bench/declared.py, issue #7), and
+`--save` writes what it found as JSON. `measure` prints the counts
 the rules of the receiver position are decided by. `jdk` writes the table of the nested
 types and fields JDK supertypes pass on (JdkMembers.java), which the extractor reads.
 
@@ -46,6 +49,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE.parent))
 import answer_key  # noqa: E402
+import declared  # noqa: E402
 from select_focus import excluded  # noqa: E402
 
 TASKS = HERE.parent / "tasks.yaml"
@@ -212,11 +216,12 @@ def run(args) -> int:
         out.unlink()
     args.output.write_text("".join(json.dumps(r) + "\n" for r in recs))
     errors = [r for r in recs if "diagnostic" in r]
-    uses = Counter(r["kind"] for r in recs if "use" in r)
+    uses = Counter(r["kind"] for r in answer_key.body(recs) if "use" in r)
     print(f"{args.repo}: {len(files)} files ({len(context)} more compiled as context, "
           f"{len(stubs)} stubs), "
           f"{len(errors)} compile errors, uses: "
-          + ", ".join(f"{k} {v}" for k, v in uses.most_common()))
+          + ", ".join(f"{k} {v}" for k, v in uses.most_common())
+          + f"; declared names: {len(declared.declared_records(recs))}")
     for r in errors[:20]:
         print(f"  {r['file']}:{r['line']}: {r['diagnostic']}")
     return 0
@@ -256,10 +261,14 @@ def compare(args) -> int:
     extractor = Extractor(spec_for_path("A.java"))
     builder = _Builder(str(root), [extractor.extract(f, rel, root) for f, rel in files],
                        Wrappers.load())
+    if args.declared:
+        declared.watch(builder)
     ir = builder.build()
-    recs = answer_key.read(args.oracle)
+    recs = answer_key.read(args.oracle, declared=args.declared)
     if in_scope(args.repo, recs, {t.id: t.location.file for t in ir.types}):
         return 1
+    if args.declared:
+        return declared.report(builder, recs, root, args, key="javac")
 
     # javac has the stubs as class files: nothing in them is recorded
     stubs = [d.relative_to(root).as_posix() + "/" for g in conf.get("stubs", ())
@@ -363,6 +372,7 @@ def main(argv=None) -> int:
     k.add_argument("oracle", type=Path)
     k.add_argument("--checkout", type=Path, required=True)
     k.add_argument("-v", "--verbose", action="store_true", help="list every miss and mismatch")
+    declared.arguments(k)
     k.set_defaults(fn=compare)
     sub.add_parser("jdk").set_defaults(fn=jdk_table)
     m = sub.add_parser("measure")

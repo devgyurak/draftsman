@@ -71,7 +71,14 @@ import javax.tools.ToolProvider;
  *
  * A body is a method or constructor body, an initializer block, a field initializer, an
  * enum constant's arguments and body, and everything inside them (lambdas, anonymous and
- * local classes). Annotations are not read. Lines are 1-based, columns 0-based in chars.
+ * local classes); annotations in bodies are not read. The names of a named type's
+ * declarations are recorded too, with "pos" "declared" (issue #7): its supertypes, its
+ * fields' types, its methods' return, parameter and thrown types, with their type
+ * arguments, and the annotations on all of these (their type and the names in their
+ * arguments). Type parameters' bounds are not recorded: the extractor draws nothing from
+ * them. A declared name also has "role" (which of these: "super", "field", "signature",
+ * "annotation") and "in_args" (inside type arguments: `Foo` in `List<Foo>`, not in an
+ * annotation's arguments). Lines are 1-based, columns 0-based in chars.
  */
 public class TypeUses {
     public static void main(String[] args) throws IOException {
@@ -181,6 +188,9 @@ public class TypeUses {
         CompilationUnitTree cu;
         String file;
         boolean body;
+        boolean decl;   // in a declaration the extractor draws a declared relation from
+        String role;    // which: "super", "field", "signature", "annotation"
+        int args;       // inside type arguments there
 
         Scanner(Trees trees, Types types, Elements elements, Path root, Set<URI> outside,
                 Set<String> stubs, PrintWriter w) {
@@ -267,19 +277,38 @@ public class TypeUses {
                 w.println("{\"declared\": " + str(te.getQualifiedName().toString())
                         + ", \"file\": " + str(file) + "}");
             }
+            inDecl(cp, c.getModifiers(), "annotation");
+            inDecl(cp, c.getExtendsClause(), "super");
+            for (Tree t : c.getImplementsClause()) {
+                inDecl(cp, t, "super");
+            }
             // only the bodies: the header and the member declarations are declarations
             for (Tree m : c.getMembers()) {
                 TreePath mp = new TreePath(cp, m);
                 if (m instanceof MethodTree mt) {
+                    inDecl(mp, mt.getModifiers(), "annotation");
+                    inDecl(mp, mt.getReturnType(), "signature");
+                    for (VariableTree p : mt.getParameters()) {
+                        TreePath pp = new TreePath(mp, p);
+                        inDecl(pp, p.getModifiers(), "annotation");
+                        inDecl(pp, p.getType(), "signature");
+                    }
+                    for (Tree t : mt.getThrows()) {
+                        inDecl(mp, t, "signature");
+                    }
                     if (mt.getBody() != null) {
                         inBody(new TreePath(mp, mt.getBody()));
                     }
                 } else if (m instanceof VariableTree vt) {
+                    Element e = trees.getElement(mp);
+                    inDecl(mp, vt.getModifiers(), "annotation");
+                    if (e == null || e.getKind() != ElementKind.ENUM_CONSTANT) {
+                        inDecl(mp, vt.getType(), "field");
+                    }
                     ExpressionTree init = vt.getInitializer();
                     if (init == null) {
                         continue;
                     }
-                    Element e = trees.getElement(mp);
                     if (e != null && e.getKind() == ElementKind.ENUM_CONSTANT
                             && init instanceof NewClassTree nc) {
                         // `A(args) { body }`: the `new Kind(...)` around them is javac's
@@ -302,14 +331,55 @@ public class TypeUses {
             return null;
         }
 
+        /** The names of a declaration's ``t`` (a type, the modifiers' annotations). */
+        void inDecl(TreePath parent, Tree t, String r) {
+            if (t == null) {
+                return;
+            }
+            boolean was = decl;
+            String wasRole = role;
+            decl = true;
+            role = r;
+            scan(new TreePath(parent, t), null);
+            decl = was;
+            role = wasRole;
+        }
+
         @Override
-        public Void visitAnnotation(AnnotationTree a, Void v) {
+        public Void visitParameterizedType(com.sun.source.tree.ParameterizedTypeTree t, Void v) {
+            if (!decl || body) {
+                return super.visitParameterizedType(t, v);
+            }
+            scan(t.getType(), v);
+            args++;
+            scan(t.getTypeArguments(), v);
+            args--;
             return null;
         }
 
         @Override
+        public Void visitAnnotation(AnnotationTree a, Void v) {
+            if (!decl || body) {
+                return null;
+            }
+            String wasRole = role;
+            int wasArgs = args;
+            role = "annotation";
+            args = 0;
+            super.visitAnnotation(a, v);
+            role = wasRole;
+            args = wasArgs;
+            return null;
+        }
+
+        @Override
+        public Void visitTypeParameter(com.sun.source.tree.TypeParameterTree t, Void v) {
+            return decl && !body ? null : super.visitTypeParameter(t, v);
+        }
+
+        @Override
         public Void visitIdentifier(IdentifierTree id, Void v) {
-            if (body) {
+            if (body || decl) {
                 record(getCurrentPath(), id.getName().toString(), pos(id));
             }
             return null;
@@ -317,7 +387,7 @@ public class TypeUses {
 
         @Override
         public Void visitMemberSelect(MemberSelectTree ms, Void v) {
-            if (body) {
+            if (body || decl) {
                 String name = ms.getIdentifier().toString();
                 SourcePositions sp = trees.getSourcePositions();
                 record(getCurrentPath(), name, sp.getEndPosition(cu, ms) - name.length());
@@ -337,7 +407,7 @@ public class TypeUses {
             }
             Element e = trees.getElement(path);
             TypeMirror tm = trees.getTypeMirror(path);
-            String position = position(path);
+            String position = body ? position(path) : "declared";
             String kind;
             String target = null;
             boolean project = false;
@@ -404,7 +474,9 @@ public class TypeUses {
                     + ", \"from\": " + str(from == null ? null : from.getQualifiedName().toString())
                     + ", \"in_nested\": " + nested
                     + ", \"outside_super\": " + outside
-                    + ", \"outside_super_not_lang\": " + outsideNotLang + "}");
+                    + ", \"outside_super_not_lang\": " + outsideNotLang
+                    + (body ? "" : ", \"role\": " + str(role) + ", \"in_args\": " + (args > 0))
+                    + "}");
         }
 
         /** A local or anonymous class, or a member of one (`Bar` in a local `Foo`): no
