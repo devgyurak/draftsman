@@ -80,3 +80,17 @@ def test_names_are_matched_within_their_declaration(tmp_path):
     assert out["rows"][0]["verdict"] == "miss" and out["rows"][0]["status"] == "not read"
     out = declared.compare(builder, [recs[3]], tmp_path)
     assert [(r["verdict"], r["drawn"]) for r in out["rows"]] == [("mismatch", ["p.B"])]
+
+
+def test_names_the_key_never_met_are_counted(tmp_path):
+    builder = _names(tmp_path, {
+        "p/B.java": "package p;\npublic class B {}\n",
+        "p/A.java": "package p;\n"
+                    "public class A {\n"        # 2
+                    "    B b;\n"                # 3
+                    "    B c(B x) { return x; }\n"  # 4
+                    "}\n"})
+    out = declared.compare(builder, [_use("B", 3, 4, "p.B")], tmp_path)
+    assert [(n["line"], n["where"]) for n in out["uncompared"]] == [(4, "signature")]
+    out = declared.compare(builder, [_use("B", 3, 4, "p.B"), _use("B", 4, 4, "p.B")], tmp_path)
+    assert out["uncompared"] == []   # `B c(B x)`: one name compared stands for the other

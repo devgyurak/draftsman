@@ -32,6 +32,8 @@ extractor's names of the same file, type and simple name, and counts:
                file or line is not compiled
     miss       the key gives a project type the extractor does not draw: it resolves the
                name to nothing of the project, leaves it unresolved, or reads no name there
+    never compared  a name the extractor draws from that no record of the key was matched
+               with (counted once per declaration): what the comparison cannot vouch for
     agreed     the rest of the key's names the extractor read; "unread" the key's names of
                types outside the sources at places the extractor reads none (a
                supertype's type arguments); a name outside every type (a top-level
@@ -297,6 +299,14 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
             ("all" if r["file"] in uncompiled else ())
         if pick is not None:
             matched.add(id(pick))
+            # a parameter property (TypeScript's `private a: A`, Kotlin's `val a: A` in a
+            # primary constructor) is a field and a parameter of the constructor: the one
+            # name stands for both
+            starts_c = [c for c in ctors.get((r["file"], r["from"]), []) if c <= r["line"]]
+            for twin in here:
+                if starts_c and twin["line"] == starts_c[-1] \
+                        and twin["written"] == pick["written"]:
+                    matched.add(id(twin))
         drawn = pick["targets"] if pick is not None else []
         ext = pick["external"] if pick is not None and pick["where"] == "super" else None
         if project:
@@ -337,10 +347,24 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
                and not any((n["file"], n["from"], part) in keyed
                            for part in re.split(r"::|\.|/", n["written"]))]
     counts["drawn where the key has no name"] = len(unkeyed)
+    # the extractor's names that draw and that no record of the key was compared with (a
+    # name written twice in one declaration counts once, as the first is compared)
+    seen = {_same_name(n) for n in names if id(n) in matched}
+    uncompared, once = [], set()
+    for n in names:
+        if n["targets"] and id(n) not in matched and _same_name(n) not in seen \
+                and _same_name(n) not in once:
+            once.add(_same_name(n))
+            uncompared.append(n)
+    counts["drawn names"] = len({_same_name(n) for n in names if n["targets"]})
+    counts["drawn names never compared"] = len(uncompared)
     print(f"declared: {counts['names']} names {key} resolved in declared positions "
           f"({counts['project names']} of project types); "
           + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())
-                      if k not in ("names", "project names")))
+                      if k not in ("names", "project names", "drawn names",
+                                   "drawn names never compared")))
+    print(f"  of the {counts['drawn names']} names the extractor draws from, "
+          f"{len(uncompared)} were compared with no record of {key}")
     for row in rows[:None if verbose else show]:
         print(f"  {row['verdict']}: {row['file']}:{row['line']}:{row['col'] + 1} "
               f"{row['from']}: {row['written']} -> {', '.join(row['drawn']) or row['status']}"
@@ -349,9 +373,17 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
         for n in unkeyed:
             print(f"  no key name: {n['file']}:{n['line']} {n['from']}: {n['written']} -> "
                   f"{', '.join(n['targets'])}")
+        for n in uncompared:
+            print(f"  never compared: {n['file']}:{n['line']} {n['from']}: {n['written']} -> "
+                  f"{', '.join(n['targets'])} ({n['where']})")
+    fields = ("file", "line", "from", "written", "where", "targets")
     return {"counts": dict(counts), "rows": rows,
-            "unkeyed": [{k: n[k] for k in ("file", "line", "from", "written", "targets")}
-                        for n in unkeyed]}
+            "unkeyed": [{k: n[k] for k in fields} for n in unkeyed],
+            "uncompared": [{k: n[k] for k in fields} for n in uncompared]}
+
+
+def _same_name(n: dict) -> tuple:
+    return (n["file"], n["from"], n["line"], n["written"], tuple(n["targets"]))
 
 
 def _answer(r: dict) -> str:
@@ -366,7 +398,9 @@ def _pick(here: list[dict], r: dict, written: str, starts: list[int]) -> Optiona
     written the same way if one is."""
     at = bisect.bisect_right(starts, r["line"])
     start = starts[at - 1] if at else None
-    pool = [n for n in here if n["line"] in (start, r["line"])]
+    # the record's own line first (an annotation's, a supertype's), then the declaration's
+    pool = sorted((n for n in here if n["line"] in (start, r["line"])),
+                  key=lambda n: n["line"] != r["line"])
     if not pool:
         return None
     exact = [n for n in pool if n["written"].replace(" ", "") == written
