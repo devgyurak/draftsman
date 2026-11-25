@@ -12,7 +12,7 @@ module lists what the extractor made of each name there and compares the two.
     {"file", "line", "from", "written", "where", "status", "targets", "external", "alias"}
 
 "line" is the declaration's (a member's first line, a supertype's or an annotation's
-line), not the name's; "written" the name as the extractor resolved it (`Outer.Inner`,
+line, also for the names in a supertype's type arguments), not the name's; "written" the name as the extractor resolved it (`Outer.Inner`,
 `p::Foo`); "where" one of "super", "annotation", "field", "signature"; "status" the
 resolver's, and "targets" the project types a relation is drawn to from it (an alias's
 expansion included, the type itself left out). A supertype outside the sources is drawn
@@ -32,6 +32,9 @@ extractor's names of the same file, type and simple name, and counts:
                file or line is not compiled
     miss       the key gives a project type the extractor does not draw: it resolves the
                name to nothing of the project, leaves it unresolved, or reads no name there
+    drawn where the key has no name  a name the extractor draws from where the key
+               resolved no name of the declaration's type of its spelling; counted apart
+               ("not compiled") in a file or at a line no compilation compiles
     never compared  a name the extractor draws from that no record of the key was matched
                with (counted once per declaration): what the comparison cannot vouch for
     agreed     the rest of the key's names the extractor read; "unread" the key's names of
@@ -381,7 +384,16 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
     unkeyed = [n for n in names if n["targets"]
                and not any((n["file"], n["from"], part) in keyed
                            for part in re.split(r"::|\.|/", n["written"]))]
-    counts["drawn where the key has no name"] = len(unkeyed)
+
+    def not_compiled(n) -> bool:
+        skipped = uncompiled.get(n["file"], ()) if isinstance(uncompiled, dict) else \
+            ("all" if n["file"] in uncompiled else ())
+        return skipped == "all" or n["line"] in skipped
+
+    # (where no compilation compiles the file or the line, the key has no names at all)
+    counts["drawn where the key has no name"] = sum(not not_compiled(n) for n in unkeyed)
+    if any(map(not_compiled, unkeyed)):
+        counts["drawn where the key has no name (not compiled)"] = sum(map(not_compiled, unkeyed))
     # the extractor's names that draw and that no record of the key was compared with (a
     # name written twice in one declaration counts once, as the first is compared)
     seen = {_same_name(n) for n in names if id(n) in matched}
@@ -406,7 +418,8 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
               f"; {key}: {row['key']}")
     if verbose:
         for n in unkeyed:
-            print(f"  no key name: {n['file']}:{n['line']} {n['from']}: {n['written']} -> "
+            print(f"  no key name{' (not compiled)' if not_compiled(n) else ''}: "
+                  f"{n['file']}:{n['line']} {n['from']}: {n['written']} -> "
                   f"{', '.join(n['targets'])}")
         for n in uncompared:
             print(f"  never compared: {n['file']}:{n['line']} {n['from']}: {n['written']} -> "
@@ -434,7 +447,9 @@ def _pick(here: list[dict], r: dict, written: str, starts: list[int]) -> Optiona
     at = bisect.bisect_right(starts, r["line"])
     start = starts[at - 1] if at else None
     # the record's own line first (an annotation's, a supertype's), then the declaration's
-    pool = sorted((n for n in here if n["line"] in (start, r["line"])),
+    # (a supertype's type arguments written on lines after its first: between the two)
+    pool = sorted((n for n in here if n["line"] in (start, r["line"]) or n["where"] == "super"
+                   and start is not None and start <= n["line"] <= r["line"]),
                   key=lambda n: n["line"] != r["line"])
     if not pool:
         return None
