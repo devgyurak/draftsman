@@ -657,6 +657,18 @@ is that type. Aliases of aliases are followed.
   reason does not change, as a macro argument may be anything (`DEFINE_GUARD(Lock, ...)`).
   A name several macros mention (as a base too) is listed with each place, "one of them
   may declare it", a file named after the name first (`XMLException.h`).
+- A name of a declaration (a base, a member's type, a parameter's or the return type) is
+  looked up as a name in a body is (below, issue #7): `::D`, a namespace alias of the
+  file, the class's own alias before `::`, no dependent base, using declarations where
+  they stand and in the files including them, include visibility, and an alias expanded
+  without its own template parameters. An alias of a member of a template
+  (`std::vector<Item>::const_iterator`, `typename X<T>::Y`) names none of the template's
+  arguments; `typename std::pair<K, Var>` is the pair. Where a body draws nothing the
+  name is unresolved with the reason: a type of an `#if` branch the declaration is outside
+  of (the branch of the same condition sees it), a type of a file the declaring file does
+  not include, a name a variable, a method or a namespace may be. A type the file cannot
+  tell whether it sees (one its includer brings in, a class's own nested type its `.cc`
+  defines) is drawn.
 - Template parameters of every kind are no types to resolve: types (`class T`), values
   (`std::size_t N`, `int N = 8`, `int... Is`, `auto V`) and templates (`template <class>
   class C`). Inside the template they hide a project type of the same name (`Array<P, N>`

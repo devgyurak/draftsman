@@ -37,6 +37,27 @@ Notes for anyone with `view.json` files written against a development build:
   focus diagram draws those that touch the focus; results measured with 0.3.0 (the
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
+- **After 0.9.0**: C++'s declared relations look names up as bodies do (below); POCO's
+  change (14 relations added, 13 removed, 4 names unresolved with a reason), leveldb's and
+  every other language's `ir.json` are the same.
+- **C++ declarations look names up as bodies do** (#7, after 0.9.0). A base, a member's
+  type and a parameter's or the return type follow the body's lookup: `::D` is the global
+  namespace's, a namespace alias of the file is read, the class's own alias comes first
+  in a qualified name's head (`Mutex::ScopedLock`), a dependent base (`Vec : TBase<T>`) is
+  not looked into, a header's using declaration is a name of its namespace where the
+  header is included and comes after a nearer namespace's type, a type of a file not
+  included is passed over (another program's `Utility`), and an alias expands as in a
+  body (its own template parameters name no type, `typename X<T>::Y` none). An alias of a
+  member of a template names none of the template's arguments
+  (`std::vector<Item>::const_iterator`). Where a body draws nothing the name is
+  unresolved, with the reason: a type of an `#if` branch the declaration is outside of, a
+  type of a file not included, a name a value or a namespace may be. A type the file
+  cannot tell whether it sees (its includer brings it in, a class's own nested type
+  defined in the `.cc`) is still drawn. On POCO the declared side now agrees with Clang at
+  every place it compares (10 wrong targets before); three relations go, under
+  `#if`/`#ifndef POCO_DOC` (`PollSet`'s `PollSetImpl`, `VarVisitor`'s `Details::` types).
+  Review set `bench/clang_oracle/review/cpp9`; `oracle.py review` compares declared
+  relations too.
 - **A grammar the language pack cannot download is exit 2, not a traceback.**
   `tree-sitter-language-pack` fetches each grammar from GitHub on first use; in the
   benchmark that fetch failed twice (HTTP 500), `draw.py` ended in a traceback, and one
