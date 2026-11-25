@@ -673,8 +673,10 @@ is that type. Aliases of aliases are followed.
   (one its includer brings in, a class's own nested type its `.cc` defines) is drawn. A
   base clause has one answer: the base a relation is drawn to is the one a member's type,
   a parameter's and a body's names are looked up in (`struct C : la::Base { Inner i_; }`
-  is `lib::Base::Inner`); a base written as an alias of one class (`typedef lib::Base LB;`,
-  `using LB = lib::Base;`) is that class, looked into. A base unresolved by the `#if` or the
+  is `lib::Base::Inner`); a base written as an alias of a class (`typedef lib::Base LB;`,
+  `using LB = lib::Base;`, an alias of an alias) is that class, looked into, and one of a
+  class outside the sources (`typedef std::vector<int> IntVec;`) is that class, as if
+  written so (drawn, and std's table says what members it has). A base unresolved by the `#if` or the
   include rule is a base whose members are not known: a name the class, its other bases or
   their bases do not have may be its member, so one found further out (a class around, a
   namespace) is unresolved in a declaration, with the base named, and draws nothing in a

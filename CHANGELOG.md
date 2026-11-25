@@ -59,7 +59,8 @@ Notes for anyone with `view.json` files written against a development build:
   one it includes declares outside every branch (`class PollSetImpl;`). A base clause has
   one answer, the base drawn being the base names are looked up in, by declarations and
   bodies alike (`struct C : la::Base { Inner i_; }` is `lib::Base::Inner`); a base written
-  as an alias of one class is looked into, and a base unresolved by the `#if` or include
+  as an alias of a class is that class (an outside one's too: `typedef std::vector<int>
+  IntVec;` is std::vector, drawn and looked up in std's table), and a base unresolved by the `#if` or include
   rule hides the names found past the class and its other bases (unresolved in a
   declaration, nothing drawn in a body). A type every branch of an `#if ... #else` chain
   declares is drawn in a declaration. On POCO the
