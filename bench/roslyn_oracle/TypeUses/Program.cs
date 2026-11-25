@@ -51,6 +51,15 @@
 // whether only generated code declares it), "method", "label" or "error"; "alias" when
 // the name is a using alias. "from" is the id of the type around the name (`Program` in
 // top-level statements, the static class around a C# 14 extension block). Lines are 1-based, columns 0-based in UTF-16 code units.
+//
+// The names of a type's declarations are recorded too, with "pos" "declared" (issue #7):
+// its base list, its fields' and properties' types, its methods' return and parameter
+// types, its constructors' and a primary constructor's parameter types (a record's
+// positional parameters are properties), with their type arguments, and the attributes on
+// the type, its members and their parameters (the attribute's name and the names in its
+// arguments). "from" is the type declaring them; "role" says which ("super", "field",
+// "signature", "annotation") and "in_args" whether the name is inside type arguments.
+// Events, indexers, operators and delegates are not recorded: the extractor reads none.
 
 using System.Text.Json;
 using Microsoft.CodeAnalysis;
@@ -141,6 +150,59 @@ sealed class Reader(SemanticModel model, HashSet<string> sources, HashSet<string
         foreach (var name in root.DescendantNodes().OfType<SimpleNameSyntax>())
             if (InBody(name))
                 Chain(name);
+            else if (DeclaredRole(name) is { } d)
+                Chain(name, d);
+    }
+
+    // where a name outside bodies stands in a declaration the extractor reads (module
+    // comment): its role, the type declaring it, whether inside type arguments
+    static (string role, BaseTypeDeclarationSyntax type, bool args)? DeclaredRole(SimpleNameSyntax name)
+    {
+        var args = false;
+        SyntaxNode prev = name;
+        for (var cur = name.Parent; cur != null; prev = cur, cur = cur.Parent)
+        {
+            switch (cur)
+            {
+                case TypeArgumentListSyntax:
+                    args = true;
+                    break;
+                case AttributeSyntax:
+                    // on a type, a member or a parameter of one, not in a body
+                    for (var up = cur.Parent; up != null; up = up.Parent)
+                    {
+                        if (up is BlockSyntax or ArrowExpressionClauseSyntax or AnonymousFunctionExpressionSyntax
+                            or LocalFunctionStatementSyntax or GlobalStatementSyntax or CompilationUnitSyntax)
+                            return null;
+                        if (up is BaseTypeDeclarationSyntax t)
+                            return ("annotation", t, false);
+                    }
+                    return null;
+                case BaseListSyntax { Parent: BaseTypeDeclarationSyntax t }:
+                    return ("super", t, args);
+                case VariableDeclarationSyntax { Parent: FieldDeclarationSyntax { Parent: BaseTypeDeclarationSyntax t } } v
+                        when prev == v.Type:
+                    return ("field", t, args);
+                case PropertyDeclarationSyntax { Parent: BaseTypeDeclarationSyntax t } pd when prev == pd.Type:
+                    return ("field", t, args);
+                case MethodDeclarationSyntax { Parent: BaseTypeDeclarationSyntax t } md when prev == md.ReturnType:
+                    return ("signature", t, args);
+                case ParameterSyntax ps when prev == ps.Type:
+                    return ps.Parent?.Parent switch
+                    {
+                        MethodDeclarationSyntax { Parent: BaseTypeDeclarationSyntax t } => ("signature", t, args),
+                        ConstructorDeclarationSyntax { Parent: BaseTypeDeclarationSyntax t } => ("signature", t, args),
+                        RecordDeclarationSyntax t => ("field", t, args),
+                        ClassDeclarationSyntax t => ("signature", t, args),
+                        StructDeclarationSyntax t => ("signature", t, args),
+                        _ => null,
+                    };
+                case MemberDeclarationSyntax or StatementSyntax or CompilationUnitSyntax or EqualsValueClauseSyntax
+                        or TypeParameterConstraintClauseSyntax:
+                    return null;
+            }
+        }
+        return null;
     }
 
     static bool InBody(SyntaxNode node)
@@ -203,7 +265,7 @@ sealed class Reader(SemanticModel model, HashSet<string> sources, HashSet<string
     bool NamesItsType(SimpleNameSyntax name) =>
         Bound(model.GetSymbolInfo(name)) is ITypeSymbol t && t.Name == name.Identifier.ValueText;
 
-    void Chain(SimpleNameSyntax name)
+    void Chain(SimpleNameSyntax name, (string role, BaseTypeDeclarationSyntax type, bool args)? declared = null)
     {
         var top = Top(name);
         var parts = Parts(top);
@@ -228,14 +290,15 @@ sealed class Reader(SemanticModel model, HashSet<string> sources, HashSet<string
         var got = new List<Dictionary<string, object?>>();
         foreach (var part in parts)
         {
-            var c = Classify(part);
+            var c = Classify(part, attribute: declared is { role: "annotation" } && top.Parent is AttributeSyntax);
             got.Add(c);
             if ((string)c["kind"]! is not ("type" or "namespace"))
                 break;
         }
         if (parts.Count == 1 && !typeContext && (string)got[0]["kind"]! != "type" && !ConstantPlace(top))
             return;   // a variable, a method, a label: no type could stand there
-        var from = From(name.SpanStart);
+        var from = declared is { } dd && Named(model.GetDeclaredSymbol(dd.type)) is { } owner
+            ? Id(owner) : From(name.SpanStart);
         for (var i = 0; i < got.Count; i++)
         {
             var c = got[i];
@@ -250,7 +313,12 @@ sealed class Reader(SemanticModel model, HashSet<string> sources, HashSet<string
             c["file"] = file;
             c["line"] = at.Line + 1;
             c["col"] = at.Character;
-            c["pos"] = typeContext ? "type" : "receiver";
+            c["pos"] = declared != null ? "declared" : typeContext ? "type" : "receiver";
+            if (declared is { } d)
+            {
+                c["role"] = d.role;
+                c["in_args"] = d.args;
+            }
             c["maximal"] = !(i + 1 < got.Count && (string)got[i + 1]["kind"]! == "type");
             c["from"] = from;
             c["comp"] = comp;
@@ -270,10 +338,21 @@ sealed class Reader(SemanticModel model, HashSet<string> sources, HashSet<string
         _ => false,
     };
 
-    Dictionary<string, object?> Classify(SimpleNameSyntax part)
+    // the type named, or the one around an extension block (a type with no name)
+    static INamedTypeSymbol? Named(ISymbol? s)
+    {
+        while (s is INamedTypeSymbol { Name.Length: 0 })
+            s = s.ContainingType;
+        return s as INamedTypeSymbol;
+    }
+
+    // ``attribute``: the part is of an attribute's name, which binds to its constructor
+    Dictionary<string, object?> Classify(SimpleNameSyntax part, bool attribute = false)
     {
         var info = model.GetSymbolInfo(part);
         var sym = Bound(info);
+        if (attribute && sym is IMethodSymbol { MethodKind: MethodKind.Constructor } ctor)
+            sym = ctor.ContainingType;
         var rec = new Dictionary<string, object?> { ["kind"] = "error", ["target"] = null, ["project"] = false };
         if (info.Symbol == null && info.CandidateSymbols.Length > 0)
         {

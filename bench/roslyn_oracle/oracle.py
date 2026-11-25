@@ -5,11 +5,12 @@ compilation, in the format bench/answer_key.py gives; this script runs it in a c
 and joins the compilations each file is in.
 
     uv run bench/roslyn_oracle/oracle.py selftest
-    uv run bench/roslyn_oracle/oracle.py key DIR [-o OUT.jsonl] [--compare] [-v]
+    uv run bench/roslyn_oracle/oracle.py key DIR [-o OUT.jsonl] [--compare [--declared]] [-v]
     uv run bench/roslyn_oracle/oracle.py review [SET ...]
     uv run bench/roslyn_oracle/oracle.py run REPO --checkout DIR -o OUT.jsonl
     uv run bench/roslyn_oracle/oracle.py scope REPO OUT.jsonl ir.json
     uv run bench/roslyn_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR [-v]
+    uv run bench/roslyn_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR --declared [--save F]
     uv run bench/roslyn_oracle/oracle.py measure OUT.jsonl [--ir ir.json]
     uv run bench/roslyn_oracle/oracle.py framework
 
@@ -24,7 +25,8 @@ end-to-end page extracts (docs/e2e/csharp/); the checkout is restored (and built
 REPOS says) in the container first, which takes the network. `scope` fails unless the key
 saw the same types, declared in the same files, as ir.json of those sources. `compare`
 extracts the same sources and checks every name a body relation is drawn from against
-what Roslyn resolved at its place. `measure` prints what the rules for hiding names are
+what Roslyn resolved at its place; with `--declared` (also for `key --compare`), the
+names declared relations are drawn from instead (bench/declared.py, issue #7). `measure` prints what the rules for hiding names are
 decided by. `framework` writes the extractor's table of .NET and ASP.NET
 (skills/draftsman/scripts/draftsman/langs/csharp_framework.json) from the reference
 assemblies of the image's SDK: each namespace's public types, and each public class's
@@ -61,6 +63,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(ROOT / "skills" / "draftsman" / "scripts"))
 import answer_key  # noqa: E402
+import declared  # noqa: E402
 from extract import discover  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "csharp" / "body"
@@ -132,7 +135,7 @@ def oracle(checkout: Path, root: str, files: list[Path], loads: list[str], langu
         container(["dotnet", "/opt/type-uses/TypeUses.dll", "/work/raw.jsonl",
                    f"/src/{root}".rstrip("/"), "/work/sources", language, CONFIGURATION,
                    *(f"/src/{load}" for load in loads)], checkout, work)
-        raw = answer_key.read(work / "raw.jsonl")
+        raw = answer_key.read(work / "raw.jsonl", declared=True)
         if keep := os.environ.get("ROSLYN_ORACLE_RAW"):   # each compilation's records
             shutil.copy(work / "raw.jsonl", keep)
     recs = join(raw, {f.resolve().relative_to(checkout / root).as_posix() for f in files})
@@ -221,7 +224,7 @@ def key(args) -> int:
     if not args.compare:
         return 0
     root = args.directory.resolve()
-    return check(root, discover(root, {"csharp"}, []), recs, args.verbose)
+    return check(root, discover(root, {"csharp"}, []), recs, args.verbose, args)
 
 
 def review(args) -> int:
@@ -278,10 +281,11 @@ def sources(repo: str, checkout: Path) -> list[tuple[Path, str]]:
 def summary(recs: list[dict], name: str) -> None:
     comps = [r for r in recs if "compilation" in r]
     errors = [r for r in recs if "diagnostic" in r]
-    uses = Counter(r["kind"] for r in recs if "use" in r)
+    uses = Counter(r["kind"] for r in answer_key.body(recs) if "use" in r)
     print(f"{name}: {len(comps)} compilations, {sum(c['errors'] for c in comps)} compile errors "
           f"({len(errors)} in {len({r['file'] for r in errors})} source files); uses: "
-          + ", ".join(f"{k} {v}" for k, v in uses.most_common()))
+          + ", ".join(f"{k} {v}" for k, v in uses.most_common())
+          + f"; declared names: {len(declared.declared_records(recs))}")
     for c in comps:
         print(f"  {c['compilation']}: C# {c['langversion']}, {c['configuration']}, "
               f"{c['documents']} documents, {c['generated']} generated, {c['errors']} errors")
@@ -362,7 +366,8 @@ def scope(args) -> int:
     return in_scope(answer_key.read(args.oracle), ir)
 
 
-def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: bool) -> int:
+def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: bool,
+          args=None) -> int:
     from draftsman.extractor import Extractor
     from draftsman.langs import spec_for_path
     from draftsman.resolve import _Builder
@@ -370,6 +375,8 @@ def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: 
 
     raw = [Extractor(spec_for_path(rel)).extract(f, rel, root) for f, rel in files]
     builder = _Builder(str(root), raw, Wrappers.load())
+    if args is not None and args.declared:
+        declared.watch(builder)
     ir = builder.build()
     where = {t.id: t.location.file for t in ir.types if t.language == "csharp"}
     if in_scope(recs, where):
@@ -389,13 +396,17 @@ def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: 
     def same(r: dict, dst: str) -> bool:
         parts = builder.part_files.get(dst, set())
         return set(r.get("files", ())) <= parts and len({project[f] for f in parts}) == 1
+    if args is not None and args.declared:
+        return declared.report(builder, recs, root, args, key="Roslyn", same=same,
+                               uncompiled=skipped)
     return answer_key.compare(builder.body_uses, recs, verbose, key="Roslyn", same=same)
 
 
 def compare(args) -> int:
     checkout = args.checkout.resolve()
     root = checkout / REPOS[args.repo]["root"]
-    return check(root, sources(args.repo, checkout), answer_key.read(args.oracle), args.verbose)
+    return check(root, sources(args.repo, checkout),
+                 answer_key.read(args.oracle, declared=args.declared), args.verbose, args)
 
 
 def measure(args) -> int:
@@ -465,6 +476,7 @@ def main(argv=None) -> int:
     d.add_argument("--compare", action="store_true",
                    help="check the extractor's body relations of the same files against it")
     d.add_argument("-v", "--verbose", action="store_true", help="list every miss and mismatch")
+    declared.arguments(d)
     d.set_defaults(fn=key)
     v = sub.add_parser("review")
     v.add_argument("sets", nargs="*", help="only these sets (directory names below review/)")
@@ -484,6 +496,7 @@ def main(argv=None) -> int:
     k.add_argument("oracle", type=Path)
     k.add_argument("--checkout", type=Path, required=True)
     k.add_argument("-v", "--verbose", action="store_true", help="list every miss and mismatch")
+    declared.arguments(k)
     k.set_defaults(fn=compare)
     m = sub.add_parser("measure")
     m.add_argument("oracle", type=Path)
