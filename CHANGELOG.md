@@ -38,8 +38,8 @@ Notes for anyone with `view.json` files written against a development build:
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
 - **After 0.9.0**: C++'s declared relations look names up as bodies do (below); POCO's
-  change (14 relations added, 13 removed, 4 names unresolved with a reason), leveldb's and
-  every other language's `ir.json` are the same.
+  change (14 relations added, 10 removed, 2 names unresolved with a reason), leveldb's and
+  every other language's `ir.json` are the same, and so are the body relations of both.
 - **C++ declarations look names up as bodies do** (#7, after 0.9.0). A base, a member's
   type and a parameter's or the return type follow the body's lookup: `::D` is the global
   namespace's, a namespace alias of the file is read, the class's own alias comes first
@@ -53,11 +53,15 @@ Notes for anyone with `view.json` files written against a development build:
   unresolved, with the reason: a type of an `#if` branch the declaration is outside of, a
   type of a file not included, a name a value or a namespace may be. A type the file
   cannot tell whether it sees (its includer brings it in, a class's own nested type
-  defined in the `.cc`) is still drawn. On POCO the declared side now agrees with Clang at
-  every place it compares (10 wrong targets before); three relations go, under
-  `#if`/`#ifndef POCO_DOC` (`PollSet`'s `PollSetImpl`, `VarVisitor`'s `Details::` types).
-  Review set `bench/clang_oracle/review/cpp9`; `oracle.py review` compares declared
-  relations too.
+  defined in the `.cc`) is still drawn, and so is a type of an `#if` branch the file or
+  one it includes declares outside every branch (`class PollSetImpl;`). A base clause has
+  one answer, the base drawn being the base names are looked up in, by declarations and
+  bodies alike (`struct C : la::Base { Inner i_; }` is `lib::Base::Inner`). On POCO the
+  declared side now agrees with Clang at every place it compares (10 wrong targets
+  before; `NTLMContextImpl`, defined in a Windows branch Clang does not compile, is counted
+  apart); two relations go, under `#ifndef POCO_DOC` (`VarVisitor`'s `Details::` types).
+  Review sets `bench/clang_oracle/review/cpp9` to `cpp11`; `oracle.py review` compares
+  declared relations too.
 - **A grammar the language pack cannot download is exit 2, not a traceback.**
   `tree-sitter-language-pack` fetches each grammar from GitHub on first use; in the
   benchmark that fetch failed twice (HTTP 500), `draw.py` ended in a traceback, and one

@@ -665,10 +665,16 @@ is that type. Aliases of aliases are followed.
   (`std::vector<Item>::const_iterator`, `typename X<T>::Y`) names none of the template's
   arguments; `typename std::pair<K, Var>` is the pair. Where a body draws nothing the
   name is unresolved with the reason: a type of an `#if` branch the declaration is outside
-  of (the branch of the same condition sees it), a type of a file the declaring file does
-  not include, a name a variable, a method or a namespace may be. A type the file cannot
-  tell whether it sees (one its includer brings in, a class's own nested type its `.cc`
-  defines) is drawn.
+  of (the branch of the same condition sees it; a declaration of the id outside every
+  branch, `class PollSetImpl;` in the file or one it includes, lets it be drawn, where a
+  body still draws nothing), a type of a file the declaring file does not include, a name
+  a variable, a method or a namespace may be. A type the file cannot tell whether it sees
+  (one its includer brings in, a class's own nested type its `.cc` defines) is drawn. A
+  base clause has one answer: the base a relation is drawn to is the one a member's type,
+  a parameter's and a body's names are looked up in (`struct C : la::Base { Inner i_; }`
+  is `lib::Base::Inner`). Limit: a type a file sees only through a header the compiler
+  is told to include (`-include`, `/FI`) or through an include path the extractor does not
+  resolve is a type of a file it does not include, unresolved in a declaration.
 - Template parameters of every kind are no types to resolve: types (`class T`), values
   (`std::size_t N`, `int N = 8`, `int... Is`, `auto V`) and templates (`template <class>
   class C`). Inside the template they hide a project type of the same name (`Array<P, N>`
