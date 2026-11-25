@@ -105,3 +105,22 @@ def test_a_name_after_global_is_the_global_namespaces(tmp_path):
                  "public Lib.Order N; }\n  public class D : global::Lib.Base {} }\n")})
     assert _rels(ir, "Shop.CC.X") == {("Lib.Order", "O"), ("Shop.Lib.Order", "N")}
     assert _rels(ir, "Shop.CC.D") == {("Lib.Base", None)}
+
+
+def test_a_global_using_alias_is_every_file_of_its_project(tmp_path):
+    # `global using Cash = Lib.Money;` is a name of every file of P, not of Q (cs19)
+    ir = extract_source(tmp_path, {
+        "P/P.csproj": SDK.format(""),
+        "P/T.cs": "namespace Lib { public class Money {} }\nnamespace Shop { public class Cash {} }\n",
+        "P/G.cs": "global using Cash = Lib.Money;\n",
+        "P/A.cs": ("namespace Shop.Sub { public class A { public Cash C; "
+                   "public object M() => new Cash(); } }\n"),
+        "P/B.cs": "public class B { public Cash C; }\n",
+        "Q/Q.csproj": SDK.format(""),
+        "Q/T.cs": "namespace Lib { public class Money {} }\npublic class Cash {}\n",
+        "Q/U.cs": "public class U { public Cash C; }\n"})
+    assert _rels(ir, "B") == {("Lib.Money", "C")}
+    # a namespace around comes before the global using's alias
+    assert _rels(ir, "Shop.Sub.A") == {("Shop.Cash", "C")}
+    assert _rels(ir, "U") == {("Cash", "C")}
+

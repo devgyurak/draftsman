@@ -661,6 +661,8 @@ class Extractor:
                         scope.block_local[q] = (_line(block), block.end_point[0] + 1)
                     if target:
                         scope.alias_targets[q] = spec.normalize_type(target)
+                    if spec.is_project_wide(n):
+                        scope.global_aliases.add(q)
                     if params := spec.alias_params(n):
                         scope.alias_tparams[q] = set(params)
                     if spec.block_imports:

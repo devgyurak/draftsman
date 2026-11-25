@@ -82,6 +82,8 @@ class FileScope:
     # alias -> the namespace it is declared in, where its target is looked up ("" for the
     # top of the file; LanguageSpec.block_imports)
     alias_blocks: dict[str, str] = field(default_factory=dict)
+    # aliases every file of the file's project sees (C#'s `global using X = ...`)
+    global_aliases: set[str] = field(default_factory=set)
     inline_namespaces: set[str] = field(default_factory=set)    # C++ `inline namespace v1`
     # a type or alias seen only inside the namespace block that declares it -> that
     # block's first and last line (TypeScript's member a block does not export)

@@ -97,6 +97,13 @@ class Resolver:
                 for a in s.alias_targets:
                     block = s.alias_blocks.get(a, "")
                     self.file_aliases.setdefault((s.file, block), {})[a.rsplit(".", 1)[-1]] = a
+        # a `global using X = ...` is every file's of its project, at the global namespace
+        for s in scopes:
+            for a in s.global_aliases:
+                for t in scopes:
+                    if t.project == s.project and t.file != s.file:
+                        self.file_aliases.setdefault((t.file, ""), {}).setdefault(
+                            a.rsplit(".", 1)[-1], a)
         # whether a project type is one the file's project sees (_Builder._visible: C#'s
         # project references and `internal`), set by the builder
         self.visible: Optional[Callable[[str, FileScope], bool]] = None
