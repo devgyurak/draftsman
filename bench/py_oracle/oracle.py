@@ -10,6 +10,7 @@ their answers.
     uv run bench/py_oracle/oracle.py run REPO --checkout DIR --python PY -o OUT.jsonl
     uv run bench/py_oracle/oracle.py scope REPO OUT.jsonl ir.json
     uv run bench/py_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR [-v]
+    uv run bench/py_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR --declared [--save F]
     uv run bench/py_oracle/oracle.py measure OUT.jsonl [--ir ir.json]
     uv run bench/py_oracle/oracle.py checkers OUT.jsonl
 
@@ -40,7 +41,8 @@ drivers, GDAL and the rest it imports when present are left out: a name from the
 project class either way). `scope` fails
 unless the key saw the same classes, declared in the same files, as ir.json of those
 sources. `compare` extracts the same sources and checks every name a body relation is
-drawn from against the key at its place. `measure` prints what the rules for hiding names
+drawn from against the key at its place; with `--declared`, the names declared relations
+are drawn from instead (bench/declared.py, issue #7). `measure` prints what the rules for hiding names
 are decided by, `checkers` how often each pair of checkers agrees.
 
 The checkers run in environments of their own, pinned below, never in the plugin's:
@@ -65,6 +67,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(ROOT / "skills" / "draftsman" / "scripts"))
 import answer_key  # noqa: E402
+import declared  # noqa: E402
 from extract import discover  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "python" / "body"
@@ -173,7 +176,7 @@ def oracle(root: Path, files: list[tuple[Path, str]], python: str, out: Path,
         raw = Path(tmp, "mypy.jsonl")
         subprocess.run([*MYPY, HERE / "type_uses.py", raw, srcs, python], check=True,
                        cwd=base)
-        recs = answer_key.read(raw)
+        recs = answer_key.read(raw, declared=True)
         uses = [r for r in recs if "use" in r]
         to_path = {rel: str(p) for p, _, rel in mods}
         places = Path(tmp, "places")
@@ -189,7 +192,8 @@ def oracle(root: Path, files: list[tuple[Path, str]], python: str, out: Path,
             subprocess.run([sys.executable, "-I", HERE / "lsp.py", got,
                             workspace if name == "pyright" else base, places, python,
                             "--", *SERVERS[name]], check=True)
-            said[name] = {(r["file"], r["line"], r["col"]): r for r in answer_key.read(got)}
+            said[name] = {(r["file"], r["line"], r["col"]): r
+                          for r in answer_key.read(got, declared=True)}
     sources = {str(p) for p, _, _ in mods}
     tokens = class_tokens(mods)
     for r in uses:
@@ -238,7 +242,8 @@ def selftest(_args) -> int:
     files = [(p, p.relative_to(FIXTURE).as_posix())
              for p in sorted(FIXTURE.rglob("*")) if p.suffix in SUFFIXES]
     with tempfile.TemporaryDirectory() as tmp:
-        recs = oracle(FIXTURE, files, sys.executable, Path(tmp, "fixture.jsonl"))
+        recs = answer_key.body(oracle(FIXTURE, files, sys.executable,
+                                      Path(tmp, "fixture.jsonl")))
     for r in recs:
         if r.get("kind") == "disputed":
             print(f"disputed: {r['file']}:{r['line']}:{r['col'] + 1} {r['use']}: mypy "
@@ -264,11 +269,12 @@ def run(args) -> int:
     files = sources(args.repo, checkout)
     recs = oracle(checkout / conf["root"], files, args.python, args.output)
     errors = [r for r in recs if "mypy_error" in r]
-    uses = Counter(r["kind"] for r in recs if "use" in r)
+    uses = Counter(r["kind"] for r in answer_key.body(recs) if "use" in r)
     print(f"{args.repo}: {len(files)} files, {len(errors)} mypy errors in "
           f"{len({r['file'] for r in errors})} files, uses: "
-          + ", ".join(f"{k} {v}" for k, v in uses.most_common()))
-    print("abstained: " + abstentions([r for r in recs if "use" in r]))
+          + ", ".join(f"{k} {v}" for k, v in uses.most_common())
+          + f"; declared names: {len(declared.declared_records(recs))}")
+    print("abstained: " + abstentions([r for r in answer_key.body(recs) if "use" in r]))
     return 0
 
 
@@ -295,11 +301,15 @@ def compare(args) -> int:
     raw = [Extractor(spec_for_path(rel)).extract(f, rel, root)
            for f, rel in sources(args.repo, checkout)]
     builder = _Builder(str(root), raw, Wrappers.load())
+    if args.declared:
+        declared.watch(builder)
     ir = builder.build()
-    recs = answer_key.read(args.oracle)
+    recs = answer_key.read(args.oracle, declared=args.declared)
     if answer_key.in_scope(recs, {t.id: t.location.file for t in ir.types
                                   if t.language == "python"}, language="Python"):
         return 1
+    if args.declared:
+        return declared.report(builder, recs, root, args, key="the three checkers")
     return answer_key.compare(builder.body_uses, recs, args.verbose,
                               key="the three checkers")
 
@@ -380,6 +390,7 @@ def main(argv=None) -> int:
     k.add_argument("oracle", type=Path)
     k.add_argument("--checkout", type=Path, required=True)
     k.add_argument("-v", "--verbose", action="store_true", help="list every miss and mismatch")
+    declared.arguments(k)
     k.set_defaults(fn=compare)
     m = sub.add_parser("measure")
     m.add_argument("oracle", type=Path)

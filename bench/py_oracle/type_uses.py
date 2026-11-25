@@ -31,6 +31,13 @@ binding (`Foo = ...`, `Foo += 1`, `for Foo in`, `except E as Foo`) is no use. Ev
 Names in string annotations and type comments are not recorded. Lines are 1-based,
 columns 0-based in UTF-16 code units.
 
+The names of a class's declarations are recorded too, with "pos" "declared" (issue #7):
+its bases, its decorators and its methods', its annotated assignments directly in the
+class body (`x: Foo = ...`) and an `__init__`'s annotated `self.x: Foo = ...`, and its
+methods' parameter and return annotations; with "role" ("super", "annotation", "field",
+"signature") and "in_args" (inside a subscript: `Foo` of `Base[Foo]`, `list[Foo]`). A
+class's keywords (`metaclass=`) are not recorded: the extractor draws nothing from them.
+
 mypy binds names in the bodies of functions without annotations too: semantic analysis
 runs on every body, and --check-untyped-defs only adds type checking (its answers are the
 same with it). Its columns are not UTF-16 ones on a line with other than ASCII before
@@ -131,6 +138,7 @@ def walk_classes(stmts, prefix: str, mod: str, src: Source, rel: str) -> None:
             cid = f"{prefix}.{s.name}"
             emit({"declared": cid, "file": rel})
             regions(s, cid, src, rel)
+            declaration_names(s, cid, src, rel)
             walk_classes(s.defs.body, cid, mod, src, rel)
         elif isinstance(s, (IfStmt, TryStmt, WithStmt, ForStmt, WhileStmt)):
             for b in blocks(s):
@@ -174,6 +182,59 @@ def regions(cdef: ClassDef, cid: str, src: Source, rel: str) -> None:
         if isinstance(s, AssignmentStmt) and len(s.lvalues) == 1 \
                 and isinstance(s.lvalues[0], NameExpr):
             s.rvalue.accept(Uses(cid, src, rel))
+
+
+def declaration_names(cdef: ClassDef, cid: str, src: Source, rel: str) -> None:
+    """The names of a class's declarations (module docstring)."""
+    names = lambda role: Declared(cid, src, rel, role)   # noqa: E731
+    for e in (*cdef.base_type_exprs, *cdef.removed_base_type_exprs):
+        e.accept(names("super"))
+    for d in cdef.decorators:
+        d.accept(names("annotation"))
+    for s in cdef.defs.body:
+        if isinstance(s, AssignmentStmt) and s.new_syntax and s.type is not None \
+                and len(s.lvalues) == 1 and isinstance(s.lvalues[0], NameExpr):
+            names("field").types(s.type)
+    seen: set[int] = set()
+    for d, f in methods(cdef.defs.body):
+        if d is not None:
+            for dec in d.decorators:
+                dec.accept(names("annotation"))
+        if id(f) in seen:
+            continue
+        seen.add(id(f))
+        if f.unanalyzed_type is not None and f.type is not None and not src.type_comment(f):
+            names("signature").types(f.type)
+        if f.name == "__init__":
+            for a in self_annotations(f.body.body):
+                names("field").types(a.type)
+
+
+def methods(stmts):
+    """(the Decorator node or None, the function) of each function `functions` yields."""
+    for s in stmts:
+        if isinstance(s, FuncDef):
+            yield None, s
+        elif isinstance(s, Decorator):
+            yield s, s.func
+        elif isinstance(s, OverloadedFuncDef):
+            for item in [*s.items, *([s.impl] if s.impl is not None else [])]:
+                yield (item, item.func) if isinstance(item, Decorator) else (None, item)
+        elif isinstance(s, (IfStmt, TryStmt, WithStmt, ForStmt, WhileStmt)):
+            for b in blocks(s):
+                yield from methods(b.body)
+
+
+def self_annotations(stmts):
+    """`self.x: Foo = ...` in a method's statements, also in its blocks."""
+    for s in stmts:
+        if isinstance(s, AssignmentStmt) and s.new_syntax and s.type is not None \
+                and len(s.lvalues) == 1 and isinstance(s.lvalues[0], MemberExpr) \
+                and isinstance(s.lvalues[0].expr, NameExpr) and s.lvalues[0].expr.name == "self":
+            yield s
+        elif isinstance(s, (IfStmt, TryStmt, WithStmt, ForStmt, WhileStmt)):
+            for b in blocks(s):
+                yield from self_annotations(b.body)
 
 
 def answer(node, name: str):
@@ -476,6 +537,40 @@ class TypeNames(TypeTraverserVisitor):
 
     def visit_any(self, t: AnyType) -> None:
         pass
+
+
+class Declared(Uses):
+    """Records the names of one declaration of a class, "pos" "declared"."""
+
+    def __init__(self, cid: str, src: Source, rel: str, role: str):
+        super().__init__(cid, src, rel)
+        self.role, self.args = role, 0
+
+    def record(self, name, line, c, kind, target, project, maximal, node, annotation=False):
+        emit({"use": name, "file": self.rel, "line": line, "col": self.src.utf16(line, c),
+              "pos": "declared", "kind": kind, "target": target, "project": project,
+              "maximal": maximal, "from": self.cid, "mypy": described(node),
+              "annotation": annotation, "unreachable": self.unreachable > 0,
+              "role": self.role, "in_args": self.args > 0})
+
+    def visit_index_expr(self, e) -> None:   # `Base[Foo]`
+        e.base.accept(self)
+        self.args += 1
+        e.index.accept(self)
+        self.args -= 1
+
+    def types(self, t) -> None:
+        t.accept(DeclaredTypeNames(self))
+
+
+class DeclaredTypeNames(TypeNames):
+    def visit_instance(self, t: Instance) -> None:
+        kind, target, project = answer(t.type, t.type.name)
+        self.name(t, kind, target, project, t.type)
+        self.uses.args += 1
+        for a in t.args:
+            a.accept(self)
+        self.uses.args -= 1
 
 
 def lookup_class(fullname: str):
