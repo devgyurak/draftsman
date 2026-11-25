@@ -14,6 +14,7 @@ has a real rival, so that a wrong draw is a mismatch.
 | `cpp2` | 32 | the first review of the extractor: members defined out of the class (the class's namespace before the one around the definition, not a base's namespace), a base's member type and field, a class's typedef and field, an elaborated `struct Channel`, a typedef-named definition `Ord::look()`, an enumerator of the class (`sizeof(Paid)`), a local variable declared after a use, a dependent base (`Vec : TBase<T>`: its member type and field are not looked into) beside `Fixed : TBase<int>`, template parameters named like types, an anonymous namespace's member defined out of the class, block-scope `using namespace`, `using a::C;` and namespace aliases, a file-scope namespace alias, a lambda's parameter, local classes. No mismatch |
 | `cpp3` | 10 | includes: another directory's type of the name (`one/util.h`, not included: `::Util`), a chain of includes, `"../sub/deep.h"`, a declaration `struct Fwd;` of a type whose file is not included (the name is that type), a header with no include of its own, an include below a use |
 | `cpp4` | 47 | macros (a string `STR(Money::Zero)`, `ID(...)`, `DECL(Money, d)`, `NEWOF(Money)`, `SIZE(Money)`), the vexing parse with a field, an enumerator of the namespace and a type (`Lock l2(Paid)`, `Lock l3(Money)`), `sizeof` and `typeid` of an enumerator, a function of a type's name beside the global type, aliases (`FeedPtr`, `Cash`, `Chan` through an alias template, `Channel::Ptr`), an inline namespace, `::Tag`, types of `#if` branches taken and not taken, casts, a lambda, a pointer to member, `decltype`, `static_assert`, `alignof`, `offsetof`, `noexcept`, a friend, default arguments and member initializers |
+| `cpp5` | 23 | the second review, each rule with a rival type: bases of a base (`Leaf : ViaPtr<int>`, `ViaPtr<T> : TBase<T*>`) and dependent ones of several forms, namespace aliases beside a namespace and a class of the name, a header included at the end of the one that defines its types, template and enum forward declarations, a class's forward declaration, an include a macro makes, an `#if` condition over two lines, a macro defined after the include, a function of an `#if` branch, enumerators of a class, a base, a namespace and the global one beside types |
 
 Known limits (mismatches that stay):
 
@@ -25,6 +26,9 @@ Known limits (mismatches that stay):
 - `cpp4/shop/a.cc:26:25` a qualified name in a macro's argument the macro makes a string
   (`STR(Money::Zero)`): the parser sees an expression
 - `cpp4/shop/a.cc:27:31` the same (`STR(shop::Money)`)
+- `cpp5/shop/cond.cc:12:13` an `#ifdef` of a macro the file defines after its include
+  (`LATE`): the header's branch of the same condition is not compiled, but its condition
+  reads the same
 
 Names Clang finds that are not drawn (misses, no failure):
 
@@ -44,4 +48,13 @@ Names Clang finds that are not drawn (misses, no failure):
 - `cpp4/shop/a.cc:56:5` a type of an `#if` branch used outside every branch of its
   condition (`Gate`, taken): another type of the name may be meant
 - `cpp4/shop/a.cc:57:5` the same, of a branch not taken (`Opt`, where `::Opt` is meant):
-  the extractor does not know which branches a build takes
+  the extractor does not know which branches a build takes; also `cpp5/shop/cond.cc:9:13`
+  (`Gate2` in a branch whose condition differs in its second line)
+- `cpp5/app/foo_inl.h:3:25`, `4:37` a type a file including the body's file defines
+  (`foo.h` includes `foo_inl.h` at its end): which one is meant is not known
+- `cpp5/app/macro.cc:6:13` the same in a file with an include a macro makes
+  (`#include APP_UTIL`)
+- `cpp5/app/fwduse.cc:7:23` a class's forward declaration of a nested type (`struct Pim {
+  struct Impl; }`, defined in a file not included)
+- `cpp5/shop/alias.cc:15:17` a namespace alias of a namespace (`namespace al = a::inner;`
+  inside `shop`); one of the file's scope is read
