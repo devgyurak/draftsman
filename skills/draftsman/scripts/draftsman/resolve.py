@@ -1043,6 +1043,21 @@ class Resolver:
                 return hidden
         return None
 
+    def member_named(self, rtype: RawType, name: str) -> bool:
+        """Whether ``rtype``, a type around it or a base of either has a member (a field,
+        property, method, event or constant) ``name``, also one a base outside the sources
+        has as far as the language knows it (LanguageSpec.outside_member)."""
+        cur: Optional[RawType] = rtype
+        while cur is not None:
+            for q in self._ancestors(cur):
+                if any(rm.member.name == name and rm.member.kind != "constructor"
+                       for rm in self.index[q].members):
+                    return True
+            if self._outside_member_of(cur, name, False, set()):
+                return True
+            cur = self.index.get(cur.outer) if cur.outer else None
+        return False
+
     def _ancestors(self, rtype: RawType) -> set[str]:
         """``rtype`` and its project bases, followed through."""
         out: set[str] = set()
@@ -2322,6 +2337,9 @@ class _Builder:
                     continue
                 # `Kind.A`: the type Kind, or a constant of one; `Model`: a class or a value
                 name = text.replace(" ", "")
+                if spec.members_hide_annotation_args and self.resolver.member_named(
+                        rtype, name.split(sep, 1)[0]):
+                    continue   # C#'s `nameof(Order)` beside a property Order: the property
                 while name:
                     res = self.resolver.resolve(name, rtype, None, scope=ann.scope)
                     if res.status in (PROJECT, ALIAS):

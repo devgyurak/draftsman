@@ -746,6 +746,7 @@ class CSharpSpec(LanguageSpec):
     qualified_heads_in_scope = True
     enclosing_outside_hides = True
     arity_selects = True
+    members_hide_annotation_args = True
     block_imports = True
     body_aliases = True
     color_color = True

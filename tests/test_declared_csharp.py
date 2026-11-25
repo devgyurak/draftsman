@@ -84,3 +84,14 @@ def test_a_packages_namespace_around_the_code_may_have_the_type(tmp_path):
     (u,) = [u for u in ir.unresolved if u.from_ == "CommunityToolkit.Mvvm.Input.Mine.PP"]
     assert "namespace outside the sources around it" in u.hint
 
+
+def test_a_member_of_the_class_hides_a_name_in_an_attributes_argument(tmp_path):
+    # #35: `nameof(Order)` beside a property Order of a base is the property
+    ir = extract_source(tmp_path, {"A.cs": (
+        "using System;\nnamespace Shop {\n  public class Order {}\n"
+        "  public class Base2 { public string Order => \"\"; }\n"
+        "  public class Bodies : Base2 { [Obsolete(nameof(Order))] public void M() {} }\n"
+        "  public class Plain2 { [Obsolete(nameof(Order))] public void M() {} }\n}\n")})
+    assert _rels(ir, "Shop.Bodies") == {("Shop.Base2", None)}
+    assert _rels(ir, "Shop.Plain2") == {("Shop.Order", "@Obsolete")}
+
