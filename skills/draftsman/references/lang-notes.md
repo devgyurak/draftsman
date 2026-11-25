@@ -450,16 +450,32 @@ is that type. Aliases of aliases are followed.
   name the package does not contain is unresolved, like a relative import. Extract from
   the workspace root so every package is inside it.
 - Imported type aliases (`import { Options } from "./x"` where `type Options = …`) are
-  aliases, drawn through to the project types they name. Standard-library globals (`Partial`, `Required`,
+  aliases, drawn through to the project types they name; an alias's own type parameters
+  (`type Fn<T> = (x: T) => Item`) name no type. A supertype that is an alias
+  (`interface I extends Joined` with `type Joined = Options & Logger`) extends or
+  implements each type the alias is, and depends on the others it names (`type Obj = {
+  item: Item }`, `Omit<Base, "a"> & {...}`). Standard-library globals (`Partial`, `Required`,
   `Float32Array`, `AsyncDisposable`, ...) are builtins.
+- Types (#9): a union, also one written with a leading `|`, and an intersection (`A & B`)
+  relate to each of their types as a field's type does (an association from a field). The
+  types an object type literal (`{ item: Logger }`, a mapped type), a function or
+  constructor type, an indexed access (`Store["key"]`), a conditional type (`A extends B ?
+  C : D`) or a type predicate (`x is Logger`, `asserts x is Logger`) names are
+  dependencies, never associations; a destructured parameter (`{ a }: Options`) depends on
+  its type. No name of a type is read from a property's, a parameter's or a tuple
+  element's name, a string or template literal (a template's `${Kind}` is a name), a
+  type parameter the type declares (`<T>() => T`, `infer U`, a mapped type's key),
+  `this`, or the key of an indexed access. `typeof x` is a class or an enum of the name,
+  never an interface or a type alias of it (the variable is meant). Known limit: `keyof
+  Foo` relates to Foo as `Foo` does (an association from a field, though it holds a key).
 - Not handled: `exports` subpath maps in package.json, tsconfig `paths` aliases
   (`@app/*`), `export * as ns from`, a default export re-exported by name (`export {
   default as X } from`: X is unresolved where a member's type names it, and draws
   nothing in a body).
 - Constructor parameter properties (`constructor(private repo: Repo)`, also optional
   ones: `protected q?: Q`) are fields;
-  `#private` names are private. Properties of inline object types are not members, and
-  the types inside them produce no relations (`options: { socketClass?: Type<X> }`).
+  `#private` names are private. Properties of inline object types are not members; the
+  types inside them are dependencies (`options: { socketClass?: Type<X> }`, above).
   Fields without a written type (`reg = new Registry()`) have no type and no association:
   initialisers are not evaluated, though the names they write are body dependencies.
 - Default imports are resolved by the local name. Not handled: `declare module`,

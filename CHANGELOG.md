@@ -48,6 +48,29 @@ Notes for anyone with `view.json` files written against a development build:
   focus diagram draws those that touch the focus; results measured with 0.3.0 (the
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
+- **TypeScript types the type parser read no name from** (#9, after 0.10.0). A union
+  written with a leading `|` (prettier's multi-line unions), an intersection, an object
+  type literal, a function type with optional parameters, an indexed access
+  (`Required<GrpcOptions>['options']`), a conditional type, a type predicate (`x is
+  Logger`) and a destructured parameter (`{ a }: Options`) drew nothing, nor an alias of
+  one of them; a supertype that is an alias of several types (`interface I extends
+  Joined`, `type Joined = Options & Logger`) was unresolved. A union's and an
+  intersection's types relate as a field's type does; what the other forms name is a
+  dependency; an alias supertype extends or implements each type it is and depends on the
+  others it names. Property and parameter names, tuple labels, literals, type parameters
+  the type declares (also an alias's own, which were drawn as a class of their name) and
+  `this` name no type, and `typeof x` is no interface or type alias of the name. The
+  TypeScript parser is a dialect of its own (`LanguageSpec.type_dialect`): the other
+  languages' `ir.json` are the same. nest: 767 declared relations added (402 pairs), 7
+  `Foo['x']` associations now dependencies; TypeORM: 991 added (358 pairs), 2 now
+  dependencies, and 4 fields
+  `UpdateFilter<T> | Document[]` keep multiplicity 1 where they had `*` (the alias now
+  names `Document`, and of two relations of one field to one type the first is kept).
+  Against tsc, nest's declared names missed 394 → 66 and TypeORM's 711 → 19 (all left are
+  a supertype's type arguments or a `Provider`, #9 cases 24 and 25), no mismatch; the
+  key's alias targets read a qualified name's types as its records do (`HttpStatus.OK`
+  names `HttpStatus`). Review set `bench/tsc_oracle/review/ts1` with `oracle.py key` and
+  `review`.
 - **Java: a superclass's private nested type is not inherited** (#7, 0.10.0), nor a
   package-private one by a subclass in another package, in declarations and bodies
   (released for bodies in 0.4.1): `Hidden` in a subclass of a `Base` with a private
