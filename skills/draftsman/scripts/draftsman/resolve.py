@@ -2355,21 +2355,30 @@ class _Builder:
             if not isinstance(ref, Named):
                 continue
             loc = Location(sup.scope.file if sup.scope else rtype.location.file, sup.line)
-            if res.status == ALIAS and res.target:   # `class X : AliasOfBase()`
-                leaves, _ = self._alias_names(res.target, rtype)
-                if len(leaves) == 1:
-                    res = Resolution(PROJECT, leaves[0][0])
-            if res.status == PROJECT:
-                if res.target == rtype.qualified_name:
-                    continue
-                kind = sup.kind
-                if kind == "inherits":
-                    target_kind = self.types[res.target].kind
-                    if rtype.kind == "interface" or target_kind != "interface":
-                        kind = "extends"
-                    else:
-                        kind = "implements"
-                self.relations.append(Relation(rtype.qualified_name, res.target, kind, loc))
+            targets = [res.target] if res.status == PROJECT else []
+            if res.status == ALIAS and res.target:
+                # `class X : AliasOfBase()`; TypeScript's `interface I extends Joined` with
+                # `type Joined = Options & Logger`: each type the alias is. The others it
+                # names (an object type's members, `Omit<Base, "a">`'s Base) are
+                # dependencies, as a field's alias draws them
+                leaves, names = self._alias_names(res.target, rtype)
+                targets = list(dict.fromkeys(t for t, _, _ in leaves))
+                for other in names:
+                    if other not in targets and other != rtype.qualified_name:
+                        self.relations.append(Relation(rtype.qualified_name, other,
+                                                       "dependency", loc))
+            if targets:
+                for target in targets:
+                    if target == rtype.qualified_name:
+                        continue
+                    kind = sup.kind
+                    if kind == "inherits":
+                        target_kind = self.types[target].kind
+                        if rtype.kind == "interface" or target_kind != "interface":
+                            kind = "extends"
+                        else:
+                            kind = "implements"
+                    self.relations.append(Relation(rtype.qualified_name, target, kind, loc))
             elif res.status in (EXTERNAL, BUILTIN):
                 ext_id = res.target or ref.name
                 name = ext_id.rsplit("::", 1)[-1].rsplit("/", 1)[-1].rsplit(".", 1)[-1]

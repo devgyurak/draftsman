@@ -158,13 +158,19 @@ def watch(builder) -> None:
             if not isinstance(ref, Named):
                 continue
             file = sup.scope.file if sup.scope else rtype.location.file
-            if res.status == ALIAS and res.target:   # as _Builder._supers
-                leaves, _ = builder._alias_names(res.target, rtype)
-                if len(leaves) == 1:
-                    res = type(res)(PROJECT, leaves[0][0])
-                else:
+            drawn = []
+            if res.status == ALIAS and res.target:
+                # as _Builder._supers: each type the alias is, and the others it names
+                leaves, mentioned = builder._alias_names(res.target, rtype)
+                drawn = [t for t in dict.fromkeys([t for t, _, _ in leaves] + list(mentioned))
+                         if t != rtype.qualified_name]
+                if leaves and drawn == [leaves[0][0]]:
+                    res = type(res)(PROJECT, drawn[0])
+                elif not drawn:
                     res = type(res)(UNRESOLVED)
             note(rtype, file, sup.line, ref.name, "super", res)
+            if drawn:
+                names[-1]["targets"] = drawn
         supers(rtype)
 
     builder._supers = _supers

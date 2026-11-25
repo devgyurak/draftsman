@@ -99,3 +99,19 @@ def test_a_type_predicate_depends_on_its_type(tmp_path):
 def test_a_destructured_parameter_depends_on_its_type(tmp_path):
     ir = _ir(tmp_path, "  start({ a }: Options, [b]: [Item]): void {}")
     assert _rels(ir) == {("dependency", "Options", "start"), ("dependency", "Item", "start")}
+
+def test_a_supertype_alias_of_several_types_extends_each(tmp_path):
+    ir = extract_source(tmp_path, {"model.ts": MODEL, "a.ts": IMPORT + (
+        "export type Joined = Options & Logger;\n"
+        "export type Obj = { item: Item };\n"
+        'export type Picked = Omit<Options, "a"> & { extra: Item };\n'
+        "export interface I1 extends Joined {}\n"
+        "export interface I2 extends Obj {}\n"
+        "export interface I3 extends Picked {}\n"
+        "export class C1 implements Joined { a?: number; log(): void {} }\n")})
+    assert _rels(ir, "a.I1") == {("extends", "Options", None), ("extends", "Logger", None)}
+    assert _rels(ir, "a.C1") == {("implements", "Options", None), ("implements", "Logger", None)}
+    # an alias that is no type of the sources: what it names is a dependency
+    assert _rels(ir, "a.I2") == {("dependency", "Item", None)}
+    assert _rels(ir, "a.I3") == {("dependency", "Options", None), ("dependency", "Item", None)}
+    assert not ir.unresolved
