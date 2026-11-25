@@ -121,6 +121,21 @@ def test_a_classs_own_nested_type_defined_where_it_is_included(tmp_path):
     assert ("Table", "t") in _rels(ir, "Reader")   # u.h's includer brings Table in
 
 
+def test_a_declaration_outside_every_if_branch_lets_the_type_be_drawn(tmp_path):
+    # `class PollSetImpl;` outside every branch: the name is that type in every build, whichever
+    # branch defines it; a body is not so (the body rule stands)
+    ir = extract_source(tmp_path, {
+        "p.h": ("#pragma once\nnamespace net {\nclass PollSetImpl;\n"
+                "class PollSet { PollSetImpl* _pImpl; };\n}\n"),
+        "p.cc": ("#include \"p.h\"\nnamespace net {\n#if defined(EPOLL)\n"
+                 "class PollSetImpl { int ep; };\n#else\nclass PollSetImpl { int sel; };\n#endif\n}\n"),
+        "v.h": ("#pragma once\nnamespace d {\n#ifndef DOC\nstruct Hash {};\n#endif\n"
+                "struct Visitor { Hash h; };\n}\n")})
+    assert _rels(ir, "net::PollSet") == {("net::PollSetImpl", "_pImpl")}
+    assert not _rels(ir, "d::Visitor")
+    assert "#if branch" in _unresolved(ir, "d::Visitor")["Hash"]
+
+
 def _body(ir, src: str) -> set[str]:
     return {r.to for r in ir.relations if r.from_ == src and r.evidence == "body"}
 

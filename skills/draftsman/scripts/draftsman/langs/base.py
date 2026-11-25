@@ -131,6 +131,9 @@ class FileScope:
     namespace_aliases: dict[str, str] = field(default_factory=dict)
     # the types the file declares without defining them (C++'s `struct Fwd;`, `@body.forward`)
     forward_types: set[str] = field(default_factory=set)
+    # of those, the ones declared outside every `#if` branch of the file (`class
+    # PollSetImpl;`): the file sees a type of the id in every build
+    plain_forwards: set[str] = field(default_factory=set)
     # whether the file includes a path a macro makes (C++'s `#include APP_UTIL`,
     # `@body.include_unknown`): what it sees is not known
     unknown_include: bool = False

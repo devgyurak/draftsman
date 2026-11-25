@@ -1833,6 +1833,7 @@ class _Builder:
         # what each file includes (LanguageSpec.include_visibility)
         self.file_includes = {f.path: f.scope.includes for f in files}
         self.file_forwards = {f.path: f.scope.forward_types for f in files}
+        self.file_plain_forwards = {f.path: f.scope.plain_forwards for f in files}
         self.resolver.base_lookup = self._base_like_body
         self._closures: Optional[dict[str, set[str]]] = None
         self._includers: Optional[dict[str, set[str]]] = None   # _unseen_from
@@ -2054,7 +2055,11 @@ class _Builder:
         if branches is not None:
             around = {cond for first, last, cond in scope.branches if first <= line <= last}
             if not any(f == scope.file and first <= line <= last or cond in around
-                       for f, first, last, cond in branches):
+                       for f, first, last, cond in branches) and not any(
+                    target in self.file_plain_forwards.get(f, ())
+                    for f in self._included(scope.file)):
+                # (a declaration of the id outside every branch, `class PollSetImpl;` in
+                # the file or one it includes: the name is that type in every build)
                 return (f"{target} is declared in an #if branch this declaration is outside "
                         "of: another type of the name may be meant")
         return self._unseen_why(target, scope.file)

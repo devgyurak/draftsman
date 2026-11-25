@@ -870,8 +870,11 @@ class Extractor:
                         if cur.id in namespaces:
                             parts.insert(0, namespaces[cur.id])
                         cur = cur.parent
-                    scope.forward_types.add(self.spec.separator.join(
-                        p for p in [scope.namespace, *parts] if p))
+                    fwd = self.spec.separator.join(p for p in [scope.namespace, *parts] if p)
+                    scope.forward_types.add(fwd)
+                    line = n.start_point[0] + 1
+                    if not any(first <= line <= last for first, last, _ in scope.branches):
+                        scope.plain_forwards.add(fwd)
                 elif cap == "body.guarded":
                     blind.add(n.id)
                     guarded.add(n.id)
