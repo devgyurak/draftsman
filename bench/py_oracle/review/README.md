@@ -11,6 +11,7 @@ checkers disagree ("disputed") nothing may be drawn; such a place is counted apa
 | Set | Body names drawn | Declared names agreed | What it holds |
 |---|---|---|---|
 | `py1` | 2 | 32 | declared names (#7, cases 6, 7, 50): a member's decorator the class body binds (`Other = print`), annotations beside a class body's binding and beside a nested class the module also binds (the checkers disagree: drawn nothing), a name bound twice (`try: from q.x.foo import Foo` / `except: class Foo`) in a base and an annotation, imports under another name, module aliases, nested classes, string annotations, generics. Before the fix: 1 declared mismatch, 8 drawn where the checkers disagree |
+| `py2` | 0 | 12 | a review's probe of the fix: names bound twice through imports and `TYPE_CHECKING`, a class body's bindings of several kinds, forward references, aliases of imports |
 
 Known limits (mismatches that stay):
 

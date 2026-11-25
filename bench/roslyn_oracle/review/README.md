@@ -32,6 +32,7 @@ names drawn or declared names agreed than the table gives.
 | `cs17` | 73 | 7 | the rest of tree-sitter's declarations in a collection expression and an indexer, type positions (async lambdas, `await foreach`, LINQ with types, combined patterns), array, tuple and generic aliases, where nested and odd members' bodies belong, a record's base arguments, `#if` lines in strings and comments |
 | `cs18` | 5 | 27 | declared relations (issue #7: cases 2, 3, 4, 5, 35), each beside a rival type: a namespace-less file's alias (`using Order = Lib.Order;`) and a file without it, an alias before a file-scoped namespace beside the namespace's type, another project's `internal` type before a using's, the arity written (`Repo<int>`), a package's namespace around the code (CommunityToolkit.Mvvm.Input), `nameof(Order)` beside a base's property, the same names in bodies. The extractor before the fix: 19 declared mismatches, 1 body name |
 | `cs19` | 8 | 32 | a review's probe of the fix: a `global using` alias in every file of its project, aliases of a file in two namespaces of it, a namespace block's alias beside another block of the namespace, a namespace alias (`L.Order`, `L::Order`), an alias of a generic, `InternalsVisibleTo`, an unreferenced project's public type, arity of two type arguments, `nameof` and `typeof` beside members and nested types, `Kind.A` beside `public Kind Kind`, a namespace of the shared framework around the code |
+| `cs20` | 1 | 16 | a review's probe of the fix: a global using's alias of a generic (`Safe`), aliases in nested namespace blocks, `Kind.A` and `nameof(Kind)` beside `public Kind Kind`, `typeof` beside nested types |
 
 ## Known limits
 
@@ -65,7 +66,12 @@ although Roslyn finds a type of the sources there:
   draws nothing there (Roslyn: Shop.Order, the package has none)
 - `cs19/P/Aliases.cs:10:18`, `11:19` a type through a namespace alias (`using L = Lib;`:
   `L.Order`, `L::Order`): not read (#9)
+- `cs20/P/Attr.cs:7:14` `Kind` of `[Tag(Kind.A)]`: the extractor draws `Shop.Kind` there
+  (Roslyn's answer), but the comparison does not pair its name `Kind.A` with Roslyn's record
+  of `Kind` (a limit of bench/declared.py's matching, not of the extractor)
 
 ## Known limits of declared relations (mismatches that stay)
 
-- none
+- `cs20/P/Nested.cs:34:16` `Safe`, a global using's alias of `Lib.Box<Lib.Order>`: the
+  extractor draws both types the alias names, Roslyn's key gives only the generic's
+  definition (`Lib.Box`): a limit of the key's reading of aliases, not of the extractor

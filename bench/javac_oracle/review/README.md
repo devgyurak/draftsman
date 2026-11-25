@@ -10,6 +10,7 @@ fewer body names drawn or declared names agreed than the table says.
 | Set | Body names drawn | Declared names agreed | What it holds |
 |---|---|---|---|
 | `jv1` | 7 | 40 | a review's probe of declared names: a superclass's private nested type (`Hidden`, not inherited, #7 case 49) beside the package's and its own class's, protected and public ones (inherited), an interface's nested type, type parameters named like types (`Gen<Money>`, `<Item>`), a JDK superclass's nested type (`Thread.State`), single-type, on-demand and static imports, an annotation's arguments. Before the fix: 2 body mismatches, 1 declared |
+| `jv2` | 8 | 24 | a review's probe of inheritance across packages: a superclass's package-private nested type (`a.Base.Pkg`, not inherited by `b.SubB`, nor through `Third extends SubB`, nor in `SubB.In`; inherited by `a.SubA`) beside protected, public and private ones, private nested types of a nested base, a class's own private nested type in its inner class. Before the fix: 3 body mismatches, 3 declared |
 
 Known limits (mismatches that stay):
 
