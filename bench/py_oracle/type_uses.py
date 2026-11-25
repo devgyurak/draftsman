@@ -63,7 +63,7 @@ from mypy.options import Options
 from mypy.patterns import AsPattern, MappingPattern, StarredPattern
 from mypy.traverser import TraverserVisitor
 from mypy.types import (
-    AnyType, Instance, TypeAliasType, TypeVarType,
+    AnyType, CallableType, Instance, TypeAliasType, TypeVarType, UnboundType, UnionType,
 )
 from mypy.typetraverser import TypeTraverserVisitor
 
@@ -186,7 +186,10 @@ def regions(cdef: ClassDef, cid: str, src: Source, rel: str) -> None:
 
 def declaration_names(cdef: ClassDef, cid: str, src: Source, rel: str) -> None:
     """The names of a class's declarations (module docstring)."""
-    names = lambda role: Declared(cid, src, rel, role)   # noqa: E731
+    def names(role: str) -> "Declared":
+        d = Declared(cid, src, rel, role)
+        d.info = cdef.info
+        return d
     for e in (*cdef.base_type_exprs, *cdef.removed_base_type_exprs):
         e.accept(names("super"))
     for d in cdef.decorators:
@@ -194,7 +197,7 @@ def declaration_names(cdef: ClassDef, cid: str, src: Source, rel: str) -> None:
     for s in cdef.defs.body:
         if isinstance(s, AssignmentStmt) and s.new_syntax and s.type is not None \
                 and len(s.lvalues) == 1 and isinstance(s.lvalues[0], NameExpr):
-            names("field").types(s.type)
+            names("field").types(s.type, s.unanalyzed_type)
     seen: set[int] = set()
     for d, f in methods(cdef.defs.body):
         if d is not None:
@@ -204,10 +207,10 @@ def declaration_names(cdef: ClassDef, cid: str, src: Source, rel: str) -> None:
             continue
         seen.add(id(f))
         if f.unanalyzed_type is not None and f.type is not None and not src.type_comment(f):
-            names("signature").types(f.type)
+            names("signature").types(f.type, f.unanalyzed_type)
         if f.name == "__init__":
             for a in self_annotations(f.body.body):
-                names("field").types(a.type)
+                names("field").types(a.type, a.unanalyzed_type)
 
 
 def methods(stmts):
@@ -545,8 +548,11 @@ class Declared(Uses):
     def __init__(self, cid: str, src: Source, rel: str, role: str):
         super().__init__(cid, src, rel)
         self.role, self.args = role, 0
+        self.recorded: set[tuple[int, int]] = set()   # (line, character) recorded
+        self.info = None   # the class's TypeInfo
 
     def record(self, name, line, c, kind, target, project, maximal, node, annotation=False):
+        self.recorded.add((line, c))
         emit({"use": name, "file": self.rel, "line": line, "col": self.src.utf16(line, c),
               "pos": "declared", "kind": kind, "target": target, "project": project,
               "maximal": maximal, "from": self.cid, "mypy": described(node),
@@ -559,8 +565,50 @@ class Declared(Uses):
         e.index.accept(self)
         self.args -= 1
 
-    def types(self, t) -> None:
+    def types(self, t, written=None) -> None:
         t.accept(DeclaredTypeNames(self))
+        if written is not None:
+            self.unrecorded(written, t)
+
+    def unrecorded(self, u, t) -> None:
+        """A name of the annotation as written (``u``) that the analyzed type ``t`` gave no
+        place to: an alias mypy expanded (`Item = int` in the class body, then `a: Item`).
+        Its answer is what the analyzed type is there."""
+        if isinstance(u, CallableType) and isinstance(t, CallableType):
+            for ua, ta in zip(u.arg_types, t.arg_types):
+                self.unrecorded(ua, ta)
+            self.unrecorded(u.ret_type, t.ret_type)
+            return
+        if isinstance(u, UnionType) and isinstance(t, UnionType) and len(u.items) == len(t.items):
+            for ua, ta in zip(u.items, t.items):
+                self.unrecorded(ua, ta)
+            return
+        if not isinstance(u, UnboundType) or u.line is None or u.line < 1 or u.column is None:
+            return
+        text = self.src.lines[u.line - 1] if u.line <= len(self.src.lines) else ""
+        m = _DOTTED.match(text, u.column) if u.column >= 0 else None
+        if m is not None and m.start() == u.column and text[u.column:u.column + 1] not in "\"'":
+            last = m.group(0).rsplit(".", 1)[-1].strip()
+            c = m.end() - len(last)
+            if (u.line, c) not in self.recorded and last == u.name.rsplit(".", 1)[-1]:
+                if isinstance(t, Instance):
+                    kind, target, project = answer(t.type, last)
+                    self.record(last, u.line, c, kind, target, project, True, t.type, True)
+                elif isinstance(t, TypeVarType):
+                    self.record(last, u.line, c, "tparam", None, False, True, None, True)
+                elif isinstance(t, UnboundType) and "." not in u.name and self.info is not None:
+                    # mypy left it unanalyzed (`Item = int` in the class body is no alias
+                    # to it): what the name is bound to, in the class, then the module
+                    sym = self.info.names.get(u.name) or \
+                        result.files[self.info.module_name].names.get(u.name)
+                    node = sym.node if sym is not None else None
+                    kind, target, project = answer(node, last)
+                    self.record(last, u.line, c, kind, target, project, True, node, True)
+        if isinstance(t, Instance) and len(u.args) == len(t.args):
+            self.args += 1
+            for ua, ta in zip(u.args, t.args):
+                self.unrecorded(ua, ta)
+            self.args -= 1
 
 
 class DeclaredTypeNames(TypeNames):
