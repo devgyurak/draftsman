@@ -70,3 +70,17 @@ def test_the_arity_written_chooses_the_type(tmp_path):
     assert _rels(ir, "Shop.Sub.X") == {("Lib.Repo", "R"), ("Shop.Repo", "P")}
     assert _body(ir, "Shop.Sub.X") == {"Lib.Repo"}
 
+
+def test_a_packages_namespace_around_the_code_may_have_the_type(tmp_path):
+    # #5: in CommunityToolkit.Mvvm.Input.Mine, `RelayCommand` is the package's (Roslyn): the
+    # extractor cannot tell what the package has, so the name is unresolved with the reason
+    ir = extract_source(tmp_path, {
+        "P.csproj": SDK.format('<ItemGroup><PackageReference Include="CommunityToolkit.Mvvm" '
+                               'Version="8.4.0" /></ItemGroup>'),
+        "T.cs": "namespace Shop { public class RelayCommand {} }\n",
+        "Pkg.cs": ("using Shop;\nnamespace CommunityToolkit.Mvvm.Input.Mine "
+                   "{ public class PP { public RelayCommand C; } }\n")})
+    assert not _rels(ir, "CommunityToolkit.Mvvm.Input.Mine.PP")
+    (u,) = [u for u in ir.unresolved if u.from_ == "CommunityToolkit.Mvvm.Input.Mine.PP"]
+    assert "namespace outside the sources around it" in u.hint
+

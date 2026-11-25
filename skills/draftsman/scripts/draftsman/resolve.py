@@ -821,7 +821,8 @@ class Resolver:
                 if ns and name in (spec.outside_namespace(ns) or ()):
                     # `Host` in `namespace Microsoft.Extensions.Hosting`, before the usings
                     return Resolution(EXTERNAL, cand)
-                if strict and self._outside_around(ns, spec, scope) and not spec.is_builtin(name):
+                if (strict or spec.enclosing_outside_hides) and self._outside_around(ns, spec, scope) \
+                        and not spec.is_builtin(name):
                     return Resolution(UNRESOLVED, outside=True, hint=(
                         f"may be a type of {ns}, a namespace outside the sources around it"))
                 if (found := self._block_import(name, ns, scope, spec, strict)) is not None:
