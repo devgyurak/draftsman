@@ -702,16 +702,22 @@ is that type. Aliases of aliases are followed.
   `Keywords`); `::Foo` is the global one. What is called (`Money(1)`, `ns::Money(1)`,
   `AutoPtr<X>(p)`), a base's initializer (`: Base(1)`), `sizeof(X)`, `typeid(X)` and a
   block-scope function declaration's parameter (`Guard g(Tag);`, a variable Tag when
-  one is in scope) may be a value too; there, an enumerator of an unscoped enum of the
-  classes around, their bases or the namespaces around hides the type (`sizeof(Paid)`,
-  `Lock l(Paid);` beside `enum Kind { Paid };`; not an `enum class`'s). A call draws
-  nothing where a function of the name is declared at a namespace's scope anywhere in the
-  sources (with a return type: a constructor an error leaves at a namespace's scope is
-  none) or a method of the classes around. Inside a template, a base written with its
-  parameters (`Vec<T> : TBase<T>`) is not looked into: its member types and fields are
-  found once T is known, so they neither are candidates nor hide one (`TBase<int>` is
-  looked into). A namespace alias of the file's scope (`namespace fs = a::inner;`) is
-  read: `fs::D` is `a::inner::D`. An alias stands for every project type its written type names, as a declared
+  one is in scope) may be a value too; there, and only there, an enumerator of an
+  unscoped enum of the classes around, their bases or the namespaces around hides the
+  type when it is as near as the type or nearer (`sizeof(Paid)`, `Lock l(Paid);` beside
+  `enum Kind { Paid };`; not an `enum class`'s, nor a global `enum Coin { Cash }` beside
+  the namespace's struct Cash). A call draws nothing where a function of the name is
+  declared at a namespace's scope anywhere in the sources, also in an `#if` branch (with
+  a return type: a constructor an error leaves at a namespace's scope is none), or a
+  method of the classes around. Inside a template, a base of the class or of a class
+  around it written with their parameters (`Vec<T> : TBase<T>`) is not looked into: its
+  member types, fields, methods, enumerators and bases are found once T is known, so they
+  neither are candidates nor hide one (`TBase<int>` is looked into); a base's own bases
+  are all looked into (`Leaf : ViaPtr<int>` sees `ViaPtr<T> : TBase<T*>`'s, as
+  `TBase<int*>`). A namespace alias of the file's scope (`namespace fs = a::inner;`) is
+  read where no namespace or class of the name is nearer: `fs::D` is `a::inner::D`, but
+  `shop::fs::D` inside `shop` with a `namespace fs`, and a nested `struct gs`'s `D` in the
+  class. An alias stands for every project type its written type names, as a declared
   relation's (`typedef AutoPtr<Channel> Ptr;`), but an alias template's own parameters
   and a dependent `typename X<T>::Y` name none. What a build decides, read from the
   sources: a type of an anonymous namespace is a candidate in its file only; a type is a
@@ -719,9 +725,14 @@ is that type. Aliases of aliases are followed.
   others (a quoted path from the file's directory first, else every file whose path ends
   with the one written), and lookup goes on past one that is not (another program's
   global `Utility` is none of RemoteGen's, whose `Poco::CodeGeneration::Utility` is meant);
-  where an included file declares the type without defining it (`struct Fwd;`), the name
-  is that type and lookup stops there. A type declared in an `#if` branch is drawn in
-  that branch and in branches of the same condition, in any file (`#if defined(POCO_HAVE_IPv6)`
+  where an included file declares the type without defining it (`struct Fwd;`, `template
+  <class T> struct Box;`, `enum class Mode : int;`), the name is that type and lookup
+  stops there; it stops there too, drawing nothing, where the file may see the type
+  another way: a file including it does (`foo_inl.h`, included at the end of the `foo.h`
+  that defines `Helper`), or the file or one it includes has an include a macro makes
+  (`#include APP_UTIL`). A type declared in an `#if` branch is drawn in that branch and in
+  branches of the same condition (read with the lines a backslash continues), in any file
+  (`#if defined(POCO_HAVE_IPv6)`
   around `IPv6AddressImpl` and its uses; POCO's `ip_mreq` for HP-UX beside the system's
   is not). Bases outside the sources: under a class of `std` that
   `cpp_std.json` knows (libstdc++'s, as Clang reads it: `bench/clang_oracle/oracle.py
@@ -730,7 +741,8 @@ is that type. Aliases of aliases are followed.
   does not know, or one written with the class's template parameters (`std::vector<T>`,
   looked into once T is known), nothing is hidden. C++ and the other languages name none
   of each other's types. Checked against Clang (`bench/clang_oracle`): leveldb 877 names,
-  POCO 21,908, no mismatch; review sets cpp2 to cpp4 pin the forms
+  POCO 21,908, no mismatch; review sets cpp2 to cpp5 pin the forms, each rule beside a
+  rival type
   (`bench/clang_oracle/review/README.md`).
 - Known limits of bodies. Not drawn: code outside every type (free functions, a
   namespace's variables; #8) and template specialisations (`template <> struct X<int>
@@ -744,13 +756,16 @@ is that type. Aliases of aliases are followed.
   (`STR(Money::Zero)`), read as an expression, and a macro's argument that is an
   identifier alone (`DECL(Money, d)`, `NEWOF(Money)`), where the parser sees no type; an
   elaborated name (`struct Channel c`); a member defined out of a class named by a
-  typedef (`int Ord::look()`); a namespace alias of a block (`namespace al = a::inner;`); a
+  typedef (`int Ord::look()`); a namespace alias of a block or of a namespace (`namespace al = a::inner;` in
+  `shop`); a class's forward declaration of a nested type (`struct Pim { struct Impl; }`); a
   type the sources only declare (`struct Fwd;` with no definition); a header with no
   include of its own, which relies on what its includer included first. Includes are read
   as a whole: a name above the `#include` of its file counts as included. An include path
   is matched by its suffix where the quoted path from the file's directory fails, which
   may take another directory's file of the name (`"sub/deep.h"` for `one/sub/deep.h`
-  besides `sub/deep.h`). Lost to a rule: a type of an `#if` branch named outside every
+  besides `sub/deep.h`). A condition is compared as written: `#ifdef LATE` in a header
+  and in a file that defines `LATE` after including it read the same, though the header's
+  branch is not compiled there (the type is drawn). Lost to a rule: a type of an `#if` branch named outside every
   branch of its condition (POCO 3); a type of a file the body's file includes through a
   path the suffix match misses (1). A local variable hides its name in the whole member,
   also before it is declared, and a `using namespace` in a function counts for the file.

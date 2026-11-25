@@ -130,14 +130,19 @@ Notes for anyone with `view.json` files written against a development build:
   (`Money(1)`) draws nothing beside a function of the name; an alias stands for every
   project type it names, as a declared relation's (not an alias template's own
   parameters, nor a dependent `typename X<T>::Y`); an unscoped enum's enumerator hides a
-  type where a value may stand (`sizeof(Paid)`); a base written with the template's
-  parameters (`TBase<T>`) is not looked into; a file's namespace alias is read. What a build decides, read from the
+  type where a value may stand and it is as near or nearer (`sizeof(Paid)`); a base the
+  class or a class around it writes with its template parameters (`TBase<T>`) is not
+  looked into, a base's own bases are; a file's namespace alias is read where no
+  namespace or class of the name is nearer. What a build decides, read from the
   sources: a type of an anonymous namespace is its file's; a type is a candidate only
   where the body's file includes its file, and lookup goes on past it (another
   program's global `Utility` is no RemoteGen's, `Poco::CodeGeneration::Utility` is: 132
   wrong names kept out at a cost of 1; going on past it draws 143 more), a type the
-  included files only declare (`struct Fwd;`) stops it; a type declared in an `#if`
-  branch only in the branches of its condition (2 kept out, 3 lost); a function the grammar nests in a block (an `#if`
+  included files only declare (`struct Fwd;`, a template's or an enum's) stops it, and
+  so does one the file may see another way (through a file including it, or an include
+  a macro makes), drawing nothing; a type declared in an `#if`
+  branch only in the branches of its condition, read with its continued lines (2 kept
+  out, 3 lost); a function the grammar nests in a block (an `#if`
   that opens a block in each branch) is not read. Under a base class of std, only what
   `langs/cpp_std.json` knows hides a name (libstdc++'s public and protected members, as
   Clang reads them: `oracle.py table`, 81 KB); a base it does not know, or one written
@@ -148,7 +153,7 @@ Notes for anyone with `view.json` files written against a development build:
   compiles the line agrees. leveldb: 877 names drawn, POCO 21908, 0 mismatches. Not drawn:
   code outside every type (#8: 220 of leveldb's 1027 project type names in bodies, 990 of
   POCO's 21100) and template specialisations (1671 of POCO's). A fixture of 77 names and
-  review sets cpp1 to cpp4 pin the forms. leveldb gains 597 body dependencies and POCO 10885.
+  review sets cpp1 to cpp5 pin the forms. leveldb gains 597 body dependencies and POCO 10885.
   Declared relations are unchanged, but C++ and the other languages no longer name each
   other's types in a directory of both (a C# `Helper` took a C++ global struct); the
   lookup rules above apply to bodies only (#7 lists where declared relations differ).
