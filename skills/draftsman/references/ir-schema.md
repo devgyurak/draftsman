@@ -65,7 +65,15 @@ header/source).
 
 How each kind is derived:
 
-- **extends / implements** — the type's own supertype clauses.
+- **extends / implements** — the type's own supertype clauses. A supertype clause written
+  as an alias (TypeScript's `interface I extends Joined`, `type Joined = A & B`) extends or
+  implements each type the alias is, and depends on the others it names.
+- **dependency from a supertype's type arguments** — each project type named in the type
+  arguments of a supertype clause (`class NodeList extends ArrayList<Node>`, `: List<Item>
+  by d`, `struct S : std::vector<Item>`, `class P(Generic[T], List[Node])`), whether the
+  supertype is a project type or not; containers seen through as in a signature. A type
+  parameter and the type itself draw nothing, and a name found nowhere is not unresolved.
+  No `via`.
 - **association** — an instance field (or property) whose type, after unwrapping
   containers from `config/wrappers.yaml` and `T[]`/`T?`/`T | None`, names a project type.
   One relation per field; `multiplicity` comes from the unwrapping. When that type is a
@@ -121,9 +129,11 @@ the IR; a reference to one is drawn as a reference to the project types the alia
 assignments may be values and draw nothing. Tuples (`[A, B]`, `(A a, B b)`, `tuple[A,
 B]`, `std::pair<A, B>`) relate to each element with multiplicity `1`. Names read this way
 (`Tuple`, `tuple`, `ValueTuple`, `std::pair`, Python `Literal[...]`, and the containers of
-`config/wrappers.yaml`) mean the project's class when the project defines one: a Java
-`Tuple<A, B>` class is an association to `Tuple`. A TypeScript `typeof x` is a relation
-when `x` is a class and is otherwise a value: never unresolved.
+`config/wrappers.yaml`) mean the project's class or alias when the project defines one: a
+Java `Tuple<A, B>` class is an association to `Tuple`, and a field of a C++ `typedef
+std::vector<Item> Vector;` or a TypeScript `type Provider = A | B` is drawn through the
+alias. A TypeScript `typeof x` is a relation when `x` is a class or an enum and is
+otherwise a value: never unresolved.
 
 ## External
 

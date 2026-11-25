@@ -48,6 +48,24 @@ Notes for anyone with `view.json` files written against a development build:
   focus diagram draws those that touch the focus; results measured with 0.3.0 (the
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
+- **A supertype's type arguments are dependencies; a project alias named like a
+  container is drawn through** (#9, after 0.10.0). `class NodeList extends
+  ArrayList<Node>` depends on Node, in every language and whether the supertype is the
+  project's or not (also a qualifier's arguments, `Outer<Item>.Inner<Node>`, and a
+  TypeScript class's `extends Base<A>`, whose arguments tree-sitter keeps apart); C++
+  looks the names up as a base clause of a body does. A type parameter and the type
+  itself draw nothing; a name found nowhere is not unresolved. A project alias named like
+  a container of `config/wrappers.yaml` (`type Provider = A | B`, `typedef
+  std::vector<Item> Vector;`, `typealias Vector = List<Item>`) was passed over as the
+  container; it is expanded as any alias. Types, body relations and unresolved names are
+  the same in the 14 e2e repositories; declared relations added: nest 144 (60 pairs; 20
+  associations through `Provider`), TypeORM 43, spring-petclinic 4, jsoup 7, Netty 182,
+  eShopOnWeb 45, Serilog 3, eShop 66, nowinandroid 4, Ktor 225, POCO 52 (one dependency
+  becomes the association `X509Certificate::List` gives, `*`); leveldb, Django and httpx
+  are the same. Against the keys, declared names missed: nest 66 → 0, TypeORM 19 → 0,
+  spring-petclinic 4 → 0, jsoup 15 → 10, Netty 187 → 10, eShopOnWeb 46 → 1, Serilog 3 → 0,
+  eShop 68 → 2, nowinandroid 6 → 2, Ktor 613 → 393, POCO 196 → 151; no mismatch. Review
+  sets jv3, py3, ts2, cs21, kt17, cpp14.
 - **TypeScript types the type parser read no name from** (#9, after 0.10.0). A union
   written with a leading `|` (prettier's multi-line unions), an intersection, an object
   type literal, a function type with optional parameters, an indexed access
