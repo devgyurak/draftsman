@@ -128,7 +128,8 @@ def test_a_declaration_outside_every_if_branch_lets_the_type_be_drawn(tmp_path):
         "p.h": ("#pragma once\nnamespace net {\nclass PollSetImpl;\n"
                 "class PollSet { PollSetImpl* _pImpl; };\n}\n"),
         "p.cc": ("#include \"p.h\"\nnamespace net {\n#if defined(EPOLL)\n"
-                 "class PollSetImpl { int ep; };\n#else\nclass PollSetImpl { int sel; };\n#endif\n}\n"),
+                 "class PollSetImpl { int ep; };\n#elif defined(POLL)\n"
+                 "class PollSetImpl { int sel; };\n#endif\n}\n"),   # (no #else: not every build)
         "v.h": ("#pragma once\nnamespace d {\n#ifndef DOC\nstruct Hash {};\n#endif\n"
                 "struct Visitor { Hash h; };\n}\n")})
     assert _rels(ir, "net::PollSet") == {("net::PollSetImpl", "_pImpl")}
@@ -171,3 +172,33 @@ def test_names_are_looked_up_in_the_base_the_relation_is_drawn_to(tmp_path):
     assert "lib::Base::Inner" in _body(ir, "t4::User")
     assert _rels(ir, "M") == {("gen::Root", None), ("Inner", "i_")}
     assert "Inner" in _body(ir, "M")
+
+
+def test_names_past_a_base_whose_members_are_not_known_are_not_drawn(tmp_path):
+    # PlatBase is a type of an `#if` branch the class is outside of: unresolved, and what it
+    # has is not known; a name found in the class or another base is still drawn, one found
+    # further out may be its member
+    ir = extract_source(tmp_path, {"p.h": (
+        "#pragma once\nstruct Handle { static int n; };\nstruct Other { struct Tag {}; };\n"
+        "namespace plat {\n"
+        "#ifdef _WIN32\nstruct PlatBase { struct Handle { void* h; }; };\n#endif\n"
+        "struct File : PlatBase, Other {\n  struct Own {};\n"
+        "  Handle h_;\n  Tag t_;\n  Own o_;\n"
+        "  int f() { Handle x; Tag y; return 0; }\n  int g() { return Handle::n; }\n};\n}\n")})
+    rels = _rels(ir, "plat::File")
+    assert ("Handle", "h_") not in rels
+    assert {("Other", None), ("Other::Tag", "t_"), ("plat::File::Own", "o_")} <= rels
+    assert "base PlatBase" in _unresolved(ir, "plat::File")["Handle"]
+    assert _body(ir, "plat::File") == {"Other::Tag"}
+
+
+def test_a_base_of_a_file_not_included_hides_names_too(tmp_path):
+    ir = extract_source(tmp_path, {
+        "a/base.h": "#pragma once\nstruct Root { struct Inner {}; };\n",
+        "b/g.h": "#pragma once\nstruct Inner {};\n",
+        "b/main.cc": ("#include \"g.h\"\nstruct M : Root { Inner i_; "
+                      "int f() { Inner x; return 0; } };\n")})
+    assert not _rels(ir, "M")
+    assert "base Root" in _unresolved(ir, "M")["Inner"]
+    assert not _body(ir, "M")
+

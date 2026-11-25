@@ -33,6 +33,9 @@ class Resolution:
     hint: Optional[str] = None
     candidates: list[str] = field(default_factory=list)
     outside: bool = False   # unresolved, and only something outside the sources explains it
+    # a base clause unresolved where the language cannot tell what it is (C++: a type of an
+    # `#if` branch, of a file not included): a base whose members are not known
+    opaque: bool = False
 
 
 class Resolver:
@@ -102,6 +105,7 @@ class Resolver:
         # up (LanguageSpec.declared_like_bodies; _Builder._base_like_body): the bases a
         # relation is drawn to are the ones names are looked up in
         self.base_lookup: Optional[Callable[[RawType, Any, Resolution], Resolution]] = None
+        self._opaque_cache: dict[str, Optional[tuple[str, Resolution]]] = {}
         self._suffix_cache: dict[tuple[str, bool], Optional[str]] = {}
         self._tail_cache: dict[str, Optional[str]] = {}
         self._field_cache: dict[tuple[str, str], bool] = {}
@@ -961,6 +965,86 @@ class Resolver:
 
     def _body_resolution(self, name: str, rtype: RawType, ref: RawBodyRef,
                          qualifier: bool) -> Optional[Resolution]:
+        """_name_in_body, or None where a base whose members are not known may have the
+        name (opaque_hides)."""
+        res = self._name_in_body(name, rtype, ref, qualifier)
+        if res is not None and res.status in (PROJECT, ALIAS) and res.target \
+                and self.opaque_hides(rtype, ref, name):
+            return None
+        return res
+
+    def opaque_hides(self, rtype: RawType, ref: RawBodyRef,
+                     name: str) -> Optional[tuple[str, Resolution]]:
+        """The base (as written, and its resolution) whose members are not known
+        (Resolution.opaque) that may have ``name`` where ``ref`` is written, or None. A
+        class's scope is its own members and its bases': a name found in the class or in a
+        base of it is not hidden by the class's opaque base, one found further out (a class
+        around it, a namespace) is."""
+        chain = []
+        cur: Optional[RawType] = rtype
+        while cur is not None:
+            chain.append(cur)
+            cur = self.index.get(cur.outer) if cur.outer else None
+        if not any(self._opaque_base(c) for c in chain):
+            return None
+        sep = LANGUAGES[rtype.language].separator
+        head = name.split(sep, 1)[0]
+        found = self._in_body(head, rtype, ref, 0)
+        target = found.target if found.status in (PROJECT, ALIAS) else None
+        owner = None
+        if target is not None:
+            if target in self.index:
+                owner = self.index[target].outer
+            elif sep in target:
+                owner = target.rsplit(sep, 1)[0]
+        for c in chain:
+            scope = self._ancestors(c)
+            if target is not None and (target in scope or owner in scope):
+                return None
+            hidden = self._opaque_base(c)
+            if hidden is not None:
+                return hidden
+        return None
+
+    def _ancestors(self, rtype: RawType) -> set[str]:
+        """``rtype`` and its project bases, followed through."""
+        out: set[str] = set()
+        stack = [rtype]
+        while stack:
+            t = stack.pop()
+            if t.qualified_name in out:
+                continue
+            out.add(t.qualified_name)
+            stack += [self.index[s.target] for s in self.supertypes(t)
+                      if s.status == PROJECT and s.target in self.index]
+        return out
+
+    def _opaque_base(self, rtype: RawType) -> Optional[tuple[str, Resolution]]:
+        """A base of ``rtype`` or of its project bases whose members are not known
+        (Resolution.opaque): (as written, its resolution), or None."""
+        key = rtype.qualified_name
+        if key in self._opaque_cache:
+            return self._opaque_cache[key]
+        found = None
+        seen: set[str] = set()
+        stack = [rtype]
+        while stack and found is None:
+            t = stack.pop()
+            if t.qualified_name in seen:
+                continue
+            seen.add(t.qualified_name)
+            for written, sup in zip(t.supers, self.supertypes(t)):
+                if sup.opaque:
+                    found = (written.text, sup)
+                    break
+                if sup.status == PROJECT and sup.target in self.index:
+                    stack.append(self.index[sup.target])
+        if not self._resolving_supers:   # (not while a base is being resolved: cyclic)
+            self._opaque_cache[key] = found
+        return found
+
+    def _name_in_body(self, name: str, rtype: RawType, ref: RawBodyRef,
+                      qualifier: bool) -> Optional[Resolution]:
         """``name`` where ``ref`` is written, or None where a value or a namespace of the
         name may be meant (LanguageSpec.values_hide_types: `int Money;` hides the type
         Money; `Keywords::now` may be a namespace Keywords's). ``qualifier``: the name stands
@@ -2031,13 +2115,18 @@ class _Builder:
                 alias = found.target
             elif res.target and res.status in (PROJECT, ALIAS):
                 return Resolution(UNRESOLVED, hint=self._unseen_why(res.target, file)
-                                  or f"{name} is no type {file} sees")
+                                  or f"{name} is no type {file} sees", opaque=True)
             else:
                 return found
         else:
             target = self.resolver.body_type(name, rtype, ref)
             alias = None if target is not None else self.resolver.body_alias(name, rtype, ref)
             if target is None and alias is None:
+                hidden = self.resolver.opaque_hides(rtype, ref, name)
+                if hidden is not None and res.target and res.status in (PROJECT, ALIAS):
+                    return Resolution(UNRESOLVED, hint=(
+                        f"{name} may be a member of the base {hidden[0]}, whose members are "
+                        f"not known: {hidden[1].hint}"))
                 if res.target and res.status in (PROJECT, ALIAS):
                     return Resolution(UNRESOLVED, hint=self._unseen_why(res.target, file) or (
                         f"{name} may be a value, a namespace or a member of a base class "
@@ -2046,7 +2135,7 @@ class _Builder:
         if alias is not None:
             return Resolution(ALIAS, alias)
         why = self._declared_stop(target, scope, line)
-        return Resolution(UNRESOLVED, hint=why) if why else Resolution(PROJECT, target)
+        return Resolution(UNRESOLVED, hint=why, opaque=base) if why else Resolution(PROJECT, target)
 
     def _declared_stop(self, target: str, scope: FileScope, line: int) -> Optional[str]:
         """Why a body would draw nothing to ``target`` from ``line`` of ``scope``'s file
