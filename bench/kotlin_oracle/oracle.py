@@ -6,11 +6,12 @@ the compiler). This script runs it in a container, turns its records into the fo
 bench/answer_key.py gives and joins the compilations each file is in.
 
     uv run bench/kotlin_oracle/oracle.py selftest
-    uv run bench/kotlin_oracle/oracle.py key DIR [-o OUT.jsonl] [--compare] [-v]
+    uv run bench/kotlin_oracle/oracle.py key DIR [-o OUT.jsonl] [--compare [--declared]] [-v]
     uv run bench/kotlin_oracle/oracle.py review [SET ...]
     uv run bench/kotlin_oracle/oracle.py run REPO --checkout DIR -o OUT.jsonl [--raw DIR [--rejoin]]
     uv run bench/kotlin_oracle/oracle.py scope REPO OUT.jsonl ir.json
     uv run bench/kotlin_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR [-v]
+    uv run bench/kotlin_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR --declared [--save F]
     uv run bench/kotlin_oracle/oracle.py measure OUT.jsonl [--ir ir.json]
 
 `selftest` checks the key against the hand-written answers in tests/fixtures/kotlin/body
@@ -24,7 +25,9 @@ put into every Kotlin compile task, and records the sources its end-to-end page 
 (docs/e2e/kotlin/); it takes the network. `scope` fails unless the key saw the same types,
 declared in the same files, as ir.json of those sources. `compare` extracts the same
 sources and checks every name a body relation is drawn from against what the compiler
-resolved at its place. `measure` prints what the rules for hiding names are decided by.
+resolved at its place; with `--declared` (also for `key --compare`), the names declared
+relations are drawn from instead (bench/declared.py, issue #7). `measure` prints what the
+rules for hiding names are decided by.
 
 What a record says. A name in a body (a function's body, an initializer, a default
 argument, an `init` block, a constructor's delegation) is recorded with "pos" "type" when
@@ -81,6 +84,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(ROOT / "skills" / "draftsman" / "scripts"))
 import answer_key  # noqa: E402
+import declared  # noqa: E402
 from extract import discover  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "kotlin" / "body"
@@ -212,10 +216,15 @@ class Types:
         return None
 
 
+# where outside bodies the extractor draws declared relations from (TypeUses' "decl")
+DECLARED = ("super", "field", "signature", "annotation")
+
+
 def convert(r: dict, file: str, types: Types) -> Optional[dict]:
     """The key's record of a name TypeUses recorded, None for one it does not keep: a name
-    outside bodies, or a member name after a `.` (but a nested class's constructor)."""
-    if not r["body"]:
+    outside bodies but where a declared relation is drawn from (issue #7: "pos"
+    "declared"), or a member name after a `.` (but a nested class's constructor)."""
+    if not r["body"] and r.get("decl") not in DECLARED:
         return None
     raw = r["kind"]
     if r.get("dotted") and raw not in TYPES and raw != "local-class":
@@ -246,6 +255,9 @@ def convert(r: dict, file: str, types: Types) -> Optional[dict]:
     for k in ("role", "implicit", "call", "companion"):
         if r.get(k) not in (None, False):
             out[k] = r[k]
+    if not r["body"]:
+        out.update(pos="declared", role=r["decl"], in_args=r.get("in_args", False),
+                   **({"qualifier_role": r["role"]} if r.get("role") else {}))
     return out
 
 
@@ -369,7 +381,7 @@ def key(args) -> int:
     if not args.compare:
         return 0
     root = args.directory.resolve()
-    return check(root, discover(root, {"kotlin"}, []), recs, args.verbose)
+    return check(root, discover(root, {"kotlin"}, []), recs, args.verbose, args)
 
 
 def review(args) -> int:
@@ -431,10 +443,11 @@ def sources(repo: str, checkout: Path) -> list[tuple[Path, str]]:
 def summary(recs: list[dict], name: str) -> None:
     comps = [r for r in recs if "compilation" in r]
     errors = [r for r in recs if "diagnostic" in r]
-    uses = Counter(r["kind"] for r in recs if "use" in r)
+    uses = Counter(r["kind"] for r in answer_key.body(recs) if "use" in r)
     print(f"{name}: {len(comps)} compilations, {len(errors)} compile errors (in "
           f"{len({r['file'] for r in errors})} source files); names: "
-          + ", ".join(f"{k} {v}" for k, v in uses.most_common()))
+          + ", ".join(f"{k} {v}" for k, v in uses.most_common())
+          + f"; declared names: {len(declared.declared_records(recs))}")
     for r in errors[:20]:
         print(f"  {r['file']}:{r['line']}: {r['diagnostic']}")
     whole = [r["uncompiled"] for r in recs if "uncompiled" in r]
@@ -520,7 +533,8 @@ def scope(args) -> int:
     return in_scope(answer_key.read(args.oracle), ir)
 
 
-def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: bool) -> int:
+def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: bool,
+          args=None) -> int:
     from draftsman.extractor import Extractor
     from draftsman.langs import spec_for_path
     from draftsman.resolve import _Builder
@@ -528,10 +542,15 @@ def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: 
 
     raw = [Extractor(spec_for_path(rel)).extract(f, rel, root) for f, rel in files]
     builder = _Builder(str(root), raw, Wrappers.load())
+    if args is not None and args.declared:
+        declared.watch(builder)
     ir = builder.build()
     where = {t.id: t.location.file for t in ir.types if t.language == "kotlin"}
     if in_scope(recs, where):
         return 1
+    if args is not None and args.declared:
+        return declared.report(builder, recs, root, args, key="the compiler",
+                               uncompiled={r["uncompiled"] for r in recs if "uncompiled" in r})
     # code outside every type draws nothing: not a miss. A file no compilation compiles
     # (a module the build leaves out) has no answers: what is drawn there is counted apart
     return answer_key.compare(builder.body_uses, recs, verbose, key="the compiler",
@@ -541,7 +560,8 @@ def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: 
 
 def compare(args) -> int:
     checkout = args.checkout.resolve()
-    return check(checkout, sources(args.repo, checkout), answer_key.read(args.oracle), args.verbose)
+    return check(checkout, sources(args.repo, checkout),
+                 answer_key.read(args.oracle, declared=args.declared), args.verbose, args)
 
 
 def measure(args) -> int:
@@ -708,6 +728,7 @@ def main(argv=None) -> int:
     d.add_argument("--compare", action="store_true",
                    help="check the extractor's body relations of the same files against it")
     d.add_argument("-v", "--verbose", action="store_true", help="list every miss and mismatch")
+    declared.arguments(d)
     d.set_defaults(fn=key)
     v = sub.add_parser("review")
     v.add_argument("sets", nargs="*", help="only these sets (directory names below review/)")
@@ -731,6 +752,7 @@ def main(argv=None) -> int:
     k.add_argument("oracle", type=Path)
     k.add_argument("--checkout", type=Path, required=True)
     k.add_argument("-v", "--verbose", action="store_true", help="list every miss and mismatch")
+    declared.arguments(k)
     k.set_defaults(fn=compare)
     m = sub.add_parser("measure")
     m.add_argument("oracle", type=Path)

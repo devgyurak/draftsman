@@ -1,7 +1,8 @@
 // A Kotlin compiler plugin (K2): once a file is resolved, it walks the file's FIR and
 // writes, for every name in it, what the compiler resolved that name to. One JSON line per
 // name; one output file per compilation (a compilation is a Gradle compile task, or a
-// fragment of one in Kotlin Multiplatform).
+// fragment of one in Kotlin Multiplatform). A name outside bodies has "decl", where in a
+// declaration it stands, and "in_args", whether inside type arguments (issue #7).
 package org.draftsman.typeuses
 
 import org.jetbrains.kotlin.KtFakeSourceElementKind
@@ -217,6 +218,11 @@ class Walker(val path: String, val text: String, val session: FirSession, val co
     private val owners = ArrayList<String>()     // the classes around, innermost last
     private val callables = ArrayList<String>()  // functions and properties around
     private var body = 0
+    // outside bodies: where in a declaration a name stands ("super", "field", "signature",
+    // "annotation"; "bound", "alias" for a type parameter's bound, a typealias's type), and
+    // how many type arguments it is inside
+    private var decl: String? = null
+    private var args = 0
 
     fun walk(file: FirFile) {
         out.add(obj("file" to path, "comp" to comp, "package" to file.packageDirective.packageFqName.asString()))
@@ -227,6 +233,13 @@ class Walker(val path: String, val text: String, val session: FirSession, val co
         val parent = parents.lastOrNull()
         val entersBody = parent != null && entersBody(parent, element)
         if (entersBody) body++
+        val wasDecl = decl
+        val wasArgs = args
+        if (entersBody) decl = null
+        else if (body == 0 && parent != null) declRole(parent, element)?.let {
+            decl = it
+            if (it == "annotation") args = 0
+        }
         parents.add(element)
         var owner: String? = null
         var callable: String? = null
@@ -256,6 +269,20 @@ class Walker(val path: String, val text: String, val session: FirSession, val co
         callable?.let { callables.removeAt(callables.size - 1) }
         parents.removeAt(parents.size - 1)
         if (entersBody) body--
+        decl = wasDecl
+        args = wasArgs
+    }
+
+    /** Where in ``parent``'s declaration ``child`` stands, if it is one the key records. */
+    private fun declRole(parent: FirElement, child: FirElement): String? = when {
+        child is FirAnnotation -> "annotation"
+        parent is FirRegularClass && parent.superTypeRefs.any { it === child } -> "super"
+        parent is FirTypeParameter -> "bound"
+        parent is FirTypeAlias -> "alias"
+        parent is FirProperty && child === parent.returnTypeRef -> "field"
+        parent is FirCallableDeclaration && child === parent.returnTypeRef -> "signature"
+        parent is FirReceiverParameter -> "signature"
+        else -> null
     }
 
     /** Whether ``child`` of ``parent`` is code (a body) rather than a declaration's header. */
@@ -275,9 +302,11 @@ class Walker(val path: String, val text: String, val session: FirSession, val co
         if (!seen.add(offset to pos)) return
         var line = lineStarts.binarySearch(offset)
         if (line < 0) line = -line - 2
+        val where = if (body == 0 && decl != null) arrayOf("decl" to decl, "in_args" to (args > 0))
+            else emptyArray()
         out.add(obj("use" to name, "line" to line + 1, "col" to offset - lineStarts[line], "pos" to pos,
             "kind" to kind, "target" to target, "body" to (body > 0), "owners" to owners.toList(),
-            "callables" to callables.toList(), *extra))
+            "callables" to callables.toList(), *extra, *where))
     }
 
     private fun declared(id: ClassId, kind: String, d: FirMemberDeclaration, vararg extra: Pair<String, Any?>) {
@@ -348,7 +377,9 @@ class Walker(val path: String, val text: String, val session: FirSession, val co
                 val args = (cone?.lowerBoundIfFlexible() as? ConeClassLikeType)?.typeArguments.orEmpty()
                 val refs = d.contextParameterTypeRefs + listOfNotNull(d.receiverTypeRef) +
                     d.parameters.map { it.returnTypeRef } + d.returnTypeRef
+                this.args++
                 refs.forEachIndexed { i, r -> pair(r, args.getOrNull(i)?.type) }
+                this.args--
             }
             else -> {}
         }
@@ -381,9 +412,11 @@ class Walker(val path: String, val text: String, val session: FirSession, val co
                         else expansion(id)
                     part(p, classKind(id), id.asString(), "alias" to alias, "part" to i, "expanded" to expanded)
                     val own = p.typeArgumentList.typeArguments
+                    this.args++
                     own.forEachIndexed { i, a ->
                         if (a is FirTypeProjectionWithVariance) pair(a.typeRef, args.getOrNull(i)?.type)
                     }
+                    this.args--
                     args = args.drop(own.size)
                     id = id.outerClassId
                 }
