@@ -12,7 +12,7 @@ import posixpath
 import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from .extractor import BodyNames, RawBodyRef, RawFile, RawMember, RawType
 from .langs import LANGUAGES, FileScope, Import, Unseen, spec_for_path
@@ -98,6 +98,10 @@ class Resolver:
         self._targets = set(self.index) | self.aliases
         self._supers_cache: dict[str, list[Resolution]] = {}
         self._resolving_supers: set[str] = set()
+        # what a base clause stands for where a language looks it up as a body looks names
+        # up (LanguageSpec.declared_like_bodies; _Builder._base_like_body): the bases a
+        # relation is drawn to are the ones names are looked up in
+        self.base_lookup: Optional[Callable[[RawType, Any, Resolution], Resolution]] = None
         self._suffix_cache: dict[tuple[str, bool], Optional[str]] = {}
         self._tail_cache: dict[str, Optional[str]] = {}
         self._field_cache: dict[tuple[str, str], bool] = {}
@@ -298,8 +302,11 @@ class Resolver:
                 if isinstance(ref, Named):
                     # a supertype clause cannot see the type's *own* inherited member
                     # types, but it does see those of its enclosing types
-                    cached.append(self.resolve(ref.name, rtype, inherit=False, scope=sup.scope,
-                                               arity=len(ref.args)))
+                    res = self.resolve(ref.name, rtype, inherit=False, scope=sup.scope,
+                                       arity=len(ref.args))
+                    if self.base_lookup is not None:
+                        res = self.base_lookup(rtype, sup, res)
+                    cached.append(res)
                 else:
                     cached.append(Resolution(UNRESOLVED))
         finally:
@@ -1826,6 +1833,7 @@ class _Builder:
         # what each file includes (LanguageSpec.include_visibility)
         self.file_includes = {f.path: f.scope.includes for f in files}
         self.file_forwards = {f.path: f.scope.forward_types for f in files}
+        self.resolver.base_lookup = self._base_like_body
         self._closures: Optional[dict[str, set[str]]] = None
         self._includers: Optional[dict[str, set[str]]] = None   # _unseen_from
         self.unknown_includes = {f.path for f in files if f.scope.unknown_include}
@@ -1955,18 +1963,19 @@ class _Builder:
         )
 
     def _super_resolutions(self, rtype: RawType) -> list[Resolution]:
-        """What each supertype clause of ``rtype`` draws to (LanguageSpec.declared_like_bodies:
-        looked up as a body looks names up; the resolver's own supertypes stay as they are)."""
-        found = self.resolver.supertypes(rtype)
+        """What each supertype clause of ``rtype`` draws to: the resolver's supertypes,
+        which names are looked up in too (Resolver.base_lookup)."""
+        return self.resolver.supertypes(rtype)
+
+    def _base_like_body(self, rtype: RawType, sup: Any, res: Resolution) -> Resolution:
+        """Resolver.base_lookup: a base clause looked up as a body looks names up where the
+        language does so (LanguageSpec.declared_like_bodies); ``res`` is the resolver's own
+        answer."""
         if not LANGUAGES[rtype.language].declared_like_bodies:
-            return found
-        out = []
-        for sup, res in zip(rtype.supers, found):
-            ref = parse_type(sup.text)
-            out.append(self._like_body(ref.name, rtype, None, sup.scope or rtype.scope,
-                                       len(ref.args), sup.line, sup.text, res, base=True)
-                       if isinstance(ref, Named) else res)
-        return out
+            return res
+        ref = parse_type(sup.text)
+        return self._like_body(ref.name, rtype, None, sup.scope or rtype.scope, len(ref.args),
+                               sup.line, sup.text, res, base=True)
 
     def _declared_resolution(self, name: str, rtype: RawType, rm: Optional[RawMember],
                              arity: Optional[int], text: Optional[str] = None) -> Resolution:

@@ -119,3 +119,40 @@ def test_a_classs_own_nested_type_defined_where_it_is_included(tmp_path):
         "x.cc": "#include \"t.h\"\n#include \"u.h\"\n"})
     assert ("Table::Rep", "rep_") in _rels(ir, "Table")
     assert ("Table", "t") in _rels(ir, "Reader")   # u.h's includer brings Table in
+
+
+def _body(ir, src: str) -> set[str]:
+    return {r.to for r in ir.relations if r.from_ == src and r.evidence == "body"}
+
+
+def test_names_are_looked_up_in_the_base_the_relation_is_drawn_to(tmp_path):
+    # one answer for a base clause (Resolver.supertypes): the base drawn is the one a
+    # member's type, a parameter's and a body's names are looked up in
+    ir = extract_source(tmp_path, {
+        "g.h": "#pragma once\nstruct Inner {};\nstruct Base { struct Inner {}; };\n",
+        "lib.h": ("#pragma once\n#include \"g.h\"\n"
+                  "namespace lib { struct Base { struct Inner {}; struct Deep {}; }; }\n"),
+        "t1.h": ("#include \"lib.h\"\nnamespace la = lib;\nnamespace t1 {\n"
+                 "struct C : la::Base { Inner i_; Deep d_; int f() { Inner x; return 0; } };\n}\n"),
+        "t2.h": ("#include \"g.h\"\nnamespace t2 {\nstruct Base {};\n"
+                 "struct G : ::Base { Inner i_; int f() { Inner x; return 0; } };\n}\n"),
+        "t3.h": ("#include \"lib.h\"\nnamespace t3 {\nusing lib::Base;\nnamespace in {\n"
+                 "struct Base {};\nstruct W : Base { Inner i_; int f() { Inner x; return 0; } };\n}\n}\n"),
+        "t4/types.h": "#include \"lib.h\"\nnamespace t4 { using lib::Base; }\n",
+        "t4/user.cc": ("#include \"t4/types.h\"\nnamespace t4 {\n"
+                       "struct User : Base { Inner i_; int f() { Inner x; return 0; } };\n}\n"),
+        "a/base.h": "#pragma once\nstruct Root { struct Inner {}; };\n",
+        "b/gen.h": "#pragma once\nnamespace gen { struct Root {}; }\n",
+        "b/main.cc": ("#include \"g.h\"\n#include \"b/gen.h\"\nusing namespace gen;\n"
+                      "struct M : Root { Inner i_; int f() { Inner x; return 0; } };\n")})
+    assert _rels(ir, "t1::C") == {("lib::Base", None), ("lib::Base::Inner", "i_"),
+                                  ("lib::Base::Deep", "d_")}
+    assert "lib::Base::Inner" in _body(ir, "t1::C")
+    assert _rels(ir, "t2::G") == {("Base", None), ("Base::Inner", "i_")}
+    assert "Base::Inner" in _body(ir, "t2::G")
+    assert _rels(ir, "t3::in::W") == {("t3::in::Base", None), ("Inner", "i_")}
+    assert "Inner" in _body(ir, "t3::in::W")
+    assert _rels(ir, "t4::User") == {("lib::Base", None), ("lib::Base::Inner", "i_")}
+    assert "lib::Base::Inner" in _body(ir, "t4::User")
+    assert _rels(ir, "M") == {("gen::Root", None), ("Inner", "i_")}
+    assert "Inner" in _body(ir, "M")
