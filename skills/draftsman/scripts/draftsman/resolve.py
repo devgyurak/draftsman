@@ -327,6 +327,10 @@ class Resolver:
                     # types, but it does see those of its enclosing types
                     res = self.rooted(ref.name, sup.text, rtype) or self.resolve(
                         ref.name, rtype, inherit=False, scope=sup.scope, arity=len(ref.args))
+                    if res.status == PROJECT and self.rebinding(
+                            ref.name, res.target, sup.scope or rtype.scope,
+                            LANGUAGES[rtype.language], stars=False):
+                        res = Resolution(UNRESOLVED, hint=_REBOUND.format(ref.name, res.target))
                     if self.base_lookup is not None:
                         res = self.base_lookup(rtype, sup, res)
                     cached.append(res)
@@ -1682,15 +1686,22 @@ class Resolver:
                            arity=ref.arities[0] if ref.arities and sep not in name else None,
                            head_arity=ref.arities[0] if ref.arities and sep in name else None,
                            body_file=ref.scope.file if spec.file_local_bodies else None)
-        if res.status == PROJECT and spec.rebinding_hides and (
-                self._rebound(res.target) or self._uncertain_path(name, ref.scope, spec)
-                or sep not in name and any(
-                    found != res.target for found in self._star_provides(name, ref.scope, spec))):
-            # `try: from x import Foo` / `except: class Foo`; `class Foo` beside a star
-            # import that brings in another Foo, or beside one that may bring in anything
-            # (from outside the sources), here or in a module the name comes through
+        if res.status == PROJECT and self.rebinding(name, res.target, ref.scope, spec):
             return Resolution(UNRESOLVED)
         return res
+
+    def rebinding(self, name: str, target: str, scope: FileScope, spec,
+                  stars: bool = True) -> bool:
+        """Whether ``name``, resolved to the project type ``target``, may be another
+        binding where ``scope`` writes it (LanguageSpec.rebinding_hides): `try: from x import
+        Foo` / `except: class Foo`; `class Foo` beside a star import that brings in another
+        Foo, or beside one that may bring in anything (from outside the sources), here or in
+        a module the name comes through. Without ``stars``, a star import whose names are
+        not known is not taken for another binding (a declaration's name, #7)."""
+        return spec.rebinding_hides and (
+            self._rebound(target) or self._uncertain_path(name, scope, spec, stars)
+            or spec.separator not in name and any(
+                found != target for found in self._star_provides(name, scope, spec)))
 
     def _block_import(self, name: str, ns: str, scope: FileScope, spec,
                       strict: bool) -> Optional[Resolution]:
@@ -1738,12 +1749,12 @@ class Resolver:
         return self.scopes_by_ns.get(module) or self.scopes_by_ns.get(
             self._by_suffix(module, self.scopes_by_ns, spec) or "", [])
 
-    def _uncertain_path(self, name: str, scope: FileScope, spec) -> bool:
+    def _uncertain_path(self, name: str, scope: FileScope, spec, stars: bool = True) -> bool:
         """_uncertain for a dotted name: its head in the file, then each part in the module
         the parts before it name (`relay.Button` after `from p import relay`)."""
         sep = spec.separator
         parts = name.split(sep)
-        if self._uncertain(scope, parts[0], spec):
+        if self._uncertain(scope, parts[0], spec, stars):
             return True
         got = self._head_module(parts[0], scope, spec)
         if got is None:
@@ -1753,12 +1764,12 @@ class Resolver:
             scopes = self._module_scopes(module, spec)
             if not scopes:
                 return False
-            if any(self._uncertain(s, part, spec) for s in scopes):
+            if any(self._uncertain(s, part, spec, stars) for s in scopes):
                 return True
             module = module + sep + part
         return False
 
-    def _uncertain(self, scope: FileScope, name: str, spec) -> bool:
+    def _uncertain(self, scope: FileScope, name: str, spec, stars: bool = True) -> bool:
         """Whether a file's ``name`` may be another class than the one it resolves to: bound
         by a wildcard import of a module outside the sources (`from tkinter import *`),
         whose names are not known, bound to two things at the top of the file (`from .a
@@ -1767,8 +1778,10 @@ class Resolver:
         Foo`), or bound as a variable there (FileScope.variables); in the file, or
         in a project module the file takes the name from, by
         its name or by a wildcard import that brings it in (`from q.gui import *`, `gui.py`
-        importing tkinter's *; `from q.dup import Foo`)."""
-        key = (id(scope), name)
+        importing tkinter's *; `from q.dup import Foo`). Without ``stars``, a wildcard
+        import whose names are not known is not taken to bind the name (a declaration's
+        name: bound twice, not maybe bound)."""
+        key = (id(scope), name, stars)
         if key in self._uncertain_names:
             return self._uncertain_names[key]
         self._uncertain_names[key] = False   # a cycle of imports adds nothing
@@ -1784,12 +1797,13 @@ class Resolver:
             if imp.wildcard:
                 scopes = [] if imp.external else self._module_scopes(imp.path, spec)
                 brings = [s for s in scopes if spec.star_exports(name, s)]
-                found = not scopes or any(self._uncertain(s, name, spec) for s in brings)
+                found = (stars and not scopes) or any(
+                    self._uncertain(s, name, spec, stars) for s in brings)
                 if brings and (target := self.lookup(imp.path + sep + name, spec, certain=True)):
                     targets.add(target)
             elif not imp.module and imp.local_name == name:
                 module, _, original = imp.path.rpartition(sep)
-                found = any(self._uncertain(s, original, spec)
+                found = any(self._uncertain(s, original, spec, stars)
                             for s in self._module_scopes(module, spec))
                 # what is no project class (`from tkinter import Button`, a function) is
                 # still another binding of the name
@@ -2213,6 +2227,9 @@ class _Builder:
             return Resolution(UNRESOLVED, hint=(
                 f"the class body binds {head}: the checkers disagree whether an annotation "
                 "there means that binding or the module's"))
+        if res.status == PROJECT and self.resolver.rebinding(name, res.target, scope, spec,
+                                                             stars=False):
+            return Resolution(UNRESOLVED, hint=_REBOUND.format(name, res.target))
         if not spec.declared_like_bodies:
             return res
         scope = (rm.scope if rm is not None and rm.scope else None) or rtype.scope
@@ -2760,6 +2777,10 @@ class _Builder:
         # dependencies per pair is a presentation decision made by the renderer.
         unique = {r.key(): r for r in reversed(self.relations)}
         return sorted(unique.values(), key=lambda r: (r.from_, r.to, r.kind, r.via or ""))
+
+
+_REBOUND = ("{} is bound more than once where it is written ({} among the bindings): which "
+            "binding it is depends on what ran")
 
 
 def _every_branch(branches: list[tuple[str, int, int, str]]) -> bool:

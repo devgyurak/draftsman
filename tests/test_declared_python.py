@@ -44,3 +44,15 @@ def test_a_nested_class_beside_the_modules_name_in_an_annotation_is_disputed(tmp
     assert not any(to.endswith("In2") for to, _ in _rels(ir, "q.u.Use"))
     assert ("q.u.Own.Inner", "h") in _rels(ir, "q.u.Own")
 
+
+def test_a_name_bound_twice_draws_nothing(tmp_path):
+    # #7: `try: from q.x.foo import Foo` / `except: class Foo`: which one depends on what ran
+    ir = extract_source(tmp_path, {
+        "q/__init__.py": "", "q/x/__init__.py": "", "q/x/foo.py": "class Foo: ...\nclass Bar: ...\n",
+        "q/t.py": ("try:\n    from q.x.foo import Foo\nexcept ImportError:\n    class Foo: ...\n\n"
+                   "from q.x.foo import Bar\n\n\nclass X(Foo): ...\n\n\nclass Y(Bar):\n"
+                   "    f: Foo\n    b: Bar\n")})
+    assert not _rels(ir, "q.t.X")
+    assert "bound more than once" in _unresolved(ir, "q.t.X")["Foo"]
+    assert _rels(ir, "q.t.Y") == {("q.x.foo.Bar", None), ("q.x.foo.Bar", "b")}
+    assert "bound more than once" in _unresolved(ir, "q.t.Y")["Foo"]
