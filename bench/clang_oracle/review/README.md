@@ -21,6 +21,7 @@ has a real rival, so that a wrong draw is a mismatch.
 | `cpp9` | 0 | 32 | declared relations (issue #7), each form beside a rival type: an alias template's own parameter (`Hash`), a qualified name whose head is the class's own alias (`Mutex::ScopedLock`), another program's type of the name (`a/util.h`'s `Utility` beside `gen::Utility` through `using namespace`), a type of an `#if` branch not taken beside the system's `timeval`, a dependent base (`Vec : TBase<T>`) beside `Fixed : TBase<int>`, `::D`, a namespace alias of the file beside a nearer namespace of the name, a header's using declaration where it is included, a nearer namespace's type beside an outer one's using declaration, an alias of `std::vector<Item>::const_iterator`, `typename std::pair<K, Var>`, a class's own nested type it only declares. No body names: it checks declared relations only (32 names of the key, no mismatch; the extractor of 0.9.0 has 20 mismatches and 3 misses on it) |
 | `cpp10` | 1 | 71 | declared relations, a review's (77 names of the key; 12 mismatches and 3 misses before C++ declarations were looked up as bodies are): a header's using declarations of a type and of a base where it is included, and in another namespace, `#if` branches (a type of the branch not taken beside the global one, a type used outside its branch), a class's own nested type and a namespace's type it only declares, a header with no include of its own naming a type its includer sees, a namespace alias `la::Money`, `la::Box<Item>`, `la::Base::Inner`, a nearer namespace's type before a using declaration, anonymous namespaces' types of two `.cc` files beside a global one, a method of the type's name (`int Thing() const;`), a parameter of the type's name (`Item Item`), the class's own type in a nested class, `::Money`, a base's member type, a template parameter `Money`, member aliases, a base's using declaration, standard templates' arguments |
 | `cpp11` | 5 | 11 | the base a relation is drawn to is the one names are looked up in (Resolver.supertypes), in declarations and bodies: a base through a namespace alias (`la::Base`), `::Base` beside a namespace's own `Base`, a nearer namespace's `Base` before a using declaration of an outer one, a header's using declaration of the base where it is included, another program's type of the base's name (`Root`, not included) beside `gen::Root` through `using namespace` |
+| `cpp12` | 5 | 20 | a review's third round: a base of the `#if` branch not taken and of every branch of an `#if` chain (`PlatBase`, `#ifdef _WIN32 ... #else`), whose member type `Handle` comes before the global one; a base through a base (`B2 : A : la::Base`), a base written as a typedef (`D : LB`), an enum of a base (`Kind`, `Paid`), a base `Crtp<N>` naming the class; a forward declaration beside definitions in both branches (`fw::Impl`), `::Sel` declared beside a definition no unit compiles (counted apart as not compiled); a header with no include of its own whose base its includer brings in (`inc/d.h`). Declared: 21 names of the key, no mismatch |
 
 Known limits (mismatches that stay):
 
@@ -72,6 +73,13 @@ Names Clang finds that are not drawn (misses, no failure):
   using detail::Impl; }`, `app::detail::Impl`)
 - `cpp8/app/use.cc:35:13` a header's `using namespace` (`namespace far { using namespace
   lib; }`) in a file that includes it (`Coin` is `lib::Coin`)
+- `cpp12/fw/api.h:8:13` a type every branch of an `#if` chain defines and the file
+  declares outside them (`class Impl;`): a body's `#if` rule stands (declared relations
+  draw it)
+- `cpp12/inc/d.h:4:13` a member type of a base the header sees only through its includer
+  (`inc/b.h`, included by `use.cc` before `d.h`): what the file sees is not known
+- `cpp12/plat.h:12:13` a member type of a base every branch of an `#if` chain declares
+  (`PlatBase::Handle`): a body's `#if` rule stands (declared relations draw it)
 
 Declared names Clang finds that are not drawn (misses, no failure):
 
