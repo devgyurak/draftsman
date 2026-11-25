@@ -22,7 +22,10 @@ is that type. Aliases of aliases are followed.
   supertypes → single-type imports → same package → wildcard imports → `java.lang` and
   common JDK types. Inherited member types are found through project supertypes at
   every level, including a nested type's supertype clause (`class Impl implements
-  Listener` where the enclosing class inherits `Listener`). A JDK supertype passes on the
+  Listener` where the enclosing class inherits `Listener`); a superclass's private nested
+  type or field is not inherited (JLS 8.2: `Hidden` in a subclass of a `Base` with a private
+  `Hidden` is the package's), in declarations and bodies (#7; review set
+  `bench/javac_oracle/review/jv1`, `oracle.py review`). A JDK supertype passes on the
   nested types the JDK declares (`Entry` in a `HashMap` subclass is `java.util.Map.Entry`,
   also over the package's own `Entry`): `langs/java_jdk.json` lists the public and
   protected nested types and fields of the JDK 21 types a class can extend, their
@@ -604,9 +607,16 @@ is that type. Aliases of aliases are followed.
   p.foo`, `import p.bar`) `p.foo.Foo()` draws nothing, as `p` counts as bound twice;
   names in string annotations and type comments are not read. In a declaration, a nested
   class's annotation sees the outer class's nested classes (`class Outer: class Sub: x:
-  Inner` is `Outer.Inner`), which Python's scoping does not (the module's `Inner`), and a
-  method's decorator does not see the class body (`Other = print` there, then `@Other`,
-  draws the module's class `Other`).
+  Inner` is `Outer.Inner`), which Python's scoping does not (the module's `Inner`).
+- Declared relations and bodies agree on a class body's bindings and on names bound twice
+  (#7): a member's decorator the class body binds (`Other = print`, then `@Other`) draws
+  nothing; an annotation's name the class body binds (`Item = int`, then `a: Item`), or a
+  nested class's the module's top binds too, is unresolved, as mypy and ty take the class
+  body's binding and pyright the module's; a name bound twice at the module's top (`try:
+  from x import Foo` / `except: class Foo`, an import and a class, two imports) is
+  unresolved in a base or an annotation, with the reason (a star import of a module
+  outside the sources is not taken for another binding there, as it is in a body). Review
+  set `bench/py_oracle/review/py1` (`oracle.py review`).
 - Not handled: `__all__` written as anything but a list or tuple of strings
   (`a_all + b_all`, `__all__.extend(...)`; a star import is then taken to bring in every
   name not starting with `_`, except in a body), attributes created outside `__init__`,

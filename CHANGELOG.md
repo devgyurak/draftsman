@@ -37,6 +37,9 @@ Notes for anyone with `view.json` files written against a development build:
   focus diagram draws those that touch the focus; results measured with 0.3.0 (the
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
+- **After 0.9.0**: Python's declarations stop where a name is bound twice (below): Django
+  loses four declared relations (unresolved with the reason); Java's private nested types
+  are not inherited (below), the e2e repositories' `ir.json` the same.
 - **After 0.9.0**: C#'s declared relations and bodies share Roslyn's lookup (below):
   eShop's declared relations change (19 retargeted, 1 unresolved) and its bodies gain 6;
   eShopOnWeb loses 4 declared relations (1 unresolved with a reason); Serilog's `ir.json`
@@ -48,6 +51,20 @@ Notes for anyone with `view.json` files written against a development build:
   unresolved names, of classes whose base is an alias of a class template, read as
   maybe inherited from that template's `std::basic_streambuf`), leveldb's and
   every other language's `ir.json` are the same, and so are the body relations of both.
+- **Java: a superclass's private nested type is not inherited** (#7, after 0.9.0), in
+  declarations and bodies (released for bodies in 0.4.1): `Hidden` in a subclass of a
+  `Base` with a private `Hidden` is the package's, as javac has it. The e2e repositories
+  are the same. Review set `bench/javac_oracle/review/jv1` with `oracle.py key` and `review`.
+- **Python: a class body's bindings and names bound twice in declarations** (#7, after
+  0.9.0). A member's decorator the class body binds (`Other = print`) draws nothing; an
+  annotation's name the class body binds, or a nested class's the module also binds, is
+  unresolved (the checkers disagree); a name bound twice at the module's top (`try: from x
+  import Foo` / `except: class Foo`) is unresolved in a base or an annotation, as a body
+  draws nothing there. Django: four bases `Transform` in `contrib/gis/db/models/functions.py`
+  (imported, and later a class of the name) are unresolved, where the checkers disagree.
+  Review set `bench/py_oracle/review/py1` with `oracle.py key` and `review`.
+- **C#: a global using's alias, a namespace block's alias, Color Color in attribute
+  arguments** (#7, after 0.9.0): fixes of the lookup below; the e2e repositories are the same.
 - **C#'s declarations and bodies share Roslyn's lookup** (#7, after 0.9.0). A `using X =
   ...` alias is its file's, at the namespace it stands in: a namespace-less file's no
   longer reaches every file (eShop's `Order` and `CardType` of Ordering.API's queries, 19
