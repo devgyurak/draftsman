@@ -235,14 +235,16 @@ is that type. Aliases of aliases are followed.
   Declared relations take types of one id from two projects for one (`Program`, #10).
 - Declared relations and bodies share one lookup (#7): a `using X = ...` alias is its
   file's only, at the namespace it stands in (one at the top of the file, also before
-  `namespace A;`, after every namespace around the code), and no member of its namespace
-  for another file's using of it; a type the file's project does not see (another
+  `namespace A;`, after every namespace around the code; one in a namespace block, that
+  block's alone), and no member of its namespace for another file's using of it; a
+  `global using X = ...` is every file's of its project, at the global namespace; a type the file's project does not see (another
   project's `internal` one, an unreferenced project's) or one the arity written does not
   fit (`Repo<int>` beside a `Repo` around the code) is passed over, the lookup going on to
   a using's (bodies drew nothing there, now that type); below a package's namespace around
   the code a declaration's name is unresolved with that reason too, as a body draws nothing
   there; a member of the class or of a base hides a name in an attribute's argument
-  (`[Obsolete(nameof(Order))]` beside a property Order); a name after `global::` is the
+  (`[Obsolete(nameof(Order))]` beside a property Order), but before a `.` a member whose
+  type has its name is that type (`[Tag(Kind.A)]` beside `public Kind Kind`); a name after `global::` is the
   global namespace's. Review set `bench/roslyn_oracle/review/cs18`; the review compares
   declared relations too.
 
