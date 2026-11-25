@@ -2683,6 +2683,8 @@ class _Builder:
         for leaf in self.wrappers.leaves(ref, self._is_project(rtype, rm), track_ownership=cpp,
                                          dropped=others):
             res = self._declared_resolution(leaf.name, rtype, rm, len(leaf.args), m.type_ref)
+            if leaf.value and not self._value_type(res):
+                continue   # `typeof value`: a variable, though a type alias has the name
             if res.status == PROJECT:
                 self.relations.append(Relation(
                     rtype.qualified_name, res.target, "association", loc,
@@ -2729,6 +2731,8 @@ class _Builder:
             if self.wrappers.is_wrapper(name) and not is_project(name):
                 continue
             res = self._declared_resolution(name, rtype, rm, arity, text)
+            if name in values and not self._value_type(res):
+                continue   # `typeof value`: a variable, though a type alias has the name
             targets = [res.target] if res.status == PROJECT else \
                 self._alias_names(res.target, rtype)[1] if res.status == ALIAS and res.target else []
             for target in targets:
@@ -2737,6 +2741,13 @@ class _Builder:
                         rtype.qualified_name, target, "dependency", loc, via=m.name))
             if res.status == UNRESOLVED and name not in values:
                 self._unresolved(rtype, name, res, loc, via=m.name)
+
+    def _value_type(self, res: Resolution) -> bool:
+        """Whether a name written as a value (TypeScript's `typeof x`) may be the project
+        type ``res`` gives: a class or an enum, which are values too; an interface or a type
+        alias of the name is no value, so a variable of the name is meant."""
+        return res.status != ALIAS and not (
+            res.status == PROJECT and self.types[res.target].kind == "interface")
 
     def _expand_alias(self, alias: str, depth: int = 0, body: bool = False,
                       qualifier_args: bool = True) -> tuple[list, list]:
@@ -2776,6 +2787,7 @@ class _Builder:
                       else owner or scope.namespace,
                       outer=owner if owner in self.types else None)
         ref = parse_type(text, spec.type_dialect)
+        values = value_names(ref)
         leaves: list = []
         for leaf in self.wrappers.leaves(ref, self._is_project(ctx, None),
                                          track_ownership=spec.name == "cpp"):
@@ -2783,6 +2795,8 @@ class _Builder:
                 continue
             res = self.resolver.resolve(leaf.name, ctx, None, arity=len(leaf.args),
                                         body_file=scope.file if body else None)
+            if leaf.value and not self._value_type(res):
+                continue
             if res.status == PROJECT:
                 leaves.append((res.target, leaf.multiplicity, leaf.ownership))
             elif res.status == ALIAS and res.target:
@@ -2795,6 +2809,8 @@ class _Builder:
                 continue
             res = self.resolver.resolve(name, ctx, None, arity=arity,
                                         body_file=scope.file if body else None)
+            if name in values and not self._value_type(res):
+                continue
             if res.status == PROJECT:
                 names.append(res.target)
             elif res.status == ALIAS and res.target and res.target != alias:

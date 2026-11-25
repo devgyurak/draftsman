@@ -104,13 +104,14 @@ def watch(builder) -> None:
         return [t for t in dict.fromkeys(out) if t != own]
 
     def note(rtype, file, line, written, where, res, values=()) -> None:
-        if res.status == UNRESOLVED and written in values:
-            status = "value"
+        if written in values and (res.status == UNRESOLVED or not builder._value_type(res)):
+            status = "value"   # `typeof x`: drawn only to a class or an enum
         else:
             status = res.status
         names.append({"file": file, "line": line, "from": rtype.qualified_name,
                       "written": written, "where": where, "status": status,
-                      "targets": targets(res, rtype, where), "external":
+                      "targets": targets(res, rtype, where) if status != "value" else [],
+                      "external":
                       (res.target or written) if res.status in (EXTERNAL, BUILTIN) else None,
                       # an alias's declaration: what its expansion was read from
                       "alias": resolver.alias_targets[res.target][0]
@@ -133,7 +134,8 @@ def watch(builder) -> None:
 
     def _association(rtype, rm):
         was = state["ctx"]
-        state["ctx"] = (rtype, rm, "field", ())
+        values = value_names(parse_type(rm.member.type_ref, LANGUAGES[rtype.language].type_dialect))
+        state["ctx"] = (rtype, rm, "field", values)
         try:
             association(rtype, rm)
         finally:
