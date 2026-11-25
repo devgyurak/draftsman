@@ -103,6 +103,28 @@ def test_python_a_name_bound_twice_in_type_arguments_draws_nothing(tmp_path):
     assert not _rels(ir, "q.t.X")
 
 
+def test_typescript_a_class_extends_with_type_arguments(tmp_path):
+    # tree-sitter keeps a class's `extends Base<A>` arguments apart from its name
+    ir = extract_source(tmp_path, {
+        "model.ts": "export class Node {}\nexport class Item {}\nexport class T {}\n"
+                    "export class Base<X> {}\nexport interface Cmp<X> { c(o: X): number }\n",
+        "other.ts": "export class Node {}\n",
+        "s.ts": ('import { Node, Item, T, Base, Cmp } from "./model";\n'
+                 'import * as other from "./other";\n'
+                 "export class NodeList extends Array<Node> {}\n"
+                 "export class Gen<T> extends Array<T> {}\n"
+                 "export interface Nested extends Map<string, Item[]> {}\n"
+                 "export class UsesB extends Array<other.Node> {}\n"
+                 "export class Sub extends Base<Item> implements Cmp<Sub> {\n"
+                 "  c(o: Sub): number { return 0; }\n}\n")})
+    assert _rels(ir, "s.NodeList") == {("dependency", "model.Node")}
+    assert not _rels(ir, "s.Gen")
+    assert _rels(ir, "s.Nested") == {("dependency", "model.Item")}
+    assert _rels(ir, "s.UsesB") == {("dependency", "other.Node")}
+    assert _rels(ir, "s.Sub") == {("extends", "model.Base"), ("implements", "model.Cmp"),
+                                  ("dependency", "model.Item")}
+
+
 def test_cpp_base_template_arguments(tmp_path):
     ir = extract_source(tmp_path, {"s.h": (
         "#include <map>\n#include <vector>\n"

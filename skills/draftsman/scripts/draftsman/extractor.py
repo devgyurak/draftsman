@@ -693,7 +693,8 @@ class Extractor:
                 kind, n = sup
                 owner, _ = self._owner(n, types_by_node)
                 if owner is not None:
-                    owner.supers.append(RawSuper(kind, _text(n, src), _line(n), scope))
+                    owner.supers.append(RawSuper(kind, spec.super_text(n, _text(n, src), src),
+                                                 _line(n), scope))
 
         for nid in sorted(annotation_refs, key=lambda i: annotation_refs[i]["annotation.ref"][0].start_byte):
             self._annotation_ref(annotation_refs[nid], src, scope, types_by_node,

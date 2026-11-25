@@ -130,6 +130,15 @@ class TypeScriptSpec(LanguageSpec):
     def type_text(self, type_node, text, src):
         return _PADDED_DOT.sub(".", text)   # `rxjs          .Observable`, see _import_types
 
+    def super_text(self, node, text, src):
+        # a class's `extends Base<A>`: the value and its type arguments are two children
+        parent = node.parent
+        if parent is not None and parent.type == "extends_clause":
+            args = parent.child_by_field_name("type_arguments")
+            if args is not None and args.start_byte >= node.end_byte:
+                return text + src[args.start_byte:args.end_byte].decode("utf-8", "replace")
+        return text
+
     def preprocess(self, src):
         src = _EXPORT_TYPE_STAR.sub(lambda m: b"export" + m.group(1) + b"    " + m.group(2) + b"*",
                                     src)

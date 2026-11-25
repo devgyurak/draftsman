@@ -554,6 +554,11 @@ class LanguageSpec:
         the type node (Kotlin `suspend`, `context(A)`)."""
         return text
 
+    def super_text(self, node, text: str, src: bytes) -> str:
+        """The text of a supertype a `@super.*` capture is, ``text`` as written there
+        (TypeScript's `extends Base<A>` keeps `<A>` beside the class's name)."""
+        return text
+
     def alias_target(self, alias_node, type_node, text: str) -> Optional[str]:
         """The type an alias names, given the text of its `@alias.type`; None when the
         declaration is the type itself rather than an alias."""
