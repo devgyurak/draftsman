@@ -124,3 +124,17 @@ def test_a_global_using_alias_is_every_file_of_its_project(tmp_path):
     assert _rels(ir, "Shop.Sub.A") == {("Shop.Cash", "C")}
     assert _rels(ir, "U") == {("Cash", "C")}
 
+
+def test_a_namespace_blocks_alias_is_that_blocks(tmp_path):
+    # `namespace Shop.Sub4 { using Order = Lib.Order; }` is not another Shop.Sub4 block's
+    ir = extract_source(tmp_path, {
+        "T.cs": ("namespace Lib { public class Order {} }\n"
+                 "namespace Shop { public class Order {} }\n"),
+        "B.cs": ("namespace Shop.Sub4 {\n  using Order = Lib.Order;\n"
+                 "  public class C4 { public Order O; }\n}\n"
+                 "namespace Shop.Sub4 {\n  public class D4 { public Order O; "
+                 "public object M() => new Order(); }\n}\n")})
+    assert _rels(ir, "Shop.Sub4.C4") == {("Lib.Order", "O")}
+    assert _rels(ir, "Shop.Sub4.D4") == {("Shop.Order", "O")}
+    assert _body(ir, "Shop.Sub4.D4") == {"Shop.Order"}
+

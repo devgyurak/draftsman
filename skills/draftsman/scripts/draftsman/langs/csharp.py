@@ -920,6 +920,19 @@ class CSharpSpec(LanguageSpec):
         # namespaces are capitalised too: only what the file or the project uses as one
         return head in known or head in ("System", "Microsoft", "global")
 
+    def local_block(self, decl_node):
+        # a `using X = ...` inside a namespace block is that block's alone, not another
+        # block of the namespace's, even in the file (`namespace A { using O = L.O; }`)
+        cur = decl_node
+        while cur is not None and cur.type != "using_directive":
+            if cur.type.endswith("_declaration") and cur.type != "using_directive":
+                return None   # a type's declaration: every block of its namespace sees it
+            cur = cur.parent
+        if cur is None or cur.parent is None or cur.parent.type != "declaration_list" \
+                or cur.parent.parent is None or cur.parent.parent.type != "namespace_declaration":
+            return None
+        return cur.parent
+
     def is_project_wide(self, import_node):
         parent = import_node.parent
         return parent is not None and any(c.type == "global" for c in parent.children)
