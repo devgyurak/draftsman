@@ -7,6 +7,17 @@ Notes for anyone with `view.json` files written against a development build:
 - **0.3.0**: the entries below on nested types and annotations change the default
   focus diagram and the relations in `ir.json`; results measured with 0.2.0 (the
   benchmark's runs among them) are not comparable with 0.3.0 ones.
+- **0.10.0**: the declared relations of C++, C#, Kotlin, Python and Java look names up as
+  their compilers and checkers do (#7, below); results measured with 0.9.0 are not
+  comparable with 0.10.0 ones on what declarations relate, and for C#, Kotlin and Java
+  on what bodies relate too (bodies draw where they drew nothing, and Java's no longer
+  take a private nested type for inherited). Against the answer keys, the 14 e2e
+  repositories have no mismatch of declared or body relations. What changes: POCO's
+  declared relations (14 added, 10 removed, 2 names unresolved with a reason); eShop's
+  (19 retargeted, 1 unresolved) and its bodies (6 added); eShopOnWeb's (4 removed, 1
+  unresolved with a reason); Django's (4 bases unresolved, where a name is bound twice);
+  Ktor's two `Json` names, resolved. leveldb's, Serilog's, nowinandroid's, httpx's,
+  jsoup's, Netty's, petclinic's, nest's and TypeORM's `ir.json` are the same as 0.9.0's.
 - **0.9.0**: C++'s `ir.json` gains the relations read from names in bodies
   (below); results measured with 0.8.0 are not comparable with 0.9.0 ones on what C++
   bodies relate.
@@ -37,21 +48,7 @@ Notes for anyone with `view.json` files written against a development build:
   focus diagram draws those that touch the focus; results measured with 0.3.0 (the
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
-- **After 0.9.0**: Python's declarations stop where a name is bound twice (below): Django
-  loses four declared relations (unresolved with the reason); Java's private nested types
-  are not inherited (below), the e2e repositories' `ir.json` the same.
-- **After 0.9.0**: C#'s declared relations and bodies share Roslyn's lookup (below):
-  eShop's declared relations change (19 retargeted, 1 unresolved) and its bodies gain 6;
-  eShopOnWeb loses 4 declared relations (1 unresolved with a reason); Serilog's `ir.json`
-  is the same.
-- **After 0.9.0**: Kotlin's declared relations and bodies share the compiler's lookup
-  (below); Ktor's two `Json` names are resolved, nowinandroid's `ir.json` is the same.
-- **After 0.9.0**: C++'s declared relations look names up as bodies do (below); POCO's
-  change (14 relations added, 10 removed, 2 names unresolved with a reason, and 3
-  unresolved names, of classes whose base is an alias of a class template, read as
-  maybe inherited from that template's `std::basic_streambuf`), leveldb's and
-  every other language's `ir.json` are the same, and so are the body relations of both.
-- **Java: a superclass's private nested type is not inherited** (#7, after 0.9.0), nor a
+- **Java: a superclass's private nested type is not inherited** (#7, 0.10.0), nor a
   package-private one by a subclass in another package, in declarations and bodies
   (released for bodies in 0.4.1): `Hidden` in a subclass of a `Base` with a private
   `Hidden` is the package's, as javac has it. The e2e repositories
@@ -65,8 +62,8 @@ Notes for anyone with `view.json` files written against a development build:
   (imported, and later a class of the name) are unresolved, where the checkers disagree.
   Review set `bench/py_oracle/review/py1` with `oracle.py key` and `review`.
 - **C#: a global using's alias, a namespace block's alias, Color Color in attribute
-  arguments** (#7, after 0.9.0): fixes of the lookup below; the e2e repositories are the same.
-- **C#'s declarations and bodies share Roslyn's lookup** (#7, after 0.9.0). A `using X =
+  arguments** (#7, 0.10.0): fixes of the lookup below; the e2e repositories are the same.
+- **C#'s declarations and bodies share Roslyn's lookup** (#7, 0.10.0). A `using X =
   ...` alias is its file's, at the namespace it stands in: a namespace-less file's no
   longer reaches every file (eShop's `Order` and `CardType` of Ordering.API's queries, 19
   relations now to the domain's and the client's types), and one before `namespace A;`
@@ -78,7 +75,7 @@ Notes for anyone with `view.json` files written against a development build:
   name after `global::` is the global namespace's. Bodies draw where they drew nothing
   (eShop 7 names). Review set `bench/roslyn_oracle/review/cs18`; `oracle.py review` compares
   declared relations too.
-- **Kotlin's declarations and bodies share the compiler's lookup** (#7, after 0.9.0). An
+- **Kotlin's declarations and bodies share the compiler's lookup** (#7, 0.10.0). An
   interface's nested types and those of a superclass's companion are not inherited: the
   package's type of the name is found (declared relations drew the nested type; bodies drew
   nothing); a name the file imports under another name is no candidate through its package
@@ -89,7 +86,7 @@ Notes for anyone with `view.json` files written against a development build:
   same; Ktor's relations are the same, and two `Json` names are no longer unresolved.
   Review set `bench/kotlin_oracle/review/kt15`; `oracle.py review` compares declared
   relations too.
-- **C++ declarations look names up as bodies do** (#7, after 0.9.0). A base, a member's
+- **C++ declarations look names up as bodies do** (#7, 0.10.0). A base, a member's
   type and a parameter's or the return type follow the body's lookup: `::D` is the global
   namespace's, a namespace alias of the file is read, the class's own alias comes first
   in a qualified name's head (`Mutex::ScopedLock`), a dependent base (`Vec : TBase<T>`) is

@@ -8,7 +8,7 @@ An asynchronous client and server framework, Kotlin Multiplatform: common code w
 | Commit | `cc3d345bc2` (2026-11-16) |
 | Extracted | the whole repository without test source sets (`<module>/<platform>/test`), test-support modules (`ktor-server-test-host`, `ktor-client-tests`, ...), the compiler plugin's test data and the Gradle build logic |
 
-Measured on 2026-11-24 with Draftsman 0.8.0 (at `c90a7d4`; 0.8.0 extracts the same `ir.json`); the declared relations are the same as 0.3.0's.
+Measured on 2026-11-25 with Draftsman 0.10.0 (at `01b2734`; 0.10.0 extracts the same `ir.json`); the declared relations are the same as 0.3.0's. In 0.10.0 (#7) a star import of a package the tables know comes before the default imports: two `Json` names (`import kotlinx.serialization.json.*`) are no longer unresolved.
 
 ## Run
 
@@ -44,12 +44,12 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 1578 files, 2137 types, relations: association 1686, dependency 3775, extends 714, implements 722, body dependency 2970, 586 unresolved (49 ambiguous, 537 outside the sources), 0 diagnostics
+draftsman: 1578 files, 2137 types, relations: association 1686, dependency 3775, extends 714, implements 722, body dependency 2970, 584 unresolved (49 ambiguous, 535 outside the sources), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 1578 | 2137 | 1686 | 3775 | 714 | 722 | 2970 | 586 (49 ambiguous, 537 outside) | 0 |
+| 1578 | 2137 | 1686 | 3775 | 714 | 722 | 2970 | 584 (49 ambiguous, 535 outside) | 0 |
 
 Types by kind: 1406 classes, 73 abstract classes, 277 interfaces, 266 objects, 69 enums, 46 annotation classes.
 
@@ -57,7 +57,7 @@ The Mermaid and SVG renders of the view draw 38 boxes and 104 relations (`HttpCl
 
 ## Unresolved
 
-586 references to 252 names, every one with a hint: 49 ambiguous, 537 outside the sources.
+584 references to 251 names, every one with a hint: 49 ambiguous, 535 outside the sources.
 Ktor imports almost everything with star imports (`import kotlinx.coroutines.*`):
 
 - Coroutine, reflection and serialization types are resolved through the Kotlin library
@@ -71,8 +71,9 @@ Ktor imports almost everything with star imports (`import kotlinx.coroutines.*`)
   external supertype may declare a nested type of the same name, which Kotlin would pick
   first (Netty handlers, `java.io` streams).
 - `Runnable` is not in the table: in kotlinx.coroutines it is `java.lang.Runnable` on the
-  JVM (an `actual typealias`), so it stays the uncertain default import below. `Json` is
-  not taken from it either, as kotlin.js has a default import of that name.
+  JVM (an `actual typealias`), so it stays the uncertain default import below. `Json`, which
+  kotlin.js also has as a default import, is taken from a star import of its package, which
+  comes first.
 - The other library types have no table: servlet (`HttpServletRequest` 28,
   `HttpServletResponse` 22), `java.nio.ByteBuffer` 24, Netty (`ChannelHandlerContext` 17),
   kotlinx.io (`Source`), Apple's `platform.Foundation` (`NSURLSession`, `NSError`) and
@@ -94,7 +95,7 @@ Ktor imports almost everything with star imports (`import kotlinx.coroutines.*`)
   `kotlin.experimental` and friends; `ExperimentalUnsignedTypes` is a default import that
   the `kotlinx.cinterop.*` star import could shadow.
 
-65 of the 586 are supertypes; the rest are member types and annotation arguments, which
+65 of the 584 are supertypes; the rest are member types and annotation arguments, which
 would draw nothing if resolved (fields, signatures and annotations of external types make no
 relation).
 

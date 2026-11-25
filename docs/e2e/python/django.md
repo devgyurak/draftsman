@@ -8,7 +8,7 @@ A web framework: ORM, forms, templates, admin, many contrib apps. Most of the co
 | Commit | `d3954c9813` (2026-11-16) |
 | Extracted | the `django/` package without the contrib apps' generated `migrations/` (tests are under `tests/`) |
 
-Measured on 2026-11-23 with Draftsman 0.6.0 (at `0933197`; 0.6.0 extracts the same `ir.json`).
+Measured on 2026-11-25 with Draftsman 0.10.0 (at `01b2734`; 0.10.0 extracts the same `ir.json`). In 0.10.0 (#7), a name bound twice draws nothing in a declaration either: four bases `Transform` lose their `extends` (below).
 
 ## Run
 
@@ -38,12 +38,12 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 879 files, 1964 types, relations: association 4, dependency 13, extends 1848, body dependency 3203, 0 unresolved, 0 diagnostics
+draftsman: 879 files, 1964 types, relations: association 4, dependency 13, extends 1844, body dependency 3203, 4 unresolved (4 unexplained), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 879 | 1964 | 4 | 13 | 1848 | 0 | 3203 | 0 | 0 |
+| 879 | 1964 | 4 | 13 | 1844 | 0 | 3203 | 4 | 0 |
 
 Types by kind: 1949 classes, 1 abstract class, 14 enums.
 
@@ -51,7 +51,11 @@ The Mermaid and SVG renders of the view draw 56 types and 59 relations (`Field`,
 
 ## Unresolved
 
-None.
+4, one name: the bases `Transform` of `GeometryType`, `IsEmpty`, `IsValid` and
+`NumDimensions` in `contrib/gis/db/models/functions.py`. The module imports `Transform` from
+`django.db.models` and declares a class `Transform` further down, so the name is bound twice
+(*bound more than once where it is written: which binding it is depends on what ran*);
+mypy, pyright and ty disagree there.
 
 ## What it covers
 

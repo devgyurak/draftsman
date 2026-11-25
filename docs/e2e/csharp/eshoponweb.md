@@ -8,7 +8,7 @@ A reference ASP.NET Core application: MVC, Razor Pages, Blazor admin, a public A
 | Commit | `4da8212117` (2025-01-13) |
 | Extracted | `src/` (tests are under `tests/`) |
 
-Measured on 2026-11-23 with Draftsman 0.7.0 (at `3e14b4d`; 0.7.0 extracts the same `ir.json`).
+Measured on 2026-11-25 with Draftsman 0.10.0 (at `01b2734`; 0.10.0 extracts the same `ir.json`). In 0.10.0 (#7) the arity written chooses the type: the `List<T>` fields of the Blazor page class `List` no longer associate it with itself (3 relations); and `BasketGuards`, written in the package's namespace `Ardalis.GuardClauses`, no longer draws `BasketItem` (unresolved, below).
 
 ## Run
 
@@ -39,12 +39,12 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 209 files, 208 types, relations: association 96, dependency 209, extends 34, implements 27, body dependency 206, 194 unresolved (1 ambiguous, 193 outside the sources), 0 diagnostics
+draftsman: 209 files, 208 types, relations: association 93, dependency 208, extends 34, implements 27, body dependency 206, 195 unresolved (1 ambiguous, 194 outside the sources), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 209 | 208 | 96 | 209 | 34 | 27 | 206 | 194 (1 ambiguous, 193 outside) | 0 |
+| 209 | 208 | 93 | 208 | 34 | 27 | 206 | 195 (1 ambiguous, 194 outside) | 0 |
 
 Types by kind: 185 classes, 5 abstract classes, 16 interfaces, 1 record, 1 enum.
 
@@ -52,12 +52,13 @@ The Mermaid and SVG renders of the view draw 7 types and 7 relations (`BasketSer
 
 ## Unresolved
 
-193 outside the sources, 1 ambiguous.
+194 outside the sources, 1 ambiguous.
 
 - 193 are library and framework types reached through `using` directives: ASP.NET Core (`PageModel`, `IActionResult`, `Controller`), EF Core (`DbContext`, `ModelBuilder`, `EntityTypeBuilder`), Identity (`UserManager`, `SignInManager`), MediatR, AutoMapper and Ardalis (`Specification`, `EndpointBaseAsync.WithRequest.WithActionResult`). Each hint names the namespaces it may come from (*may come from wildcard import Microsoft.EntityFrameworkCore.*, ...*); a wildcard import cannot tell which of them declares the name, so none is picked.
+- `BasketItem` in `BasketGuards` (`ApplicationCore/Extensions/GuardExtensions.cs`), whose code stands in `namespace Ardalis.GuardClauses`, a namespace of the Ardalis.GuardClauses package: the package may declare any type there, so the project's `BasketItem` (Roslyn's answer) is not drawn (*may be a type of Ardalis.GuardClauses, a namespace outside the sources around it*).
 - `IEmailSender` in `RegisterModel` is ASP.NET Identity's (`using Microsoft.AspNetCore.Identity.UI.Services;`). The project declares an `IEmailSender` of its own, which is listed as a candidate and not picked: ambiguous.
 - The Blazor components `List.razor.cs` names (`Create`, `Delete`, `Details`, `Edit`) are declared in `.razor` files, which are not extracted: Draftsman takes them for types the build generates, in the namespace their folder gives, and they are not unresolved.
-- 78 distinct names in all; `PageModel` (12) and `IActionResult` (10) are the most frequent.
+- 79 distinct names in all; `PageModel` (12) and `IActionResult` (10) are the most frequent.
 
 ## What it covers
 

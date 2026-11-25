@@ -11,7 +11,7 @@ exception classes.
 | Commit | `2ef5cec8a9` (2026-11-17) |
 | Extracted | the whole repository without tests (`testsuite/`, `Data/DataTest`, `CppUnit/`), `samples/`, `fuzzing/`, `Benchmark/` and the bundled third-party code (`dependencies/`, `Data/SQLParser`) |
 
-Measured on 2026-11-24 with Draftsman 0.9.0 (at `139a7df`; 0.9.0 extracts the same `ir.json`); the declared relations are the same as 0.3.0's.
+Measured on 2026-11-25 with Draftsman 0.10.0 (at `01b2734`; 0.10.0 extracts the same `ir.json`). The declared relations changed in 0.10.0 (#7: a declaration's names are looked up as names in bodies are): 14 added (RemotingNG's `HeaderInterceptor::Ptr`, which Clang resolves), 10 removed (an alias template's own parameter taken for `Poco::Hash` 3, members of `std` templates' aliases taken for their arguments 4, a dependent `typename` alias 1, `VarVisitor`'s two `Details::` types, declared under `#ifndef POCO_DOC` and named outside it); the body relations are the same as 0.9.0's.
 
 ## Run
 
@@ -49,12 +49,12 @@ unresolved below.
 `extract.py` prints:
 
 ```text
-draftsman: 2317 files, 2066 types, relations: association 1920, dependency 6989, extends 893, implements 181, body dependency 10885, 309 unresolved (1 ambiguous, 4 outside the sources, 304 unexplained), 333 diagnostics
+draftsman: 2317 files, 2066 types, relations: association 1920, dependency 6993, extends 893, implements 181, body dependency 10885, 311 unresolved (1 ambiguous, 7 outside the sources, 303 unexplained), 333 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 2317 | 2066 | 1920 | 6989 | 893 | 181 | 10885 | 309 (1 ambiguous, 4 outside, 304 unexplained) | 333 |
+| 2317 | 2066 | 1920 | 6993 | 893 | 181 | 10885 | 311 (1 ambiguous, 7 outside, 303 unexplained) | 333 |
 
 Types by kind: 1374 classes, 273 structs, 2 unions, 74 abstract classes, 65 interfaces, 278 enums.
 
@@ -62,8 +62,10 @@ The Mermaid and SVG renders of the view draw 50 boxes and 126 relations (`Poco::
 
 ## Unresolved
 
-309 references to 157 names. C++ has no wildcard import that could explain a name outside
-the sources, so most are unexplained; the groups below cover all of them.
+311 references to 159 names. C++ has no wildcard import that could explain a name outside
+the sources, so most are unexplained; the groups below cover all of them. (zlib's three
+names are "outside" now: their classes' base is an alias of a class template whose own base
+is `std::basic_streambuf`, which may nest them.)
 
 Outside the sources (267):
 
@@ -92,6 +94,9 @@ POCO_DECLARE_EXCEPTION(...) at XML/include/Poco/XML/XMLException.h:28, ...; one 
 declare it*.
 
 Never defined (1): `XMLStreamSerializer`, only forward-declared in `ValueTraits.h`.
+
+Declared in an `#if` branch the declaration is outside of (2): `Details::TypeInfoHash` and
+`Details::EqualRef` in `Dynamic::Visitor`, declared under `#ifndef POCO_DOC` only (#7).
 
 1 ambiguous: `Parser::SQLParserResult` in `Poco::Data::Statement`, from the excluded
 `Data/SQLParser`; the three project classes called `Parser` are listed as candidates and
