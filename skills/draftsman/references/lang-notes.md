@@ -26,7 +26,11 @@ is that type. Aliases of aliases are followed.
   type or field is not inherited (JLS 8.2: `Hidden` in a subclass of a `Base` with a private
   `Hidden` is the package's), nor its package-private nested type by a subclass in another
   package (an interface's member types are public), in declarations and bodies (#7; review
-  sets `bench/javac_oracle/review/jv1`, `jv2`, `oracle.py review`). A JDK supertype passes on the
+  sets `bench/javac_oracle/review/jv1`, `jv2`, `oracle.py review`). Known limits: the
+  package is checked at the inheriting class only, so a class back in the member's package
+  is taken to inherit it through a superclass in another package that does not
+  (`a.Leaf extends b.Mid extends a.Base`: Base's package-private `Pkg`); and a superclass's
+  package-private field in another package is still taken for inherited. A JDK supertype passes on the
   nested types the JDK declares (`Entry` in a `HashMap` subclass is `java.util.Map.Entry`,
   also over the package's own `Entry`): `langs/java_jdk.json` lists the public and
   protected nested types and fields of the JDK 21 types a class can extend, their
