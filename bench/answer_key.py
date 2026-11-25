@@ -14,6 +14,9 @@ JSON lines, one record per line, in one format:
         sources), "var", "tparam", "local" or "error"; "maximal" is false for a part of a
         longer type name (`p` in `p.Foo`); "from" is the named type around it. Lines are
         1-based, columns 0-based in UTF-16 code units. A key adds fields of its own.
+        A name written where the extractor draws a declared relation (a supertype, a
+        field's or a signature's type, an annotation) has "pos" "declared" (issue #7): only
+        declared.py reads those; every function here leaves them out.
     {"declared": QUALIFIED_NAME, "file"}
         a type declared in the sources (not local or anonymous)
     {"diagnostic": MESSAGE, "file", "line"}
@@ -34,8 +37,15 @@ from pathlib import Path
 from typing import Callable, Iterable, Optional
 
 
-def read(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text().splitlines()]
+def read(path: Path, declared: bool = False) -> list[dict]:
+    """A key's records; the names of declared positions only if ``declared``."""
+    recs = [json.loads(line) for line in path.read_text().splitlines()]
+    return recs if declared else body(recs)
+
+
+def body(recs: list[dict]) -> list[dict]:
+    """The records without the names of declared positions (issue #7)."""
+    return [r for r in recs if r.get("pos") != "declared"]
 
 
 def expected(root: Path, suffixes: Iterable[str], marker: str = "//>"
@@ -81,6 +91,7 @@ def answer(rec: dict) -> str:
 def selftest(recs: list[dict], want: dict) -> int:
     """Check a key's records on a fixture against its hand-written answers ``want``, so
     that a mismatch later is the extractor's and not the key's."""
+    recs = body(recs)
     uses = {(r["file"], r["line"], r["col"]): r for r in recs if "use" in r}
     problems = [f"compile error: {r['file']}:{r['line']}: {r['diagnostic']}"
                 for r in recs if "diagnostic" in r]
@@ -152,6 +163,7 @@ def compare(drawn: list[tuple[str, int, int, str, str]], recs: list[dict],
     translation units answer differently, a dependent name). A key's answer may name
     several types (`targets`: a C++ alias of `AutoPtr<Channel>`), each of which may be
     drawn."""
+    recs = body(recs)
     broken = {r["file"] for r in recs if "diagnostic" in r}
     uses = {(r["file"], r["line"], r["col"]): r for r in recs if "use" in r}
     problems: Counter = Counter()
