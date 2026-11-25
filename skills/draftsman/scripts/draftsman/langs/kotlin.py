@@ -238,8 +238,8 @@ def _outside_names(type_id: str, what: str) -> Optional[frozenset]:
     if t is None:
         return None
     names = set(t["members"]) if what != "nested" else set()
-    if what != "instance":
-        names |= set(t["nested"])
+    if what != "instance" and t["kind"] != "interface":
+        names |= _own_nested(type_id)   # (an interface passes on no nested type)
     if what == "subclass":
         names |= set(t["statics"])
     for sup in t["supers"]:
@@ -249,15 +249,47 @@ def _outside_names(type_id: str, what: str) -> Optional[frozenset]:
     return frozenset(names)
 
 
+@lru_cache(maxsize=None)
+def _interface_nested(type_id: str) -> frozenset:
+    """The nested types the interfaces among the library type's ancestors declare (the
+    type's own too, when it is one)."""
+    table = _outside_table()
+    type_id = table["aliases"].get(type_id, type_id)
+    t = table["types"].get(type_id)
+    if t is None:
+        return frozenset()
+    names = set(t["nested"]) if t["kind"] == "interface" else set()
+    for sup in t["supers"]:
+        names |= _interface_nested(sup)
+    return frozenset(names)
+
+
+@lru_cache(maxsize=None)
+def _own_nested(type_id: str) -> frozenset:
+    """The nested types the library type declares itself: the table lists those of its
+    interfaces too (`java.util.AbstractMap`'s `Entry`), as Java has them, which a Kotlin
+    subclass does not see."""
+    table = _outside_table()
+    t = table["types"].get(table["aliases"].get(type_id, type_id))
+    if t is None:
+        return frozenset()
+    if t["kind"] == "interface":
+        return frozenset(t["nested"])
+    inherited = set()
+    for sup in t["supers"]:
+        inherited |= _interface_nested(sup)
+    return frozenset(set(t["nested"]) - inherited)
+
+
 def _outside_nested_owner(type_id: str, name: str, depth: int) -> Optional[str]:
     """The id of the nested type ``name`` a subclass of the library type sees, as the table
     has it (its own, or a superclass's: not an interface's), or None."""
     table = _outside_table()
     type_id = table["aliases"].get(type_id, type_id)
     t = table["types"].get(type_id)
-    if t is None or depth > 16:
-        return None
-    if name in t["nested"]:
+    if t is None or depth > 16 or t["kind"] == "interface":
+        return None   # (`class M : Map<K, V>` sees no `Entry`)
+    if name in _own_nested(type_id):
         return f"{type_id}.{name}"
     for sup in t["supers"]:
         if table["types"].get(table["aliases"].get(sup, sup), {}).get("kind") == "interface":

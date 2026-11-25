@@ -68,3 +68,18 @@ def test_a_superclass_companions_nested_type_is_not_inherited(tmp_path):
     assert ("shop.Base.InComp", "own") in _rels(ir, "shop.Base")
     assert ("shop.InComp", "a") in _rels(ir, "shop.Sub")
     assert _body(ir, "shop.Sub") == {"shop.InComp"}
+
+
+def test_a_library_interfaces_nested_type_is_not_inherited(tmp_path):
+    # `Map`'s `Entry` is no member of a class implementing it, nor of a Java class
+    # implementing it (`java.util.AbstractMap`), whose own `SimpleEntry` is (kt16)
+    ir = extract_source(tmp_path, {"shop/M.kt": (
+        "package shop\nclass Entry<K, V>\nclass SimpleEntry<K, V>\n"
+        "abstract class MyMap : Map<String, Int> { abstract val first: Entry<String, Int> }\n"
+        "abstract class JMap : java.util.AbstractMap<String, Int>() {\n"
+        "  abstract val e: SimpleEntry<String, Int>\n  abstract val x: Entry<String, Int>\n"
+        "  fun g(): Any = Entry<String, Int>()\n}\n")})
+    assert ("shop.Entry", "first") in _rels(ir, "shop.MyMap")
+    assert ("shop.Entry", "x") in _rels(ir, "shop.JMap")
+    assert ("shop.SimpleEntry", "e") not in _rels(ir, "shop.JMap")
+    assert _body(ir, "shop.JMap") == {"shop.Entry"}   # the table no longer hides it
