@@ -249,6 +249,25 @@ def _outside_names(type_id: str, what: str) -> Optional[frozenset]:
     return frozenset(names)
 
 
+def _outside_nested_owner(type_id: str, name: str, depth: int) -> Optional[str]:
+    """The id of the nested type ``name`` a subclass of the library type sees, as the table
+    has it (its own, or a superclass's: not an interface's), or None."""
+    table = _outside_table()
+    type_id = table["aliases"].get(type_id, type_id)
+    t = table["types"].get(type_id)
+    if t is None or depth > 16:
+        return None
+    if name in t["nested"]:
+        return f"{type_id}.{name}"
+    for sup in t["supers"]:
+        if table["types"].get(table["aliases"].get(sup, sup), {}).get("kind") == "interface":
+            continue
+        found = _outside_nested_owner(sup, name, depth + 1)
+        if found:
+            return found
+    return None
+
+
 # source sets every other one of a module sees: Kotlin Multiplatform's common one
 # (`common/src` in Ktor's layout, `src/commonMain/kotlin`), a single-platform module's
 # `src/main`
@@ -486,6 +505,11 @@ class KotlinSpec(LanguageSpec):
                                                "multiline_comment"):
             cur = cur.prev_named_sibling
         return cur if cur is not None and cur.type == "property_declaration" else None
+
+    def inherited_type(self, super_id, name):
+        # a nested type of a library superclass the table knows, by the class declaring it
+        # (`Thread.State` in `class T : Thread()`): it comes before the file's package
+        return _outside_nested_owner(super_id, name, 0) if super_id else None
 
     def outside_instance_member(self, type_id, name):
         known = _outside_names(type_id, "instance") if type_id else None

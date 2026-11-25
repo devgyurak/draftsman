@@ -27,6 +27,15 @@ def test_an_import_alias_hides_the_name_from_the_package_and_star_imports(tmp_pa
     assert _rels(ir, "q.H") == {("r.Money", "a"), ("p.Money", "b"), ("p.Money", "c")}
 
 
+def test_a_library_superclass_nested_type_comes_before_the_package(tmp_path):
+    # #10: Thread.State, which the table of library types knows
+    ir = extract_source(tmp_path, {"shop/T.kt": (
+        "package shop\nclass State\nclass T(val s: State) : Thread() { fun f(x: State) {} }\n"
+        "class Plain(val s: State)\n")})
+    assert not any(to == "shop.State" for to, _ in _rels(ir, "shop.T"))
+    assert ("shop.State", "s") in _rels(ir, "shop.Plain")
+
+
 def test_an_interface_passes_on_no_nested_type(tmp_path):
     # #11: `N` in a class implementing Face is the package's; a superclass's is inherited
     ir = extract_source(tmp_path, {"shop/F.kt": (
