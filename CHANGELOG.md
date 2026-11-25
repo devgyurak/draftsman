@@ -51,9 +51,10 @@ Notes for anyone with `view.json` files written against a development build:
   unresolved names, of classes whose base is an alias of a class template, read as
   maybe inherited from that template's `std::basic_streambuf`), leveldb's and
   every other language's `ir.json` are the same, and so are the body relations of both.
-- **Java: a superclass's private nested type is not inherited** (#7, after 0.9.0), in
-  declarations and bodies (released for bodies in 0.4.1): `Hidden` in a subclass of a
-  `Base` with a private `Hidden` is the package's, as javac has it. The e2e repositories
+- **Java: a superclass's private nested type is not inherited** (#7, after 0.9.0), nor a
+  package-private one by a subclass in another package, in declarations and bodies
+  (released for bodies in 0.4.1): `Hidden` in a subclass of a `Base` with a private
+  `Hidden` is the package's, as javac has it. The e2e repositories
   are the same. Review set `bench/javac_oracle/review/jv1` with `oracle.py key` and `review`.
 - **Python: a class body's bindings and names bound twice in declarations** (#7, after
   0.9.0). A member's decorator the class body binds (`Other = print`) draws nothing; an

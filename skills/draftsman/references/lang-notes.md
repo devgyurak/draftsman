@@ -24,8 +24,9 @@ is that type. Aliases of aliases are followed.
   every level, including a nested type's supertype clause (`class Impl implements
   Listener` where the enclosing class inherits `Listener`); a superclass's private nested
   type or field is not inherited (JLS 8.2: `Hidden` in a subclass of a `Base` with a private
-  `Hidden` is the package's), in declarations and bodies (#7; review set
-  `bench/javac_oracle/review/jv1`, `oracle.py review`). A JDK supertype passes on the
+  `Hidden` is the package's), nor its package-private nested type by a subclass in another
+  package (an interface's member types are public), in declarations and bodies (#7; review
+  sets `bench/javac_oracle/review/jv1`, `jv2`, `oracle.py review`). A JDK supertype passes on the
   nested types the JDK declares (`Entry` in a `HashMap` subclass is `java.util.Map.Entry`,
   also over the package's own `Entry`): `langs/java_jdk.json` lists the public and
   protected nested types and fields of the JDK 21 types a class can extend, their
