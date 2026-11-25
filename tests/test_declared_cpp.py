@@ -202,3 +202,19 @@ def test_a_base_of_a_file_not_included_hides_names_too(tmp_path):
     assert "base Root" in _unresolved(ir, "M")["Inner"]
     assert not _body(ir, "M")
 
+
+def test_a_type_every_branch_of_an_if_chain_declares_is_drawn(tmp_path):
+    ir = extract_source(tmp_path, {"p.h": (
+        "#pragma once\nstruct Handle {};\nnamespace plat {\n"
+        "#ifdef _WIN32\nstruct PlatBase { struct Handle { void* h; }; };\n"
+        "#elif defined(__APPLE__)\nstruct PlatBase { struct Handle { long m; }; };\n"
+        "#else\nstruct PlatBase { struct Handle { int fd; }; };\n#endif\n"
+        "#ifdef A\nstruct Half {};\n#elif defined(B)\nstruct Half {};\n#endif\n"
+        "struct File : PlatBase { Handle h_; int f() { Handle x; return 0; } };\n"
+        "struct Uses { PlatBase b_; Half h_; };\n}\n")})
+    assert _rels(ir, "plat::File") == {("plat::PlatBase", None),
+                                       ("plat::PlatBase::Handle", "h_")}
+    assert not _body(ir, "plat::File")   # a body's `#if` rule stands
+    assert _rels(ir, "plat::Uses") == {("plat::PlatBase", "b_")}   # no #else: Half is not
+    assert "#if branch" in _unresolved(ir, "plat::Uses")["Half"]
+

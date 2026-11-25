@@ -2146,7 +2146,7 @@ class _Builder:
             if not any(f == scope.file and first <= line <= last or cond in around
                        for f, first, last, cond in branches) and not any(
                     target in self.file_plain_forwards.get(f, ())
-                    for f in self._included(scope.file)):
+                    for f in self._included(scope.file)) and not _every_branch(branches):
                 # (a declaration of the id outside every branch, `class PollSetImpl;` in
                 # the file or one it includes: the name is that type in every build)
                 return (f"{target} is declared in an #if branch this declaration is outside "
@@ -2608,6 +2608,28 @@ class _Builder:
         # dependencies per pair is a presentation decision made by the renderer.
         unique = {r.key(): r for r in reversed(self.relations)}
         return sorted(unique.values(), key=lambda r: (r.from_, r.to, r.kind, r.via or ""))
+
+
+def _every_branch(branches: list[tuple[str, int, int, str]]) -> bool:
+    """Whether the branches declaring a type (Type.branches) are every branch of one
+    `#if ... #else ... #endif` chain of a file (`#elif`s too): the type is there whatever the
+    condition. A chain's branches follow each other (one ends on the line the next starts),
+    the first's condition is an `#if`'s and the last's an `#else`'s."""
+    by_file: dict[str, list[tuple[int, int, str]]] = {}
+    for f, first, last, cond in branches:
+        by_file.setdefault(f, []).append((first, last, cond))
+    for parts in by_file.values():
+        parts = sorted(set(parts))
+        for i, (first, _, cond) in enumerate(parts):
+            if "|" in cond or not cond.startswith("if"):
+                continue   # not the first branch of a chain
+            j = i
+            while j + 1 < len(parts) and parts[j + 1][0] == parts[j][1] \
+                    and parts[j + 1][2].endswith("|" + cond):
+                j += 1
+                if parts[j][2].startswith("else|"):
+                    return True
+    return False
 
 
 def _without_qualifier_args(text: str) -> str:
