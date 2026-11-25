@@ -7,6 +7,7 @@ format bench/answer_key.py gives; this script runs it and reads its output.
     uv run bench/tsc_oracle/oracle.py run REPO --checkout DIR -o OUT.jsonl
     uv run bench/tsc_oracle/oracle.py scope REPO OUT.jsonl ir.json
     uv run bench/tsc_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR [-v]
+    uv run bench/tsc_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR --declared [--save F]
     uv run bench/tsc_oracle/oracle.py measure OUT.jsonl [--ir ir.json]
 
 `selftest` checks the key against the hand-written answers in
@@ -17,7 +18,9 @@ installed (`npm ci --ignore-scripts`, `pnpm install --ignore-scripts`), as impor
 only resolve through them. `scope` fails unless the key saw the same types, declared in
 the same files, as ir.json of those sources. `compare` extracts the same sources and
 checks every name a body relation is drawn from against what the compiler resolved at
-its place. `measure` prints what the rules for hiding names are decided by.
+its place; with `--declared`, the names declared relations are drawn from instead
+(bench/declared.py, issue #7). `measure` prints what the rules for hiding names are
+decided by.
 
 The compiler is the `typescript` package pinned in package.json here: `npm ci` in
 bench/tsc_oracle first. Node runs it.
@@ -38,6 +41,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(ROOT / "skills" / "draftsman" / "scripts"))
 import answer_key  # noqa: E402
+import declared  # noqa: E402
 from extract import discover  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "typescript" / "body"
@@ -63,7 +67,7 @@ def oracle(root: Path, files: list[Path], tsconfig: Path, out: Path) -> list[dic
         srcs.write_text("".join(f"{f}\n" for f in files))
         subprocess.run(["node", "--max-old-space-size=8192", HERE / "type_uses.mjs", out,
                         root, tsconfig, srcs], check=True)
-    return answer_key.read(out)
+    return answer_key.read(out, declared=True)
 
 
 def expected(root: Path) -> dict[tuple[str, int, int], tuple[str, str]]:
@@ -88,10 +92,11 @@ def run(args) -> int:
     files = [f for f, _ in sources(args.repo, checkout)]
     recs = oracle(checkout / conf["root"], files, checkout / conf["tsconfig"], args.output)
     errors = [r for r in recs if "diagnostic" in r]
-    uses = Counter(r["kind"] for r in recs if "use" in r)
+    uses = Counter(r["kind"] for r in answer_key.body(recs) if "use" in r)
     print(f"{args.repo}: {len(files)} files, {len(errors)} compile errors in "
           f"{len({r['file'] for r in errors})} files, uses: "
-          + ", ".join(f"{k} {v}" for k, v in uses.most_common()))
+          + ", ".join(f"{k} {v}" for k, v in uses.most_common())
+          + f"; declared names: {len(declared.declared_records(recs))}")
     for r in errors[:20]:
         print(f"  {r['file']}:{r['line']}: {r['diagnostic']}")
     return 0
@@ -118,11 +123,15 @@ def compare(args) -> int:
     raw = [Extractor(spec_for_path(rel)).extract(f, rel, root)
            for f, rel in sources(args.repo, checkout)]
     builder = _Builder(str(root), raw, Wrappers.load())
+    if args.declared:
+        declared.watch(builder)
     ir = builder.build()
-    recs = answer_key.read(args.oracle)
+    recs = answer_key.read(args.oracle, declared=args.declared)
     if answer_key.in_scope(recs, {t.id: t.location.file for t in ir.types
                                   if t.language in _languages()}, language="TypeScript"):
         return 1
+    if args.declared:
+        return declared.report(builder, recs, root, args, key="tsc")
     return answer_key.compare(builder.body_uses, recs, args.verbose, key="tsc")
 
 
@@ -178,6 +187,7 @@ def main(argv=None) -> int:
     k.add_argument("oracle", type=Path)
     k.add_argument("--checkout", type=Path, required=True)
     k.add_argument("-v", "--verbose", action="store_true", help="list every miss and mismatch")
+    declared.arguments(k)
     k.set_defaults(fn=compare)
     m = sub.add_parser("measure")
     m.add_argument("oracle", type=Path)
