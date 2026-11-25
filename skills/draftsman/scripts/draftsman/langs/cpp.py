@@ -364,8 +364,13 @@ class CppSpec(LanguageSpec):
             if not m:
                 continue
             word = m.group(1)
-            # the branch's condition as written: `ifdef X`, `elif B|if A`, `else|if A`
-            text = " ".join(line.decode("utf-8", "replace").split("//")[0].split()).lstrip("# ")
+            # the branch's condition as written: `ifdef X`, `elif B|if A`, `else|if A`, with
+            # the lines a backslash continues
+            full, j = line, i
+            while full.rstrip().endswith(b"\\") and j + 1 < len(lines):
+                j += 1
+                full = full.rstrip()[:-1] + b" " + lines[j]
+            text = " ".join(full.decode("utf-8", "replace").split("//")[0].split()).lstrip("# ")
             text = re.sub(r"^#\s*", "", text)
             if word.startswith(b"if"):
                 guard = b"__cplusplus" in line or (
@@ -384,6 +389,17 @@ class CppSpec(LanguageSpec):
                     stack[-1][2] = [text.split()[0] if word == b"else" else text] + conds
         out.sort(key=lambda r: r[1] - r[0])   # innermost first
         return out
+
+    def top_function(self, node):
+        # through `#if` branches up to a namespace's or the file's scope
+        cur = node.parent
+        while cur is not None and cur.type not in ("declaration", "function_definition"):
+            cur = cur.parent
+        while cur is not None and cur.type in ("declaration", "function_definition",
+                                               "template_declaration") or (
+                cur is not None and cur.type.startswith("preproc_")):
+            cur = cur.parent
+        return cur is not None and cur.type in ("translation_unit", "declaration_list")
 
     def unreadable(self, node):
         # a function defined inside a block is a parse the grammar could not close (an `#if`

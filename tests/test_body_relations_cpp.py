@@ -279,6 +279,25 @@ def test_a_template_or_enum_declared_only_is_that_type(tmp_path):
     assert _body(ir) == [("app::F", "app::Box", 3), ("app::F", "app::Mode", 3)]
 
 
+def test_an_if_condition_is_read_with_the_lines_it_continues(tmp_path):
+    ir = extract_source(tmp_path, {
+        "a.h": "struct Gate {};\nnamespace s {\n#if defined(A) && \\\n    defined(B)\nstruct Gate {};\n#endif\n}\n",
+        "b.cc": '#include "a.h"\nnamespace s { struct C {\n#if defined(A) && \\\n    defined(C)\n'
+                "  void f() { Gate g; }\n#endif\n#if defined(A) && \\\n    defined(B)\n"
+                "  void g() { Gate g; }\n#endif\n}; }\n"})
+    assert _body(ir) == [("s::C", "s::Gate", 9)]
+
+
+def test_a_function_of_an_if_branch_hides_a_call(tmp_path):
+    # a namespace's; not a method of a class's `#if` branch
+    ir = extract_source(tmp_path, {
+        "g.h": "struct Rate { Rate(int) {} }; struct Fee { Fee(int) {} };\n",
+        "s/fns.h": '#include "g.h"\nnamespace s {\n#ifdef EARLY\nint Rate(int);\n#endif\n'
+                   "struct K {\n#ifdef X\n  int Fee(int n) { return n; }\n#endif\n}; }\n",
+        "s/c.cc": '#include "s/fns.h"\nnamespace s { struct C { void f() { Rate(1); Fee(2); } }; }\n'})
+    assert _body(ir) == [("s::C", "Fee", 2)]
+
+
 def test_an_enumerator_hides_a_type_only_where_a_value_may_stand_and_as_near(tmp_path):
     # the namespace's struct Cash is nearer than the global `enum Coin { Cash }`
     ir = extract_source(tmp_path, {

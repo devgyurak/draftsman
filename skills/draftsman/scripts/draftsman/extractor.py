@@ -810,7 +810,8 @@ class Extractor:
                 elif cap == "body.receiver":
                     receivers.append(n)
                 elif cap == "body.function":
-                    scope.top_functions.add(self.spec.body_name_text(_text(n, src)))
+                    if self.spec.top_function(n):
+                        scope.top_functions.add(self.spec.body_name_text(_text(n, src)))
                 elif cap == "body.value":
                     scope.top_values.add(self.spec.body_name_text(_text(n, src)))
                 elif cap in ("body.hidden_type", "body.hidden_tparam"):

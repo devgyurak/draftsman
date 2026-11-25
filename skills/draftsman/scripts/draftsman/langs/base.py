@@ -393,6 +393,11 @@ class LanguageSpec:
         parameter its bounds (`fun <T : Ctx> T.ext()`)."""
         return [text]
 
+    def top_function(self, node: "ts.Node") -> bool:
+        """Whether a `@body.function` capture is a function of a namespace (C++: not one of
+        a class's or a block's `#if` branch)."""
+        return True
+
     def unreadable(self, node: "ts.Node") -> bool:
         """Whether a name a `@body.ref.*` captures stands where the parse cannot be trusted
         (C++: a function definition inside a block, an `#if` the grammar could not close)."""
