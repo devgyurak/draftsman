@@ -228,3 +228,14 @@ def test_a_base_written_as_an_alias_of_one_class_is_looked_into(tmp_path):
     assert _rels(ir, "D") == {("lib::Base", None), ("lib::Base::Inner", "i_")}
     assert _body(ir, "D") == {"lib::Base::Inner"}
     assert _rels(ir, "E") == {("lib::Base", None), ("lib::Base::Inner", "i_")}
+
+
+def test_a_base_written_as_an_alias_of_an_outside_class_is_that_class(tmp_path):
+    # `typedef std::vector<int> IntVec; struct D4 : IntVec` is `struct D4 : std::vector<int>`:
+    # the base is drawn, and std's table says value_type may be its member
+    ir = extract_source(tmp_path, {"a.h": (
+        "#include <vector>\nstruct value_type {};\ntypedef std::vector<int> IntVec;\n"
+        "struct D4 : IntVec { value_type v_; int f() { value_type y; return 0; } };\n")})
+    assert _rels(ir, "D4") == {("std::vector", None)}
+    assert "value_type" in _unresolved(ir, "D4")
+    assert not _body(ir, "D4")

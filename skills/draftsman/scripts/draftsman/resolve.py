@@ -2062,12 +2062,43 @@ class _Builder:
         found = self._like_body(ref.name, rtype, None, sup.scope or rtype.scope, len(ref.args),
                                 sup.line, sup.text, res, base=True)
         if found.status == ALIAS and found.target:
-            # `typedef lib::Base LB; struct D : LB`: an alias of one class is that class,
-            # looked into as a base is
-            leaves, _ = self._alias_names(found.target, rtype)
-            if len(leaves) == 1 and leaves[0][0] in self.types:
-                return Resolution(PROJECT, leaves[0][0])
+            # `typedef lib::Base LB; struct D : LB`: an alias of a class is that class,
+            # looked into as a base is; `typedef std::vector<int> IntVec;` is std::vector's
+            named = self._alias_class(found.target)
+            if named is not None:
+                return named
         return found
+
+    def _alias_class(self, alias: str, depth: int = 0) -> Optional[Resolution]:
+        """The class an alias names as a whole (`typedef lib::Base LB;`, `using V =
+        std::vector<int>;`, aliases of aliases followed): a project type (PROJECT) or one
+        outside the sources (EXTERNAL), or None (a pointer, a dependent `typename`, a name
+        it cannot tell)."""
+        entry = self.resolver.alias_targets.get(alias)
+        if entry is None or depth > 4:
+            return None
+        text, scope = entry
+        if text.strip().startswith("typename "):
+            return None
+        ref = parse_type(text)
+        if not isinstance(ref, Named):
+            return None
+        spec = spec_for_path(scope.file)
+        sep = spec.separator
+        owner = alias.rsplit(sep, 1)[0] if sep in alias else None
+        ctx = RawType(alias, alias.rsplit(sep, 1)[-1], "alias", Location(scope.file, 0), scope,
+                      spec.name, namespace=self.types[owner].namespace if owner in self.types
+                      else owner or scope.namespace,
+                      outer=owner if owner in self.types else None)
+        if ref.name.split(sep, 1)[0] in self.resolver.alias_tparams.get(alias, set()):
+            return None
+        res = self.resolver.resolve(ref.name, ctx, None, arity=len(ref.args),
+                                    body_file=scope.file)
+        if res.status == PROJECT or res.status == EXTERNAL and res.target:
+            return Resolution(res.status, res.target)
+        if res.status == ALIAS and res.target and res.target != alias:
+            return self._alias_class(res.target, depth + 1)
+        return None
 
     def _declared_resolution(self, name: str, rtype: RawType, rm: Optional[RawMember],
                              arity: Optional[int], text: Optional[str] = None) -> Resolution:
