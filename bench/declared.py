@@ -178,6 +178,9 @@ def watch(builder) -> None:
         sep = spec.separator
         for ann in rtype.annotation_refs:
             file = ann.scope.file
+            if ann.line > rtype.location.line and builder._class_binds(
+                    rtype, ann.name.split(sep, 1)[0]):
+                continue   # a member's decorator the class body binds (as _Builder's)
             last = None
             for name in spec.annotation_type_names(ann.name):
                 last = resolve(name, rtype, None, scope=ann.scope)

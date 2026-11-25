@@ -2131,6 +2131,20 @@ class _Builder:
             members=[rm.member for rm in t.members],
         )
 
+    def _class_binds(self, rtype: RawType, name: str) -> bool:
+        """Whether the class body of ``rtype`` binds ``name`` itself (a field, method or
+        property of the name: `Other = print`), where its statements and its members'
+        decorators and annotations are evaluated (LanguageSpec.initializers_in_class_scope)."""
+        return LANGUAGES[rtype.language].initializers_in_class_scope and any(
+            rm.member.name == name and rm.member.kind in ("field", "method", "property")
+            for rm in rtype.members)
+
+    def _module_binds(self, scope: FileScope, name: str, spec) -> bool:
+        """Whether the file's top binds ``name`` (an import of it, a class, a variable)."""
+        own = f"{scope.namespace}{spec.separator}{name}" if scope.namespace else name
+        return own in self.types or name in scope.variables or any(
+            not imp.wildcard and imp.local_name == name for imp in scope.imports)
+
     def _super_resolutions(self, rtype: RawType) -> list[Resolution]:
         """What each supertype clause of ``rtype`` draws to: the resolver's supertypes,
         which names are looked up in too (Resolver.base_lookup)."""
@@ -2190,7 +2204,16 @@ class _Builder:
         type, ``text`` as written) stands for."""
         res = self.resolver.rooted(name, text, rtype) or self.resolver.resolve(
             name, rtype, rm, arity=arity)
-        if not LANGUAGES[rtype.language].declared_like_bodies:
+        spec = LANGUAGES[rtype.language]
+        scope = (rm.scope if rm is not None and rm.scope else None) or rtype.scope
+        head = name.split(spec.separator, 1)[0]
+        if res.status in (PROJECT, ALIAS) and (self._class_binds(rtype, head) or (
+                spec.initializers_in_class_scope and res.target == rtype.qualified_name
+                + spec.separator + head and self._module_binds(scope, head, spec))):
+            return Resolution(UNRESOLVED, hint=(
+                f"the class body binds {head}: the checkers disagree whether an annotation "
+                "there means that binding or the module's"))
+        if not spec.declared_like_bodies:
             return res
         scope = (rm.scope if rm is not None and rm.scope else None) or rtype.scope
         line = rm.member.line if rm is not None else rtype.location.line
@@ -2331,6 +2354,9 @@ class _Builder:
         for ann in rtype.annotation_refs:
             via = "@" + ann.name
             loc = Location(ann.scope.file, ann.line)
+            if ann.line > rtype.location.line and self._class_binds(
+                    rtype, ann.name.split(sep, 1)[0]):
+                continue   # Python: a member's decorator the class body binds (`Other = print`)
             maybe = None
             for name in spec.annotation_type_names(ann.name):
                 res = self.resolver.resolve(name, rtype, None, scope=ann.scope)
