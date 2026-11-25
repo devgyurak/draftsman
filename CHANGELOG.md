@@ -38,7 +38,9 @@ Notes for anyone with `view.json` files written against a development build:
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
 - **After 0.9.0**: C++'s declared relations look names up as bodies do (below); POCO's
-  change (14 relations added, 10 removed, 2 names unresolved with a reason), leveldb's and
+  change (14 relations added, 10 removed, 2 names unresolved with a reason, and 3
+  unresolved names, of classes whose base is an alias of a class template, read as
+  maybe inherited from that template's `std::basic_streambuf`), leveldb's and
   every other language's `ir.json` are the same, and so are the body relations of both.
 - **C++ declarations look names up as bodies do** (#7, after 0.9.0). A base, a member's
   type and a parameter's or the return type follow the body's lookup: `::D` is the global
@@ -56,7 +58,11 @@ Notes for anyone with `view.json` files written against a development build:
   defined in the `.cc`) is still drawn, and so is a type of an `#if` branch the file or
   one it includes declares outside every branch (`class PollSetImpl;`). A base clause has
   one answer, the base drawn being the base names are looked up in, by declarations and
-  bodies alike (`struct C : la::Base { Inner i_; }` is `lib::Base::Inner`). On POCO the
+  bodies alike (`struct C : la::Base { Inner i_; }` is `lib::Base::Inner`); a base written
+  as an alias of one class is looked into, and a base unresolved by the `#if` or include
+  rule hides the names found past the class and its other bases (unresolved in a
+  declaration, nothing drawn in a body). A type every branch of an `#if ... #else` chain
+  declares is drawn in a declaration. On POCO the
   declared side now agrees with Clang at every place it compares (10 wrong targets
   before; `NTLMContextImpl`, defined in a Windows branch Clang does not compile, is counted
   apart); two relations go, under `#ifndef POCO_DOC` (`VarVisitor`'s `Details::` types).
