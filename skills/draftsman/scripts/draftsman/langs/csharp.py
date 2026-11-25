@@ -627,7 +627,7 @@ class CSharpSpec(LanguageSpec):
     def project_references(self, project):
         return _references(project)
 
-    def subtype_sees(self, modifiers):
+    def subtype_sees(self, modifiers, same_package=True):
         # a private member, or a nested type with no access modifier (private), is not
         # seen in a subtype; `private protected` is
         return any(m in ("public", "protected", "internal", "package") for m in modifiers)

@@ -181,7 +181,8 @@ def test_explicit_import_beats_same_package(tmp_path):
 def test_nested_types_inherited_from_supertypes(tmp_path):
     ir = extract_source(tmp_path, {
         "p/Filter.java": "package p; public interface Filter { enum Result { GO, STOP } }",
-        "p/Base.java": "package p; public class Base implements Filter { class Node {} }",
+        # (a package-private Node would not be inherited by q.Printer: JLS 8.2, #7)
+        "p/Base.java": "package p; public class Base implements Filter { protected class Node {} }",
         "q/Printer.java": "package q; import p.Base; class Printer extends Base {"
                           " Result last; Node node; Base.Result viaOuter; }",
     })

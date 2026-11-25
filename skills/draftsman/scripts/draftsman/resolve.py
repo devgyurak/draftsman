@@ -342,10 +342,15 @@ class Resolver:
         return cached
 
     def _member_type(self, owner: RawType, name: str, sep: str, inherit: bool,
-                     seen: set[str], body: bool = False) -> Optional[str]:
+                     seen: set[str], body: bool = False,
+                     from_ns: Optional[str] = None) -> Optional[str]:
         """A nested type or member type alias ``name`` declared in ``owner`` or inherited from
         its supertypes (`using CharacterMap = int[256];` in a base class). ``body``: for a
-        name in a body, where C++ looks into no dependent base (`TBase<T>`) of ``owner``."""
+        name in a body, where C++ looks into no dependent base (`TBase<T>`) of ``owner``.
+        ``from_ns``: the namespace of the type that inherits (``owner``'s at the first call),
+        which sees a base's package-private nested type in its own package only (Java)."""
+        if from_ns is None:
+            from_ns = owner.namespace
         if owner.qualified_name in seen:
             return None
         seen.add(owner.qualified_name)
@@ -360,15 +365,28 @@ class Resolver:
                         continue   # Kotlin: an interface passes on no nested type
                     # (a base's own bases are known once the base is: `ViaPtr<int>`'s
                     # `TBase<T*>` is `TBase<int*>`)
-                    found = self._member_type(self.index[sup.target], name, sep, inherit, seen)
-                    # C#'s private nested type is no member of a subclass, nor Kotlin's type
+                    found = self._member_type(self.index[sup.target], name, sep, inherit, seen,
+                                              from_ns=from_ns)
+                    # C#'s and Java's private nested type is no member of a subclass, nor
+                    # Java's package-private one in another package, nor Kotlin's type
                     # nested in a superclass's companion object (folded into the class)
                     if found and (found not in self.index
-                                  or spec.subtype_sees(self.index[found].modifiers)
+                                  or spec.subtype_sees(self._access(found),
+                                                       self.index[found].namespace == from_ns)
                                   and not (spec.class_nested_only
                                            and self.index[found].static_scope)):
                         return found
         return None
+
+    def _access(self, qname: str) -> list[str]:
+        """A nested type's modifiers, with `public` where the type it is declared in makes
+        it so (a Java interface's or annotation's member types)."""
+        t = self.index[qname]
+        outer = self.index.get(t.outer) if t.outer else None
+        if outer is not None and outer.kind in ("interface", "annotation") \
+                and not any(m in ("public", "protected", "private") for m in t.modifiers):
+            return [*t.modifiers, "public"]
+        return t.modifiers
 
     def _external_supers(self, rtype: RawType) -> list[str]:
         """External ancestors of the type and its enclosing types, also those reached

@@ -21,3 +21,30 @@ def test_a_private_nested_type_of_a_superclass_is_not_inherited(tmp_path):
     assert not any(to == "p.Base.Hidden" for f, to, _, _ in rels if f == "p.Sub")
     assert ("p.Sub", "p.Base.Deep", "c", None) in rels   # a protected one is inherited
     assert ("p.Own", "p.Own.Hidden", "a", None) in rels  # its own class sees it
+
+
+def test_a_package_private_nested_type_is_not_inherited_in_another_package(tmp_path):
+    # b.SubB extends a.Base: Base's package-private Pkg is b.Pkg there, also through a
+    # subclass of SubB and in SubB's nested class; a.SubA inherits it; protected and
+    # public ones and an interface's (public) are inherited across packages (jv2)
+    ir = extract_source(tmp_path, {
+        "a/Base.java": ("package a;\npublic class Base implements Face {\n  static class Pkg {}\n"
+                        "  protected static class Prot {}\n}\n"),
+        "a/Face.java": "package a;\npublic interface Face { class Fn {} }\n",
+        "a/Pkg.java": "package a; public class Pkg {}\n",
+        "a/SubA.java": "package a;\npublic class SubA extends Base { Pkg p; }\n",
+        "b/Pkg.java": "package b; public class Pkg {}\n",
+        "b/Prot.java": "package b; public class Prot {}\n",
+        "b/Fn.java": "package b; public class Fn {}\n",
+        "b/SubB.java": ("package b;\npublic class SubB extends a.Base {\n  Pkg p;\n  Prot q;\n"
+                        "  Object m() { return new Pkg(); }\n  class In { Pkg p2; }\n}\n"),
+        "b/Third.java": "package b;\npublic class Third extends SubB { Pkg p; }\n",
+        "b/Imp.java": "package b;\npublic class Imp implements a.Face { Fn f; }\n"})
+    rels = {(r.from_, r.to, r.via, r.evidence) for r in ir.relations}
+    assert ("a.SubA", "a.Base.Pkg", "p", None) in rels
+    assert ("b.SubB", "b.Pkg", "p", None) in rels
+    assert ("b.SubB", "b.Pkg", "m", "body") in rels
+    assert ("b.SubB.In", "b.Pkg", "p2", None) in rels
+    assert ("b.Third", "b.Pkg", "p", None) in rels
+    assert ("b.SubB", "a.Base.Prot", "q", None) in rels
+    assert ("b.Imp", "a.Face.Fn", "f", None) in rels

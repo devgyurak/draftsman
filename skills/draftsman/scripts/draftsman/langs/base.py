@@ -363,9 +363,10 @@ class LanguageSpec:
         its `#if ANDROID`): no name in them is read for a body relation."""
         return []
 
-    def subtype_sees(self, modifiers: list[str]) -> bool:
+    def subtype_sees(self, modifiers: list[str], same_package: bool = True) -> bool:
         """Whether a subtype sees by its simple name a nested type or field a supertype
-        declares with these modifiers (or visibility); not C#'s private ones."""
+        declares with these modifiers (or visibility); not C#'s private ones.
+        ``same_package``: whether the subtype is in the supertype's package."""
         return True
 
     def file_local(self, modifiers: list[str]) -> bool:
