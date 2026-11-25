@@ -12,6 +12,7 @@ checkers disagree ("disputed") nothing may be drawn; such a place is counted apa
 |---|---|---|---|
 | `py1` | 2 | 32 | declared names (#7, cases 6, 7, 50): a member's decorator the class body binds (`Other = print`), annotations beside a class body's binding and beside a nested class the module also binds (the checkers disagree: drawn nothing), a name bound twice (`try: from q.x.foo import Foo` / `except: class Foo`) in a base and an annotation, imports under another name, module aliases, nested classes, string annotations, generics. Before the fix: 1 declared mismatch, 8 drawn where the checkers disagree |
 | `py2` | 0 | 12 | a review's probe of the fix: names bound twice through imports and `TYPE_CHECKING`, a class body's bindings of several kinds, forward references, aliases of imports |
+| `py3` | 0 | 10 | a base's type arguments (#9, case 24): `List[Node]` beside another package's `Node`, `Generic[T]` with a `TypeVar` beside a class `T`, nested arguments, a module-qualified `b.models.Node`, the class itself as a string; an alias named like a container (`type Vector = list[Item]`, case 25). Before the fix: 5 agreed, 4 misses |
 
 Known limits (mismatches that stay):
 
@@ -19,4 +20,6 @@ Known limits (mismatches that stay):
 
 Known limits of declared relations (mismatches that stay):
 
-- none
+- `py3/p/lists.py:34:12` `Vector`, a `type` statement's alias of `list[Item]`: the
+  extractor draws `Item`, the alias names it; the key records a type alias as a variable
+  with no types it names (a limit of the key: `type Items = list[Item]` compares so too)

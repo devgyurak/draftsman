@@ -33,6 +33,7 @@ names drawn or declared names agreed than the table gives.
 | `cs18` | 5 | 27 | declared relations (issue #7: cases 2, 3, 4, 5, 35), each beside a rival type: a namespace-less file's alias (`using Order = Lib.Order;`) and a file without it, an alias before a file-scoped namespace beside the namespace's type, another project's `internal` type before a using's, the arity written (`Repo<int>`), a package's namespace around the code (CommunityToolkit.Mvvm.Input), `nameof(Order)` beside a base's property, the same names in bodies. The extractor before the fix: 19 declared mismatches, 1 body name |
 | `cs19` | 8 | 32 | a review's probe of the fix: a `global using` alias in every file of its project, aliases of a file in two namespaces of it, a namespace block's alias beside another block of the namespace, a namespace alias (`L.Order`, `L::Order`), an alias of a generic, `InternalsVisibleTo`, an unreferenced project's public type, arity of two type arguments, `nameof` and `typeof` beside members and nested types, `Kind.A` beside `public Kind Kind`, a namespace of the shared framework around the code |
 | `cs20` | 1 | 16 | a review's probe of the fix: a global using's alias of a generic (`Safe`), aliases in nested namespace blocks, `Kind.A` and `nameof(Kind)` beside `public Kind Kind`, `typeof` beside nested types |
+| `cs21` | 0 | 15 | a supertype's type arguments (#9, case 24): `List<Node>` beside another namespace's `Node`, a type parameter `T` beside a class `T`, nested arguments, `IComparable<Nested>` naming the class itself, a qualifier's arguments (`Outer<Item>.Inner<Node>`); aliases named like containers (`using Vector = ...List<A.Item>;`, `using Provider = A.Node;`, case 25). Before the fix: 7 agreed, 7 misses |
 
 ## Known limits
 
@@ -77,3 +78,5 @@ although Roslyn finds a type of the sources there:
   definition (`Lib.Box`): a limit of the key's reading of aliases, not of the extractor
 - `cs19/P/Aliases.cs:12:16` `Map`, `using Map = System.Collections.Generic.Dictionary<string,
   Lib.Order>;` (a name of a container, no longer passed over: #9, case 25): the same
+- `cs21/P/Supers.cs:19:16` `Vector`, `using Vector = System.Collections.Generic.List<A.Item>;`
+  (the same case): the same
