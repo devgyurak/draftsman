@@ -309,7 +309,7 @@ class Resolver:
                      seen: set[str], body: bool = False) -> Optional[str]:
         """A nested type or member type alias ``name`` declared in ``owner`` or inherited from
         its supertypes (`using CharacterMap = int[256];` in a base class). ``body``: for a
-        name in a body, where C++ looks into no dependent base (`TBase<T>`)."""
+        name in a body, where C++ looks into no dependent base (`TBase<T>`) of ``owner``."""
         if owner.qualified_name in seen:
             return None
         seen.add(owner.qualified_name)
@@ -320,7 +320,9 @@ class Resolver:
             spec = LANGUAGES[owner.language]
             for sup in self._project_supers(owner, body):
                 if sup.status == PROJECT:
-                    found = self._member_type(self.index[sup.target], name, sep, inherit, seen, body)
+                    # (a base's own bases are known once the base is: `ViaPtr<int>`'s
+                    # `TBase<T*>` is `TBase<int*>`)
+                    found = self._member_type(self.index[sup.target], name, sep, inherit, seen)
                     # C#'s private nested type is no member of a subclass
                     if found and (found not in self.index
                                   or spec.subtype_sees(self.index[found].modifiers)):
@@ -422,18 +424,19 @@ class Resolver:
         return f"mentioned by {shown}{more}; one of them may declare it"
 
     def _project_supers(self, rtype: RawType, body: bool) -> list[Resolution]:
-        """The supertypes of ``rtype`` a name is looked up in; for a name in a body, C++'s
-        written with the class's template parameters (`TBase<T>`) left out: looked into
-        once the template is instantiated."""
+        """The supertypes of ``rtype`` a name is looked up in; for a name in a body of
+        ``rtype`` (or of a class it is around), C++'s written with the class's template
+        parameters (`TBase<T>`) left out: looked into once the template is instantiated.
+        A base's own bases are all looked into: they are known once the base is."""
         sups = self.supertypes(rtype)
         if not body or not LANGUAGES[rtype.language].values_hide_types:
             return sups
         return [s for w, s in zip(rtype.supers, sups) if not self._dependent_base(w.text, rtype)]
 
-    def _enum_constant_around(self, name: str, rtype: RawType) -> bool:
-        """Whether a constant of an unscoped enum (C++'s `enum Status { Paid }`) of the
-        classes around ``rtype``, of their project bases, or of the namespaces around it is
-        named ``name``: a name of that scope, nearer than a type of the namespaces."""
+    def _enum_constant_around(self, name: str, rtype: RawType) -> Optional[int]:
+        """Where a constant of an unscoped enum (C++'s `enum Status { Paid }`) named
+        ``name`` is, nearest first: -1 for the classes around ``rtype`` and their project
+        bases, else the index of the namespace in the chain around it; None if none is."""
         if self._unscoped is None:
             self._unscoped = {}
             for t in self.index.values():
@@ -442,23 +445,37 @@ class Resolver:
                     self._unscoped.setdefault(key, set()).update(
                         rm.member.name for rm in t.members if rm.member.kind == "enum_constant")
         seen: set[str] = set()
-        stack = []
+        stack = []   # (a type, whether a body is in it or in a class it is around)
         cur: Optional[RawType] = rtype
         while cur is not None:
-            stack.append(cur)
+            stack.append((cur, True))
             cur = self.index.get(cur.outer) if cur.outer else None
         while stack:
-            t = stack.pop()
+            t, around = stack.pop()
             if t.qualified_name in seen:
                 continue
             seen.add(t.qualified_name)
             if name in self._unscoped.get(t.qualified_name, ()):
-                return True
-            stack += [self.index[s.target] for s in self._project_supers(t, True)
+                return -1
+            stack += [(self.index[s.target], False) for s in self._project_supers(t, around)
                       if s.status == PROJECT]
         spec = LANGUAGES[rtype.language]
-        return any(name in self._unscoped.get("ns:" + ns, ()) for ns in self._namespace_chain(
+        return next((i for i, ns in enumerate(self._namespace_chain(
             rtype.namespace, spec.separator, spec.parent_namespace_lookup))
+            if name in self._unscoped.get("ns:" + ns, ())), None)
+
+    def _type_depth(self, target: str, rtype: RawType) -> int:
+        """Where a type found by its simple name from ``rtype`` is, as
+        _enum_constant_around counts: -1 for a member of a class (found in the classes
+        around), else its namespace's index in the chain around ``rtype`` (one the chain
+        lacks, brought in by a `using`, counts as the farthest)."""
+        spec = LANGUAGES[rtype.language]
+        sep = spec.separator
+        owner = target.rsplit(sep, 1)[0] if sep in target else ""
+        if owner in self.index:
+            return -1
+        chain = self._namespace_chain(rtype.namespace, sep, spec.parent_namespace_lookup)
+        return chain.index(owner) if owner in chain else len(chain)
 
     def _base_named(self, rtype: RawType, name: str, sep: str, body: bool = False
                     ) -> Optional[Resolution]:
@@ -471,7 +488,7 @@ class Resolver:
             if t.qualified_name in seen:
                 continue
             seen.add(t.qualified_name)
-            for sup in self._project_supers(t, body):
+            for sup in self._project_supers(t, body and t is rtype):
                 if not sup.target:
                     continue
                 if sup.target.rsplit(sep, 1)[-1] == name and sup.status in (PROJECT, EXTERNAL):
@@ -939,9 +956,19 @@ class Resolver:
         sep = spec.separator
         if spec.values_hide_types:
             if not qualifier and sep not in name and (
-                    self._is_variable(name, rtype, ref) or self._method_around(name, rtype, ref)
-                    or self._enum_constant_around(name, rtype)):
+                    self._is_variable(name, rtype, ref) or self._method_around(name, rtype, ref)):
                 return None
+            if not qualifier and sep not in name and ref.position != "type":
+                # where a value may stand, an enumerator as near as the type or nearer
+                # hides it (`sizeof(Paid)`; not `Cash c;`, nor `sizeof(Cash)` beside a
+                # global `enum Coin { Cash }` and the namespace's struct Cash)
+                at = self._enum_constant_around(name, rtype)
+                if at is not None:
+                    res = self._in_body(name, rtype, ref, 0)
+                    if res.status not in (PROJECT, ALIAS) or not res.target \
+                            or at <= self._type_depth(res.target, rtype):
+                        return None
+                    return res
             head = name.split(sep, 1)[0]
             if (qualifier or sep in name) and self._namespace_around(head, rtype) and \
                     self._in_body(head, rtype, ref, 0).status in (PROJECT, ALIAS):
@@ -1073,12 +1100,13 @@ class Resolver:
         function only (what a value of the type has: an extension's receiver)."""
         if rtype.qualified_name in seen:
             return False
+        around = not seen   # (a base's own bases are all looked into)
         seen.add(rtype.qualified_name)
         spec = LANGUAGES[rtype.language]
         for written, sup in zip(rtype.supers, self.supertypes(rtype)):
             if nested_only and written.kind != "extends" and not spec.values_hide_types:
                 continue   # an interface passes on no nested type (C++ has none)
-            if spec.values_hide_types and self._dependent_base(written.text, rtype):
+            if spec.values_hide_types and around and self._dependent_base(written.text, rtype):
                 continue   # C++: `std::vector<T>` is looked into only once T is known
             if sup.status == PROJECT:
                 if self._outside_member_of(self.index[sup.target], name, nested_only, seen,
@@ -1227,10 +1255,11 @@ class Resolver:
         """Whether the project type or a project supertype declares a method ``name``."""
         if rtype.qualified_name in seen:
             return False
+        around = not seen   # (a base's own bases are all looked into)
         seen.add(rtype.qualified_name)
         return any(rm.member.name == name and rm.member.kind == "method" for rm in rtype.members) \
             or any(self._has_method(self.index[s.target], name, seen)
-                   for s in self._project_supers(rtype, True) if s.status == PROJECT)
+                   for s in self._project_supers(rtype, around) if s.status == PROJECT)
 
     def _receiver_head(self, head: str, rtype: RawType, ref: RawBodyRef,
                        spec) -> Optional[str]:
@@ -1689,7 +1718,7 @@ class Resolver:
                 and (not inherited or spec.subtype_sees([rm.member.visibility, *rm.member.modifiers]))
                 for rm in rtype.members) or name in rtype.body_fields or any(
                 self._has_field(self.index[s.target], name, True)
-                for s in self._project_supers(rtype, True) if s.status == PROJECT) or any(
+                for s in self._project_supers(rtype, not inherited) if s.status == PROJECT) or any(
                 spec.inherited_field(o, name)
                 for o in self._external_ancestors(rtype, starred=True))
         return self._field_cache[key]

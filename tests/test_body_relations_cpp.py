@@ -228,3 +228,26 @@ def test_a_function_without_a_return_type_hides_no_call(tmp_path):
                "int Ticket(int n);\nstruct Ticket { Ticket(int) {} };\n"
                "struct U { void f() { Money(1); Ticket(2); } }; }\n"})
     assert _body(ir) == [("s::U", "s::Money", 5)]
+
+
+def test_a_bases_own_bases_are_looked_into(tmp_path):
+    # only the bases of the class and the classes around it may be dependent: `ViaPtr<int>`
+    # is known, and so is its `TBase<T*>` (`TBase<int*>`): its nested types and its field
+    ir = extract_source(tmp_path, {
+        "a.h": "struct Inner {}; struct Deep {}; struct Helper {};\n"
+               "template <class T> struct TBase { struct Inner {}; struct Deep {}; int Helper; };\n"
+               "template <class T> struct ViaPtr : TBase<T*> { void f() { Inner i; } };\n"
+               "struct Leaf : ViaPtr<int> { void f() { Inner i; Deep d; int n = sizeof(Helper); } };\n"
+               "template <class T> struct Chain : ViaPtr<int> { void f() { Inner i; } };\n"})
+    assert _body(ir) == [("Chain", "TBase::Inner", 5), ("Leaf", "TBase::Deep", 4),
+                         ("Leaf", "TBase::Inner", 4), ("ViaPtr", "Inner", 3)]
+
+
+def test_an_enumerator_hides_a_type_only_where_a_value_may_stand_and_as_near(tmp_path):
+    # the namespace's struct Cash is nearer than the global `enum Coin { Cash }`
+    ir = extract_source(tmp_path, {
+        "a.h": "enum Coin { Cash };\nstruct Gold {};\n"
+               "namespace s { struct Cash {}; enum Metal { Gold };\n"
+               "struct M { void f() { Cash c; int n = sizeof(Cash); }\n"
+               "  void g() { int n = sizeof(Gold); }\n  void h() { Gold g; } }; }\n"})
+    assert _body(ir) == [("s::M", "Gold", 6), ("s::M", "s::Cash", 4)]
