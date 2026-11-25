@@ -24,7 +24,10 @@ extractor's names of the same file, type and simple name, and counts:
 
     mismatch   the extractor draws a project type the key does not give there (the key
                gives another one, a type outside the sources, a type parameter ...), or
-               draws a supertype as external where the key gives a project type
+               draws a supertype as external where the key gives a project type; counted
+               apart where the key has no answer (a compile error, checkers or
+               compilations that disagree: "error", "disputed", "split") or where the
+               file or line is not compiled
     miss       the key gives a project type the extractor does not draw: it resolves the
                name to nothing of the project, leaves it unresolved, or reads no name there
     agreed     the rest of the key's names the extractor read; "unread" the key's names of
@@ -287,8 +290,8 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
                 verdict += " (file with compile errors)"
             elif skipped == "all" or r["line"] in skipped:
                 verdict += " (not compiled)"
-            elif r["kind"] == "error":
-                verdict += " (key: error)"
+            elif r["kind"] in ("error", "disputed", "split"):
+                verdict += f" (key: {r['kind']})"
         counts[verdict] += 1
         counts["names"] += 1
         counts["project names"] += project
