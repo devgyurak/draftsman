@@ -90,3 +90,12 @@ def test_an_alias_of_such_a_type_is_expanded(tmp_path):
                          ("dependency", "Options", "gen"), ("dependency", "Key", "c"),
                          ("dependency", "Item", "c")}
 
+def test_a_type_predicate_depends_on_its_type(tmp_path):
+    ir = _ir(tmp_path, "  isLogger(x: unknown): x is Logger { return true; }\n"
+             "  check(x: unknown): asserts x is Options {}\n"
+             "  check2(x: unknown): asserts x {}")
+    assert _rels(ir) == {("dependency", "Logger", "isLogger"), ("dependency", "Options", "check")}
+
+def test_a_destructured_parameter_depends_on_its_type(tmp_path):
+    ir = _ir(tmp_path, "  start({ a }: Options, [b]: [Item]): void {}")
+    assert _rels(ir) == {("dependency", "Options", "start"), ("dependency", "Item", "start")}

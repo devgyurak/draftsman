@@ -87,6 +87,16 @@
 (abstract_method_signature
   name: (_) @name
   return_type: (type_annotation (_) @type)?) @member.method
+; a type predicate as the return type: `x is Logger`, `asserts x is Logger`
+(method_definition
+  name: (_) @name
+  return_type: [(type_predicate_annotation (_) @type) (asserts_annotation (_) @type)] body: (_)? @body) @member.method
+(method_signature
+  name: (_) @name
+  return_type: [(type_predicate_annotation (_) @type) (asserts_annotation (_) @type)]) @member.method
+(abstract_method_signature
+  name: (_) @name
+  return_type: [(type_predicate_annotation (_) @type) (asserts_annotation (_) @type)]) @member.method
 
 (enum_body (property_identifier) @name @member.enum_constant)
 (enum_body (enum_assignment name: (_) @name) @member.enum_constant)
@@ -94,21 +104,21 @@
 ; ---------------------------------------------------------------- parameters
 (method_definition
   parameters: (formal_parameters
-    [(required_parameter pattern: [(identifier) (rest_pattern)] @param.name
+    [(required_parameter pattern: [(identifier) (rest_pattern) (object_pattern) (array_pattern)] @param.name
                          type: (type_annotation (_) @param.type)?)
-     (optional_parameter pattern: (identifier) @param.name
+     (optional_parameter pattern: [(identifier) (object_pattern) (array_pattern)] @param.name
                          type: (type_annotation (_) @param.type)?)] @param))
 (method_signature
   parameters: (formal_parameters
-    [(required_parameter pattern: [(identifier) (rest_pattern)] @param.name
+    [(required_parameter pattern: [(identifier) (rest_pattern) (object_pattern) (array_pattern)] @param.name
                          type: (type_annotation (_) @param.type)?)
-     (optional_parameter pattern: (identifier) @param.name
+     (optional_parameter pattern: [(identifier) (object_pattern) (array_pattern)] @param.name
                          type: (type_annotation (_) @param.type)?)] @param))
 (abstract_method_signature
   parameters: (formal_parameters
-    [(required_parameter pattern: [(identifier) (rest_pattern)] @param.name
+    [(required_parameter pattern: [(identifier) (rest_pattern) (object_pattern) (array_pattern)] @param.name
                          type: (type_annotation (_) @param.type)?)
-     (optional_parameter pattern: (identifier) @param.name
+     (optional_parameter pattern: [(identifier) (object_pattern) (array_pattern)] @param.name
                          type: (type_annotation (_) @param.type)?)] @param))
 
 ; ---------------------------------------------------------------- aliases
