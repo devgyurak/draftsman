@@ -1063,15 +1063,21 @@ class Resolver:
             return Resolution(PROJECT, name)
         return Resolution(ALIAS, name) if name in self.aliases else Resolution(EXTERNAL, name)
 
-    def member_named(self, rtype: RawType, name: str) -> bool:
+    def member_named(self, rtype: RawType, name: str, before_dot: bool = False) -> bool:
         """Whether ``rtype``, a type around it or a base of either has a member (a field,
         property, method, event or constant) ``name``, also one a base outside the sources
-        has as far as the language knows it (LanguageSpec.outside_member)."""
+        has as far as the language knows it (LanguageSpec.outside_member). ``before_dot``:
+        the name stands before a `.`, where a member whose type has its name is the type
+        (C#'s "Color Color": `Kind.A` beside `public Kind Kind`)."""
+        def hides(m) -> bool:
+            if m.name != name or m.kind == "constructor":
+                return False
+            written = parse_type(m.type_ref) if before_dot and m.type_ref else None
+            return not (isinstance(written, Named) and written.name.rsplit(".", 1)[-1] == name)
         cur: Optional[RawType] = rtype
         while cur is not None:
             for q in self._ancestors(cur):
-                if any(rm.member.name == name and rm.member.kind != "constructor"
-                       for rm in self.index[q].members):
+                if any(hides(rm.member) for rm in self.index[q].members):
                     return True
             if self._outside_member_of(cur, name, False, set()):
                 return True
@@ -2359,7 +2365,7 @@ class _Builder:
                 # `Kind.A`: the type Kind, or a constant of one; `Model`: a class or a value
                 name = text.replace(" ", "")
                 if spec.members_hide_annotation_args and self.resolver.member_named(
-                        rtype, name.split(sep, 1)[0]):
+                        rtype, name.split(sep, 1)[0], sep in name):
                     continue   # C#'s `nameof(Order)` beside a property Order: the property
                 while name:
                     res = self.resolver.resolve(name, rtype, None, scope=ann.scope)

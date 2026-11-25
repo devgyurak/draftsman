@@ -138,3 +138,15 @@ def test_a_namespace_blocks_alias_is_that_blocks(tmp_path):
     assert _rels(ir, "Shop.Sub4.D4") == {("Shop.Order", "O")}
     assert _body(ir, "Shop.Sub4.D4") == {"Shop.Order"}
 
+
+def test_a_member_named_like_its_type_is_the_type_before_a_dot(tmp_path):
+    # `[Tag(Kind.A)]` beside `public Kind Kind` of a base: Shop.Kind (Color Color);
+    # `nameof(Order)` beside a property Order stays the property (cs19)
+    ir = extract_source(tmp_path, {"A.cs": (
+        "using System;\nnamespace Shop {\n  public enum Kind { A }\n  public class Order {}\n"
+        "  public class TagAttribute : Attribute { public TagAttribute(object o) {} }\n"
+        "  public class Base6 { public string Order => \"\"; public Kind Kind => Kind.A; }\n"
+        "  public class OnClass : Base6 {\n    [Tag(Kind.A)] public void N() {}\n"
+        "    [Tag(nameof(Order))] public void O() {}\n  }\n}\n")})
+    assert _rels(ir, "Shop.OnClass") >= {("Shop.Kind", "@Tag")}
+    assert ("Shop.Order", "@Tag") not in _rels(ir, "Shop.OnClass")

@@ -197,7 +197,7 @@ def watch(builder) -> None:
                     continue
                 name = text.replace(" ", "")
                 if spec.members_hide_annotation_args and builder.resolver.member_named(
-                        rtype, name.split(sep, 1)[0]):
+                        rtype, name.split(sep, 1)[0], sep in name):
                     continue   # C#'s `nameof(Order)` beside a property Order
                 while name:   # `Kind.A`: the type Kind, or a constant of one
                     res = resolve(name, rtype, None, scope=ann.scope)
