@@ -1013,12 +1013,15 @@ class Resolver:
             cur = self.index.get(cur.outer) if cur.outer else None
         return False
 
-    def _namespace_around(self, head: str, rtype: RawType) -> bool:
+    def _namespace_around(self, head: str, rtype: RawType, alias: bool = False) -> bool:
         """Whether ``head`` names a namespace of the sources the code around ``rtype``
-        sees by that name: one inside a namespace around it, or a top one."""
+        sees by that name: one inside a namespace around it, or a top one (with ``alias``,
+        not a top one: a namespace alias of the file's scope is the file's top name)."""
         spec = LANGUAGES[rtype.language]
         sep = spec.separator
         for ns in self._namespace_chain(rtype.namespace, sep, spec.parent_namespace_lookup):
+            if alias and not ns:
+                continue
             cand = ns + sep + head if ns else head
             if cand in self.namespaces or cand in self.opened_namespaces:
                 return True
@@ -2038,8 +2041,14 @@ class _Builder:
                 # stands for every project type it names (as a declared relation's)
                 rooted = ref.text.startswith(sep)   # `::Helper`: the global namespace's
                 parts = ref.text[len(sep):].split(sep) if rooted else ref.text.split(sep)
-                # `fs::D` after `namespace fs = a::inner;` in the file: a::inner::D
+                # `fs::D` after `namespace fs = a::inner;` in the file: a::inner::D, unless a
+                # namespace or a class of the name is nearer (`shop::fs`, a nested `gs`)
                 renamed = ref.scope.namespace_aliases.get(parts[0]) if len(parts) > 1 else None
+                if renamed and not rooted and (
+                        self.resolver._namespace_around(parts[0], rtype, alias=True)
+                        or self.resolver._in_body(parts[0], rtype, ref, 0).status
+                        in (PROJECT, ALIAS)):
+                    renamed = None
                 if renamed:
                     rooted = True
                 n = 0

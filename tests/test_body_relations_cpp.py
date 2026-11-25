@@ -243,6 +243,18 @@ def test_a_bases_own_bases_are_looked_into(tmp_path):
                          ("Leaf", "TBase::Inner", 4), ("ViaPtr", "Inner", 3)]
 
 
+def test_a_namespace_alias_gives_way_to_a_nearer_namespace_or_class(tmp_path):
+    ir = extract_source(tmp_path, {
+        "a.cc": "namespace a { namespace inner { struct D {}; struct E {}; } }\n"
+                "namespace fs = a::inner;\nnamespace gs = a::inner;\n"
+                "namespace shop { namespace fs { struct D {}; }\n"
+                "struct X { struct gs { struct D {}; };\n"
+                "  void f() { fs::D d; } void g() { gs::D d; } };\n"
+                "struct Y { void f() { gs::E e; } }; }\n"})
+    assert _body(ir) == [("shop::X", "shop::X::gs::D", 6), ("shop::X", "shop::fs::D", 6),
+                         ("shop::Y", "a::inner::E", 7)]
+
+
 def test_an_enumerator_hides_a_type_only_where_a_value_may_stand_and_as_near(tmp_path):
     # the namespace's struct Cash is nearer than the global `enum Coin { Cash }`
     ir = extract_source(tmp_path, {
