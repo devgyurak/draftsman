@@ -799,6 +799,9 @@ class Extractor:
                     regions.add(n.id)
                 elif cap == "body.var":
                     declared.append((n, "variables"))
+                elif cap == "body.var.enum":
+                    if not self.spec.scoped_enum(n.parent.parent.parent):
+                        declared.append((n, "variables"))
                 elif cap == "body.field":
                     if (owner := self._owner(n, types_by_node)[0]) is not None:
                         owner.body_fields.add(self.spec.body_name_text(_text(n, src)))

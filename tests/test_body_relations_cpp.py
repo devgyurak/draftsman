@@ -306,3 +306,12 @@ def test_an_enumerator_hides_a_type_only_where_a_value_may_stand_and_as_near(tmp
                "struct M { void f() { Cash c; int n = sizeof(Cash); }\n"
                "  void g() { int n = sizeof(Gold); }\n  void h() { Gold g; } }; }\n"})
     assert _body(ir) == [("s::M", "Gold", 6), ("s::M", "s::Cash", 4)]
+
+
+def test_an_enumerator_of_an_enum_in_a_body_hides_a_type(tmp_path):
+    # as a local variable does; not one of an `enum class`
+    ir = extract_source(tmp_path, {
+        "a.h": "struct Paid {}; struct Open {};\n"
+               "struct O { int f() { enum { Paid }; return sizeof(Paid); }\n"
+               "  int g() { enum class S { Open }; return sizeof(Open); } };\n"})
+    assert _body(ir) == [("O", "Open", 3)]

@@ -138,7 +138,10 @@
  (#eq? @_typeid "typeid"))
 
 ; variables a member declares: parameters, locals (also `Lock l(x);`), `for`, `catch`,
-; lambda captures, structured bindings
+; lambda captures, structured bindings; and the enumerators of an enum it declares
+; (`enum { Paid };`: names of the block, not of an `enum class`)
+(compound_statement (enum_specifier body: (enumerator_list (enumerator name: (identifier) @body.var.enum))))
+(compound_statement (declaration type: (enum_specifier body: (enumerator_list (enumerator name: (identifier) @body.var.enum)))))
 (parameter_declaration declarator: [(identifier) @body.var
                                     (pointer_declarator declarator: (identifier) @body.var)
                                     (reference_declarator (identifier) @body.var)
