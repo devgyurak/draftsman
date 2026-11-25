@@ -22,6 +22,7 @@ has a real rival, so that a wrong draw is a mismatch.
 | `cpp10` | 1 | 71 | declared relations, a review's (77 names of the key; 12 mismatches and 3 misses before C++ declarations were looked up as bodies are): a header's using declarations of a type and of a base where it is included, and in another namespace, `#if` branches (a type of the branch not taken beside the global one, a type used outside its branch), a class's own nested type and a namespace's type it only declares, a header with no include of its own naming a type its includer sees, a namespace alias `la::Money`, `la::Box<Item>`, `la::Base::Inner`, a nearer namespace's type before a using declaration, anonymous namespaces' types of two `.cc` files beside a global one, a method of the type's name (`int Thing() const;`), a parameter of the type's name (`Item Item`), the class's own type in a nested class, `::Money`, a base's member type, a template parameter `Money`, member aliases, a base's using declaration, standard templates' arguments |
 | `cpp11` | 5 | 11 | the base a relation is drawn to is the one names are looked up in (Resolver.supertypes), in declarations and bodies: a base through a namespace alias (`la::Base`), `::Base` beside a namespace's own `Base`, a nearer namespace's `Base` before a using declaration of an outer one, a header's using declaration of the base where it is included, another program's type of the base's name (`Root`, not included) beside `gen::Root` through `using namespace` |
 | `cpp12` | 5 | 20 | a review's third round: a base of the `#if` branch not taken and of every branch of an `#if` chain (`PlatBase`, `#ifdef _WIN32 ... #else`), whose member type `Handle` comes before the global one; a base through a base (`B2 : A : la::Base`), a base written as a typedef (`D : LB`), an enum of a base (`Kind`, `Paid`), a base `Crtp<N>` naming the class; a forward declaration beside definitions in both branches (`fw::Impl`), `::Sel` declared beside a definition no unit compiles (counted apart as not compiled); a header with no include of its own whose base its includer brings in (`inc/d.h`). Declared: 21 names of the key, no mismatch |
+| `cpp13` | 5 | 24 | a review's fourth round: bases written as an alias of an alias, an alias template, a class's own typedef and an alias of an outside class (`typedef std::vector<int> IntVec;`, std's `value_type` beside a global one), a dependent base through an alias template; `#if` chains of three branches, nested chains, one whose `#else` is an `#error` and one with a forward declaration in a branch; a base of an `#ifndef` branch whose members are not known, beside another base, the class's own type and a nested class. Declared: 32 names of the key, no mismatch |
 
 Known limits (mismatches that stay):
 
@@ -80,6 +81,8 @@ Names Clang finds that are not drawn (misses, no failure):
   (`inc/b.h`, included by `use.cc` before `d.h`): what the file sees is not known
 - `cpp12/plat.h:12:13` a member type of a base every branch of an `#if` chain declares
   (`PlatBase::Handle`): a body's `#if` rule stands (declared relations draw it)
+- `cpp13/opaque.h:20:13`, `:20:38` names in the body of a class whose base is not known
+  (`PB`, under `#ifndef DOC`): `Handle` and the namespace's `Path` may be its members
 
 Declared names Clang finds that are not drawn (misses, no failure):
 
@@ -92,6 +95,13 @@ Declared names Clang finds that are not drawn (misses, no failure):
 - `cpp10/shop/hide.h:11:3` a type named like a method the class declares below
   (`Thing t_;` beside `int Thing() const;`): unresolved, as in a body, where a name of the
   class's members may be the method
+- `cpp13/chain.h:23:3` a type of an `#if` chain whose `#else` is an `#error`: every branch a
+  build compiles declares it, but the chain is not read as every branch (#9)
+- `cpp13/chain.h:43:3` a type of a chain one branch of which only declares it
+  (`struct Fwd;`) (#9)
+- `cpp13/opaque.h:8:12`, `:24:3` a base declared only under `#ifndef DOC`, used outside it
+  (#18's rule), and so, a base whose members are not known: `:10:3`, `:13:3`, `:17:5` names
+  found past it, and `:15:8` `lib::Base`, a qualified name it hides too (#9)
 
 Known limits of declared relations (mismatches that stay):
 
