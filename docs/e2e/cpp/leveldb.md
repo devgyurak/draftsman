@@ -8,7 +8,7 @@ Google's key-value store: plain C++ with a C API, ports and benchmarks.
 | Commit | `29465588d3` (2026-11-12) |
 | Extracted | the whole repository without `*_test.cc` and `third_party/` |
 
-Measured on 2026-11-24 with Draftsman after 0.8.0 (at `81ecfac`); the declared relations are the same as 0.3.0's.
+Measured on 2026-11-24 with Draftsman 0.9.0 (at `81ecfac`; 0.9.0 extracts the same `ir.json`); the declared relations are the same as 0.3.0's.
 
 ## Run
 

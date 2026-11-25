@@ -11,7 +11,7 @@ exception classes.
 | Commit | `2ef5cec8a9` (2026-11-17) |
 | Extracted | the whole repository without tests (`testsuite/`, `Data/DataTest`, `CppUnit/`), `samples/`, `fuzzing/`, `Benchmark/` and the bundled third-party code (`dependencies/`, `Data/SQLParser`) |
 
-Measured on 2026-11-24 with Draftsman after 0.8.0 (at `81ecfac`); the declared relations are the same as 0.3.0's.
+Measured on 2026-11-24 with Draftsman 0.9.0 (at `139a7df`; 0.9.0 extracts the same `ir.json`); the declared relations are the same as 0.3.0's.
 
 ## Run
 

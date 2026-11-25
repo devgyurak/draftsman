@@ -7,8 +7,9 @@ Notes for anyone with `view.json` files written against a development build:
 - **0.3.0**: the entries below on nested types and annotations change the default
   focus diagram and the relations in `ir.json`; results measured with 0.2.0 (the
   benchmark's runs among them) are not comparable with 0.3.0 ones.
-- **After 0.8.0**: C++'s `ir.json` gains the relations read from names in bodies
-  (below); results measured with 0.8.0 are not comparable on what C++ bodies relate.
+- **0.9.0**: C++'s `ir.json` gains the relations read from names in bodies
+  (below); results measured with 0.8.0 are not comparable with 0.9.0 ones on what C++
+  bodies relate.
   C++'s declared relations and every other language's `ir.json` are the same.
 - **0.8.0**: Kotlin's `ir.json` gains the relations read from names in bodies
   (below); results measured with 0.7.0 are not comparable with 0.8.0 ones on what Kotlin
@@ -117,7 +118,7 @@ Notes for anyone with `view.json` files written against a development build:
   (`Field`). Django extracts in about 2.5 s instead of 1.0 s. jsoup's, petclinic's,
   Netty's, TypeORM's and nest's `ir.json` are byte for byte the same; the C#, Kotlin and
   C++ e2e projects were not run again.
-- **Names in C++ bodies are relations** (#5). A project type a member function's body
+- **Names in C++ bodies are relations** (#5, 0.9.0). A project type a member function's body
   names is a dependency marked `evidence: "body"`, also in a member defined out of its
   class (`void Foo::bar() {}`, a constructor's initializers, `int Foo::x = ...;`: the
   class's, looked up in the class, its bases and the namespaces around the class: 78% of
