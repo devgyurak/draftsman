@@ -75,3 +75,5 @@ although Roslyn finds a type of the sources there:
 - `cs20/P/Nested.cs:34:16` `Safe`, a global using's alias of `Lib.Box<Lib.Order>`: the
   extractor draws both types the alias names, Roslyn's key gives only the generic's
   definition (`Lib.Box`): a limit of the key's reading of aliases, not of the extractor
+- `cs19/P/Aliases.cs:12:16` `Map`, `using Map = System.Collections.Generic.Dictionary<string,
+  Lib.Order>;` (a name of a container, no longer passed over: #9, case 25): the same

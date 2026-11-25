@@ -2108,7 +2108,9 @@ class _Builder:
                 existing.annotations.append(a)
 
     def _is_project(self, rtype: RawType, member: Optional[RawMember]):
-        return lambda name: self.resolver.resolve(name, rtype, member).status == PROJECT
+        """Whether a name is the project's: a type or a type alias of the sources, which a
+        container of its name (`Provider`, `Vector`, `Map`) never is."""
+        return lambda name: self.resolver.resolve(name, rtype, member).status in (PROJECT, ALIAS)
 
     def _unresolved(self, rtype: RawType, raw: str, res: Resolution, loc: Location,
                     via: Optional[str]) -> None:

@@ -1,6 +1,7 @@
-"""A supertype's type arguments (issue #9, case 24), in every language. Each test is a
-form of the review sets jv3, py3, ts2, cs21, kt17, cpp14 (bench/*_oracle/review), whose
-answers the compilers and checkers give; the relation each form draws is pinned here, as the keys do not tell a dependency
+"""A supertype's type arguments (issue #9, case 24) and project aliases named like a
+container (case 25), in every language. Each test is a form of the review sets jv3, py3,
+ts2, cs21, kt17, cpp14 (bench/*_oracle/review), whose answers the compilers and checkers
+give; the relation each form draws is pinned here, as the keys do not tell a dependency
 from an association."""
 
 from conftest import extract_source
@@ -151,3 +152,24 @@ def test_cpp_base_template_arguments_are_looked_up_as_bodies_do(tmp_path):
         "#include <vector>\n#ifdef _WIN32\nstruct Win {};\n#endif\n"
         "struct D : std::vector<Win> {};\n")})
     assert not _rels(ir, "D")
+
+
+# ------------------------------------------------------------------ 25: container names
+
+def test_project_aliases_named_like_containers_are_expanded(tmp_path):
+    ts = extract_source(tmp_path / "ts", {
+        "m.ts": ("export interface Options {}\nexport interface Logger {}\nexport class Item {}\n"
+                 "export type Provider = Options | Logger;\nexport type Vector = Item[];\n"
+                 "export class A { provider?: Provider; items?: Vector; }\n")})
+    assert _rels(ts, "m.A") == {("association", "m.Options"), ("association", "m.Logger"),
+                                ("association", "m.Item")}
+    cpp = extract_source(tmp_path / "cpp", {"h.h": (
+        "#include <map>\n#include <vector>\nstruct Item {}; struct Node {};\n"
+        "struct Holder { typedef std::vector<Item> Vector; Vector items_; };\n"
+        "struct Holder2 { using Map = std::map<int, Node>; Map m_; };\n")})
+    assert _rels(cpp, "Holder") == {("association", "Item")}
+    assert _rels(cpp, "Holder2") == {("association", "Node")}
+    kt = extract_source(tmp_path / "kt", {"a/T.kt": (
+        "package a\nclass Item\nclass Node\ntypealias Vector = List<Item>\n"
+        "typealias Provider = Node\nclass Holder(val items: Vector, val p: Provider)\n")})
+    assert {("association", "a.Item"), ("association", "a.Node")} <= _rels(kt, "a.Holder")
