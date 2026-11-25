@@ -125,6 +125,11 @@ class JavaSpec(LanguageSpec):
             return text(node.named_children[0]), True
         return super().annotation_arg(node, text)
 
+    def subtype_sees(self, modifiers: list[str]) -> bool:
+        # a private member class or field is not inherited (JLS 8.2): a subclass finds the
+        # name further out (`Hidden` of the package, not Base's private one; #7)
+        return "private" not in modifiers
+
     def inherited_type(self, super_id: str, name: str) -> Optional[str]:
         qname = super_id if "." in super_id else _jdk_named(super_id)
         return _jdk_types(qname).get(name) if qname else None
