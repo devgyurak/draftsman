@@ -688,13 +688,16 @@ is that type. Aliases of aliases are followed.
 - Names in bodies (`evidence: "body"`; a member function's body, also one defined out of
   its class (`void Foo::bar() {}`, `Foo::Foo() : Base(1) {}`, `int Foo::x = ...;`: the
   class's, looked up in the class, its bases, the namespaces around the class, then the
-  file's `using`s), a constructor's initializers, a default argument or member
+  file's `using`s; a using declaration of a namespace or of the file's scope, `namespace
+  app { using lib::Money; }`, is a name of that namespace: after the types a nearer
+  namespace declares, and also in every file that includes its file), a constructor's initializers, a default argument or member
   initializer, an enumerator's value, a friend function, an operator or a destructor
   defined in the class, and what is inside them: lambdas and local classes, which are the
   function's around them). Where only a type stands (a declaration's type, `new`, a cast,
   a template argument) the name is looked up among types; a variable, a parameter, a
   field or a method of the classes around hides a type of its name there too, as C++ has
-  one scope for both. A qualified name's parts are types or namespaces (no variable is
+  one scope for both; so does an enumerator of an enum the member declares (`enum {
+  Paid }; sizeof(Paid)`), as a local variable. A qualified name's parts are types or namespaces (no variable is
   looked up before `::`): the longest prefix that is a project type is drawn
   (`Order::Status::Paid` draws Order::Status, `A::B::c()` A::B), the head looked up in
   the classes around first (`Mutex::ScopedLock` after `using Mutex = FastMutex;`), and a
@@ -769,6 +772,9 @@ is that type. Aliases of aliases are followed.
   branch of its condition (POCO 3); a type of a file the body's file includes through a
   path the suffix match misses (1). A local variable hides its name in the whole member,
   also before it is declared, and a `using namespace` in a function counts for the file.
+  An enumerator of a class around hides a nested class's member type of its name, which
+  is nearer (`Outer`'s `enum { Tag }` and `Outer::In::Tag`: `sizeof(Tag)` in `In` draws
+  nothing).
 - Not handled in declared relations: `#include` graphs (resolution is by name and
   namespace, not by includes; bodies use them, above), template specialisations
   (skipped, see above), private/protected inheritance (drawn as plain `extends`).

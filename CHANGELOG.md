@@ -133,7 +133,9 @@ Notes for anyone with `view.json` files written against a development build:
   type where a value may stand and it is as near or nearer (`sizeof(Paid)`); a base the
   class or a class around it writes with its template parameters (`TBase<T>`) is not
   looked into, a base's own bases are; a file's namespace alias is read where no
-  namespace or class of the name is nearer. What a build decides, read from the
+  namespace or class of the name is nearer; a using declaration of a namespace is that
+  namespace's name, after nearer types, also in the files including its file; an
+  enumerator of an enum a member declares hides a name as a local variable. What a build decides, read from the
   sources: a type of an anonymous namespace is its file's; a type is a candidate only
   where the body's file includes its file, and lookup goes on past it (another
   program's global `Utility` is no RemoteGen's, `Poco::CodeGeneration::Utility` is: 132
