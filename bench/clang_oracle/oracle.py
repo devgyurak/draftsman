@@ -512,7 +512,8 @@ def review(args) -> int:
     `key --compare --declared`: the names drawn and the mismatches of each, of body and of
     declared relations. Fails on a mismatch review/README.md does not list as a known limit
     (`- `set/file:line:col``; a declared one under "Known limits of declared relations")
-    and on fewer names drawn than it lists for the set (`| `set` | n |`). A set compiles
+    and on fewer names drawn, or declared names agreed, than it lists for the set
+    (`| `set` | n | m |`). A set compiles
     without errors: a mismatch in a file with compile errors counts too."""
     import contextlib
     import io
@@ -525,6 +526,7 @@ def review(args) -> int:
     dknown = set(re.findall(r"^- `([^`]+)`", dlimits, re.M))
     dseen: set = set()
     counts = {k: int(v) for k, v in re.findall(r"^\| `(\w+)` \| (\d+) \|", readme, re.M)}
+    dcounts = {k: int(v) for k, v in re.findall(r"^\| `(\w+)` \| \d+ \| (\d+) \|", readme, re.M)}
     sets = sorted((d for d in REVIEW.iterdir() if d.is_dir() and not args.sets
                    or d.name in (args.sets or ())), key=lambda d: (len(d.name), d.name))
     new, seen = [], set()
@@ -541,6 +543,11 @@ def review(args) -> int:
         out = text.getvalue()
         dout = dtext.getvalue()
         dnames = re.search(r"^declared: (\d+) names", dout, re.M)
+        dagreed = re.search(r"^declared: .*?agreed (\d+)", dout, re.M)
+        nd = int(dagreed.group(1)) if dagreed else 0
+        dfewer = d.name in dcounts and nd < dcounts[d.name]
+        if dfewer or not dnames:
+            new.append(d.name + " (declared)")
         dwrong = re.findall(r"^  mismatch(?: \(file with compile errors\))?: (\S+)", dout, re.M)
         dplaces = list(dict.fromkeys(f"{d.name}/{w.rstrip(':')}" for w in dwrong))
         dseen.update(dplaces)
@@ -562,9 +569,10 @@ def review(args) -> int:
               + (f", {len(fresh)} not among the known limits" if fresh else "")
               + (f", fewer than the {counts[d.name]} README.md lists" if fewer else "")
               + (" (scope check failed)" if not drawn else "")
-              + f"; declared: {dnames.group(1) if dnames else '?'} names, "
+              + f"; declared: {dnames.group(1) if dnames else '?'} names, {nd} agreed, "
               f"{len(dplaces)} mismatches"
-              + (f", {len(dfresh)} not among the known limits" if dfresh else ""))
+              + (f", {len(dfresh)} not among the known limits" if dfresh else "")
+              + (f", fewer agreed than the {dcounts[d.name]} README.md lists" if dfewer else ""))
         for line in out.splitlines():
             m = re.match(r"  (?:mismatch|in a file with compile errors): (\S+)", line)
             if m and f"{d.name}/{m.group(1).rstrip(':')}" in fresh:
