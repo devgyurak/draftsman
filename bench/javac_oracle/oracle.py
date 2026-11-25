@@ -13,6 +13,8 @@ holds what the answer keys of the other languages share.
     uv run bench/javac_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR --declared [--save F]
     uv run bench/javac_oracle/oracle.py measure OUT.jsonl [--ir ir.json]
     uv run bench/javac_oracle/oracle.py jdk
+    uv run bench/javac_oracle/oracle.py key DIR [-o OUT.jsonl] [--compare [--declared]] [-v]
+    uv run bench/javac_oracle/oracle.py review [SET ...]
 
 `selftest` checks the oracle against the hand-written answers in
 tests/fixtures/java/body (its README gives the marker format), so that a mismatch later
@@ -27,6 +29,10 @@ the names declared relations are drawn from instead (bench/declared.py, issue #7
 `--save` writes what it found as JSON. `measure` prints the counts
 the rules of the receiver position are decided by. `jdk` writes the table of the nested
 types and fields JDK supertypes pass on (JdkMembers.java), which the extractor reads.
+
+`key` runs javac over a directory of sources (Java 21) and, with `--compare`, compares
+them with the extractor as `compare` does; `review` does so for every set of
+hand-written sources below review/ (bench/review_sets.py, review/README.md).
 
 The JDK is $JAVA_HOME, else Homebrew's openjdk@21 (/usr/bin/javac on macOS is a stub).
 """
@@ -277,6 +283,54 @@ def compare(args) -> int:
     return answer_key.compare(drawn, recs, args.verbose, key="javac")
 
 
+# ------------------------------------------------------------------ a directory, review sets
+
+REVIEW = HERE / "review"
+
+
+def key_dir(d: Path, out: Path) -> list[dict]:
+    sys.path.insert(0, str(ROOT / "skills" / "draftsman" / "scripts"))
+    from extract import discover
+    return oracle(d, [f for f, _ in discover(d, {"java"}, [])], ["--release", "21"], out)
+
+
+def check_dir(root: Path, recs: list[dict], verbose: bool, args=None) -> int:
+    sys.path.insert(0, str(ROOT / "skills" / "draftsman" / "scripts"))
+    from extract import discover
+    from draftsman.extractor import Extractor
+    from draftsman.langs import spec_for_path
+    from draftsman.resolve import _Builder
+    from draftsman.wrappers import Wrappers
+    builder = _Builder(str(root), [Extractor(spec_for_path(rel)).extract(f, rel, root)
+                                   for f, rel in discover(root, {"java"}, [])], Wrappers.load())
+    if args is not None and args.declared:
+        declared.watch(builder)
+        builder.build()
+        return declared.report(builder, recs, root, args, key="javac")
+    builder.build()
+    return answer_key.compare(builder.body_uses, recs, verbose, key="javac")
+
+
+def key(args) -> int:
+    d = args.dir.resolve()
+    with tempfile.TemporaryDirectory() as tmp:
+        out = args.output or Path(tmp, "key.jsonl")
+        recs = key_dir(d, out)
+        errors = [r for r in recs if "diagnostic" in r]
+        print(f"{args.dir}: {sum(1 for r in recs if 'use' in r)} names, {len(errors)} compile errors")
+        for r in errors:
+            print(f"  compile error: {r.get('file')}:{r.get('line')}: {r['diagnostic']}")
+        if args.compare:
+            return check_dir(d, answer_key.body(recs) if not args.declared else recs,
+                             args.verbose, args)
+    return 0
+
+
+def review(args) -> int:
+    import review_sets
+    return review_sets.review(REVIEW, args.sets, key_dir, check_dir)
+
+
 # ------------------------------------------------------------------ jdk
 
 JDK_TABLE = ROOT / "skills" / "draftsman" / "scripts" / "draftsman" / "langs" / "java_jdk.json"
@@ -375,6 +429,17 @@ def main(argv=None) -> int:
     declared.arguments(k)
     k.set_defaults(fn=compare)
     sub.add_parser("jdk").set_defaults(fn=jdk_table)
+    kd = sub.add_parser("key")
+    kd.add_argument("dir", type=Path)
+    kd.add_argument("-o", "--output", type=Path)
+    kd.add_argument("--compare", action="store_true")
+    kd.add_argument("--declared", action="store_true")
+    kd.add_argument("--save", type=Path)
+    kd.add_argument("-v", "--verbose", action="store_true")
+    kd.set_defaults(fn=key)
+    rv = sub.add_parser("review")
+    rv.add_argument("sets", nargs="*")
+    rv.set_defaults(fn=review)
     m = sub.add_parser("measure")
     m.add_argument("oracle", type=Path)
     m.add_argument("--ir", type=Path, help="ir.json of the same sources: count only what it lacks")

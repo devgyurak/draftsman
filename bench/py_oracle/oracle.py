@@ -13,6 +13,8 @@ their answers.
     uv run bench/py_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR --declared [--save F]
     uv run bench/py_oracle/oracle.py measure OUT.jsonl [--ir ir.json]
     uv run bench/py_oracle/oracle.py checkers OUT.jsonl
+    uv run bench/py_oracle/oracle.py key DIR [-o OUT.jsonl] [--compare [--declared]] [-v]
+    uv run bench/py_oracle/oracle.py review [SET ...]
 
 Each answer is read as a project class (by its id), a class declared in a function
 ("local"), or anything else. Where the three give the same, the record keeps mypy's kind
@@ -44,6 +46,10 @@ sources. `compare` extracts the same sources and checks every name a body relati
 drawn from against the key at its place; with `--declared`, the names declared relations
 are drawn from instead (bench/declared.py, issue #7). `measure` prints what the rules for hiding names
 are decided by, `checkers` how often each pair of checkers agrees.
+
+`key` runs the three checkers over a directory of sources (no dependencies) and, with
+`--compare`, compares them with the extractor as `compare` does; `review` does so for
+every set of hand-written sources below review/ (bench/review_sets.py, review/README.md).
 
 The checkers run in environments of their own, pinned below, never in the plugin's:
 mypy's pure-Python wheel through `uv run --with` (type_uses.py subclasses its visitors,
@@ -369,6 +375,48 @@ def checkers(args) -> int:
     return 0
 
 
+REVIEW = HERE / "review"
+
+
+def key_dir(d: Path, out: Path) -> list[dict]:
+    from extract import discover
+    return oracle(d, discover(d, {"python"}, []), sys.executable, out)
+
+
+def check_dir(root: Path, recs: list[dict], verbose: bool, args=None) -> int:
+    from extract import discover
+    from draftsman.extractor import Extractor
+    from draftsman.langs import spec_for_path
+    from draftsman.resolve import _Builder
+    from draftsman.wrappers import Wrappers
+    builder = _Builder(str(root), [Extractor(spec_for_path(rel)).extract(f, rel, root)
+                                   for f, rel in discover(root, {"python"}, [])], Wrappers.load())
+    if args is not None and args.declared:
+        declared.watch(builder)
+        builder.build()
+        return declared.report(builder, recs, root, args, key="the three checkers")
+    builder.build()
+    return answer_key.compare(builder.body_uses, recs, verbose, key="the three checkers")
+
+
+def key(args) -> int:
+    d = args.dir.resolve()
+    with tempfile.TemporaryDirectory() as tmp:
+        out = args.output or Path(tmp, "key.jsonl")
+        recs = key_dir(d, out)
+        print(f"{args.dir}: {sum(1 for r in recs if 'use' in r)} names, "
+              f"{sum(1 for r in recs if r.get('kind') == 'disputed')} disputed")
+        if args.compare:
+            return check_dir(d, answer_key.body(recs) if not args.declared else recs,
+                             args.verbose, args)
+    return 0
+
+
+def review(args) -> int:
+    import review_sets
+    return review_sets.review(REVIEW, args.sets, key_dir, check_dir)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -400,6 +448,17 @@ def main(argv=None) -> int:
     a = sub.add_parser("checkers")
     a.add_argument("oracle", type=Path)
     a.set_defaults(fn=checkers)
+    kd = sub.add_parser("key")
+    kd.add_argument("dir", type=Path)
+    kd.add_argument("-o", "--output", type=Path)
+    kd.add_argument("--compare", action="store_true")
+    kd.add_argument("--declared", action="store_true")
+    kd.add_argument("--save", type=Path)
+    kd.add_argument("-v", "--verbose", action="store_true")
+    kd.set_defaults(fn=key)
+    rv = sub.add_parser("review")
+    rv.add_argument("sets", nargs="*")
+    rv.set_defaults(fn=review)
     args = ap.parse_args(argv)
     return args.fn(args)
 
