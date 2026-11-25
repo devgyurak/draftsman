@@ -285,8 +285,11 @@ is that type. Aliases of aliases are followed.
   (`kotlinx.coroutines.CoroutineScope`) when the file star-imports the package and exactly
   one of the star-imported packages has the name (two would be an ambiguity error in
   Kotlin). The project's own types, explicit imports and the file's own package come
-  first; a core type or default import of the same name is not overruled (`Transient`,
-  and `Json`, which kotlin.js also has, stay as they are). `CoroutineContext.Key` follows its head. The table is not used where a
+  first; such a star import comes before the default imports, as in Kotlin (`Transient`
+  under `import kotlinx.serialization.*` is kotlinx.serialization's, not kotlin.jvm's;
+  `Json` under `import kotlinx.serialization.json.*` is that package's, not kotlin.js's).
+  Where a star-imported package the list knows lacks a default import's name, the default
+  import is still not taken: the lists leave out typealiases. `CoroutineContext.Key` follows its head. The table is not used where a
   nested type of an external supertype could have the name, as Kotlin would take that
   first: under a supertype whose nested types are not known (Netty, `java.io`), the name
   stays unresolved with both hints. Known: the common supertypes of those libraries, and
@@ -378,17 +381,23 @@ is that type. Aliases of aliases are followed.
   property of it anywhere (Ktor 3), a class of an id another platform's file declares
   private (Ktor's `DatagramSendChannel`, private in `web/`, internal in `jvm/`: 2), a type of another platform's source set a platform one
   depends on (`jvmAndPosix` from `jvm`: Ktor 12); a type a name finds through a star
-  import or a nested type of an interface or a companion when another type of the name
-  comes first; in type positions, a name an import of an enum entry or an object's
+  import when another type of the name comes first; in type positions, a name an import of an enum entry or an object's
   member brings in (`import shop.Kind.A`, where Kotlin looks for a class `A`); in a
   member with a local extension or an anonymous function with a receiver, its receiver's
   members everywhere in the member; a qualified or generic anonymous function's receiver
   type (`fun shop.Ctx.()`); a
   superclass's or an interface's companion members taken for a receiver's or an
-  implementing class's; `o.Part()` (an inner class's constructor after a value). Declared relations follow none of the lookup rules above
-  (#7): they take an interface's or a superclass's companion's nested type for inherited,
-  a project type for one an outside superclass nests (`Thread`'s `State`), and see a name
-  an import alias hides.
+  implementing class's; `o.Part()` (an inner class's constructor after a value).
+- Declared relations and bodies share one lookup (#7): an interface's nested types and
+  those of a superclass's companion are not inherited (the package's type of the name is
+  found instead: `class Impl : Face { val a: N }` is `shop.N`); a name the file imports
+  under another name is no candidate through its package or a star import, and the lookup
+  goes on (`Money` after `import p.Money as Coin` and `import r.*` is `r.Money`); a nested
+  type of a library superclass `kotlin_outside.json` knows comes before the package's
+  (`class T : Thread() { val s: State }` is `java.lang.Thread.State`). Under a superclass
+  the table does not know (androidx.work's `CoroutineWorker` and its `Result`) the
+  package's type is still taken. Review set `bench/kotlin_oracle/review/kt15`; the review
+  compares declared relations too.
 
 ## TypeScript / TSX
 

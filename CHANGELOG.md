@@ -37,11 +37,24 @@ Notes for anyone with `view.json` files written against a development build:
   focus diagram draws those that touch the focus; results measured with 0.3.0 (the
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
+- **After 0.9.0**: Kotlin's declared relations and bodies share the compiler's lookup
+  (below); Ktor's two `Json` names are resolved, nowinandroid's `ir.json` is the same.
 - **After 0.9.0**: C++'s declared relations look names up as bodies do (below); POCO's
   change (14 relations added, 10 removed, 2 names unresolved with a reason, and 3
   unresolved names, of classes whose base is an alias of a class template, read as
   maybe inherited from that template's `std::basic_streambuf`), leveldb's and
   every other language's `ir.json` are the same, and so are the body relations of both.
+- **Kotlin's declarations and bodies share the compiler's lookup** (#7, after 0.9.0). An
+  interface's nested types and those of a superclass's companion are not inherited: the
+  package's type of the name is found (declared relations drew the nested type; bodies drew
+  nothing); a name the file imports under another name is no candidate through its package
+  or a star import, the lookup going on (`Money` after `import p.Money as Coin` and
+  `import r.*` is `r.Money`); a library superclass's nested type the table knows comes
+  before the package's (`Thread.State`); a star import of a library package the lists know
+  comes before the default imports (`Transient`, `Json`). nowinandroid's `ir.json` is the
+  same; Ktor's relations are the same, and two `Json` names are no longer unresolved.
+  Review set `bench/kotlin_oracle/review/kt15`; `oracle.py review` compares declared
+  relations too.
 - **C++ declarations look names up as bodies do** (#7, after 0.9.0). A base, a member's
   type and a parameter's or the return type follow the body's lookup: `::D` is the global
   namespace's, a namespace alias of the file is read, the class's own alias comes first
