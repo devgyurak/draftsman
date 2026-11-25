@@ -333,12 +333,17 @@ class Resolver:
             spec = LANGUAGES[owner.language]
             for sup in self._project_supers(owner, body):
                 if sup.status == PROJECT:
+                    if spec.class_nested_only and self.index[sup.target].kind == "interface":
+                        continue   # Kotlin: an interface passes on no nested type
                     # (a base's own bases are known once the base is: `ViaPtr<int>`'s
                     # `TBase<T*>` is `TBase<int*>`)
                     found = self._member_type(self.index[sup.target], name, sep, inherit, seen)
-                    # C#'s private nested type is no member of a subclass
+                    # C#'s private nested type is no member of a subclass, nor Kotlin's type
+                    # nested in a superclass's companion object (folded into the class)
                     if found and (found not in self.index
-                                  or spec.subtype_sees(self.index[found].modifiers)):
+                                  or spec.subtype_sees(self.index[found].modifiers)
+                                  and not (spec.class_nested_only
+                                           and self.index[found].static_scope)):
                         return found
         return None
 

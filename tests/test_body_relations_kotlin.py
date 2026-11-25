@@ -68,9 +68,7 @@ def test_body_relations_go_where_the_hand_written_answers_say():
             wrong.append((file, line, answer))
     assert wrong == []
     # every project type recorded is drawn but where a function of the name may be called
-    # instead (`Money(1)`: a function `Money` is declared at a file's top), a top-level type
-    # of the name of an interface's or a superclass's companion's nested type, which the
-    # extractor finds first and so gives up (`InComp` in Sub), a type's own
+    # instead (`Money(1)`: a function `Money` is declared at a file's top), a type's own
     # name (`Order(1)` in Order's companion) and the part of a longer name (`Order` in
     # `Order.Line`, `Ticket` in `Ticket.Factory`)
     recorded = {(raw.path, line, col) for raw in _fixture() for t in raw.types
@@ -80,8 +78,6 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     assert missed == [
         ("shop/Hiding.kt", 34, "shop.Money"), ("shop/Model.kt", 7, "shop.Order"),
         ("shop/Model.kt", 8, "shop.Order"), ("shop/Model.kt", 17, "shop.Money"),
-        ("shop/Nesting.kt", 14, "shop.InComp"), ("shop/Nesting.kt", 15, "shop.InComp"),
-        ("shop/Nesting.kt", 18, "shop.N"), ("shop/Nesting.kt", 19, "shop.N"),
         ("shop/Places.kt", 8, "shop.Money"), ("shop/Places.kt", 15, "shop.Money"),
         ("shop/Places.kt", 21, "shop.Money"), ("shop/Places.kt", 31, "shop.Money"),
         ("shop/Places.kt", 32, "shop.Money"), ("shop/Uses.kt", 13, "shop.Order"),
