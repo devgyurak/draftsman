@@ -71,6 +71,20 @@ class TypeTuple:
     items: tuple
 
 
+@dataclass(frozen=True)
+class TypeIntersection(TypeUnion):
+    """TypeScript's `A & B`: its items are read as a union's are (each one a type the
+    value is)."""
+
+
+@dataclass(frozen=True)
+class TypeMention(FunctionType):
+    """TypeScript types a type names without being one of them (`params`): an object type
+    literal's members (`{ item: Logger }`), an indexed access (`Foo['bar']`), a
+    conditional type, a type predicate (`x is Logger`), a mapped type. Read as a function
+    type's are: a dependency on each, never an association."""
+
+
 # generic names that are tuples when given two or more element types (unless the project
 # defines a class of that name: see special_form)
 _TUPLES = frozenset({"tuple", "Tuple", "typing.Tuple", "std::tuple", "std::pair", "ValueTuple",
@@ -403,16 +417,511 @@ def special_form(ref: Named) -> Optional[str]:
     return None
 
 
-def parse_type(text: Optional[str]) -> Optional[TypeRef]:
-    """Parse a type expression; return ``None`` if it has no usable structure."""
+def parse_type(text: Optional[str], dialect: Optional[str] = None) -> Optional[TypeRef]:
+    """Parse a type expression; return ``None`` if it has no usable structure.
+    ``dialect`` "typescript" reads TypeScript's whole type syntax (_TsParser), which no
+    other language's text is read with (LanguageSpec.type_dialect)."""
     if not text:
         return None
+    if dialect == "typescript":
+        try:
+            tokens, breaks = _ts_tokenize(text)
+            return _TsParser(tokens, breaks).parse()
+        except (_ParseError, RecursionError):
+            return None
     if "Annotated" in text:
         text = _strip_annotated(text)
     try:
         return _Parser(_tokenize(text)).parse()
     except _ParseError:
         return None
+
+
+# ------------------------------------------------------------------ TypeScript
+
+_TS_TOKEN = re.compile(
+    r"""(?P<ident>(?:[^\W\d]|\$)[\w$]*)
+      | (?P<num>\d[\w.]*)
+      | (?P<str>"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')
+      | (?P<punct>\.\.\.|=>|\+\?|-\?|[<>\[\](){},;?|&*.:=+\-!@`])
+    """,
+    re.VERBOSE,
+)
+_TS_TEMPLATE = "#tpl"   # a template literal type: `#tpl` `(` type `,` type `)`
+
+
+def _ts_tokenize(text: str) -> tuple[list[str], list[bool]]:
+    """TypeScript type tokens, and for each whether a line break stands before it (an
+    indexed access `A[K]` has none: on a new line `[K]: V` is an index signature). A
+    template literal type gives `#tpl ( T1 , T2 )` of the types in its `${...}`."""
+    tokens: list[str] = []
+    breaks: list[bool] = []
+    pos, n, brk = 0, len(text), False
+    # the `}` that closes a template's `${`: the template goes on after it
+    holes: list[int] = []
+    depth = 0
+
+    def template(pos: int) -> int:
+        """Scan template text from ``pos`` (after a backtick or a hole's `}`) to the next
+        `${` or the closing backtick."""
+        nonlocal depth
+        i = pos
+        while i < n:
+            c = text[i]
+            if c == "\\":
+                i += 2
+                continue
+            if c == "`":
+                tokens.append(")")
+                breaks.append(False)
+                return i + 1
+            if c == "$" and i + 1 < n and text[i + 1] == "{":
+                if tokens[-1] != "(":
+                    tokens.append(",")
+                    breaks.append(False)
+                holes.append(depth)
+                return i + 2
+            i += 1
+        raise _ParseError("unterminated template")
+
+    while pos < n:
+        c = text[pos]
+        if c in " \t\r\n":
+            brk = brk or c == "\n"
+            pos += 1
+            continue
+        if text.startswith("//", pos):
+            end = text.find("\n", pos)
+            pos = n if end < 0 else end
+            continue
+        if text.startswith("/*", pos):
+            end = text.find("*/", pos + 2)
+            if end < 0:
+                raise _ParseError("unterminated comment")
+            brk = brk or "\n" in text[pos:end]
+            pos = end + 2
+            continue
+        if c == "`":
+            tokens += [_TS_TEMPLATE, "("]
+            breaks += [brk, False]
+            brk = False
+            pos = template(pos + 1)
+            continue
+        if c == "}" and holes and holes[-1] == depth:
+            holes.pop()
+            pos = template(pos + 1)
+            continue
+        m = _TS_TOKEN.match(text, pos)
+        if not m:
+            raise _ParseError(text[pos:])
+        pos = m.end()
+        if m.group("str") or m.group("num"):
+            tok = "#lit"
+        else:
+            tok = m.group("ident") or m.group("punct")
+            depth += (tok == "{") - (tok == "}")
+        tokens.append(tok)
+        breaks.append(brk)
+        brk = False
+    return tokens, breaks
+
+
+def _ts_items(*refs) -> tuple:
+    return tuple(r for r in refs if r is not None)
+
+
+def _mention(*refs) -> Optional[TypeRef]:
+    items = _ts_items(*refs)
+    return TypeMention(items) if items else None
+
+
+class _TsParser(_Parser):
+    """TypeScript's type syntax (parse_type's dialect "typescript"). What the type is made
+    of is kept as the other languages' shapes: a union's and an intersection's items
+    (TypeUnion, TypeIntersection), arrays and tuples, function types, generic names. The
+    types a type only names (an object type literal's members, an indexed access, a
+    conditional type, a mapped type, a type predicate) are a TypeMention. What is no name
+    of a type gives nothing: a literal, a property's or a parameter's name, a tuple's
+    label, a type parameter declared in the text (`<T>() => T`, `infer U`, a mapped
+    type's key), `this`, the key of an indexed access written as a literal."""
+
+    def __init__(self, tokens: list[str], breaks: list[bool]):
+        super().__init__(tokens)
+        self.breaks = breaks
+        self.bound: list[set[str]] = []   # type parameters the text declares, innermost last
+        self.infer: Optional[set[str]] = None   # `infer U` names of a conditional's extends
+
+    def broken(self) -> bool:
+        """Whether a line break stands before the next token."""
+        return self.i < len(self.breaks) and self.breaks[self.i]
+
+    def is_bound(self, name: str) -> bool:
+        return any(name in b for b in self.bound)
+
+    def parse(self) -> Optional[TypeRef]:
+        ref = self.type()
+        if self.peek() is not None:
+            raise _ParseError(f"trailing {self.peek()!r}")
+        return ref
+
+    # a type: a predicate, a function or constructor type, a conditional type
+    def type(self) -> Optional[TypeRef]:
+        tok = self.peek()
+        if tok == "asserts" and (_is_ident(self.peek(1) or "")) and self.peek(1) != "is":
+            self.take()
+            self.take()
+            if self.peek() == "is":
+                self.take()
+                return _mention(self.type())
+            return None
+        if _is_ident(tok or "") and self.peek(1) == "is":   # `x is Logger`, `this is Foo`
+            self.take()
+            self.take()
+            return _mention(self.type())
+        if tok == "abstract" and self.peek(1) == "new":
+            self.take()
+            tok = "new"
+        if tok == "new" and self.peek(1) in ("(", "<"):   # a constructor type
+            self.take()
+            return self.function_type()
+        if tok == "<" or tok == "(" and self.arrow_ahead():
+            return self.function_type()
+        checked = self.union()
+        if self.peek() != "extends":
+            return checked
+        self.take()   # `C extends E ? T : F`
+        was, self.infer = self.infer, set()
+        try:
+            extends = self.union()
+            inferred = self.infer
+        finally:
+            self.infer = was
+        self.take("?")
+        self.bound.append(inferred)
+        try:
+            yes = self.type()
+        finally:
+            self.bound.pop()
+        self.take(":")
+        no = self.type()
+        return _mention(checked, extends, yes, no)
+
+    def arrow_ahead(self) -> bool:
+        """Whether the `(` at hand opens a function type's parameters (a `=>` follows its
+        closing parenthesis)."""
+        depth, j = 0, self.i
+        while j < len(self.toks):
+            t = self.toks[j]
+            if t in ("(", "[", "{"):
+                depth += 1
+            elif t in (")", "]", "}"):
+                depth -= 1
+                if depth == 0:
+                    return j + 1 < len(self.toks) and self.toks[j + 1] == "=>"
+            j += 1
+        return False
+
+    def function_type(self) -> FunctionType:
+        """`<T>(a: A, b?: B) => R`, the parameters' names left out."""
+        bound, named = self.type_params() if self.peek() == "<" else (set(), [])
+        self.bound.append(bound)
+        try:
+            params = self.params()
+            self.take("=>")
+            return FunctionType(params + tuple(named), self.type())
+        finally:
+            self.bound.pop()
+
+    def type_params(self) -> tuple[set[str], list]:
+        """`<T extends A = B, U>`: the names (bound from here on), and the types the
+        constraints and defaults name."""
+        self.take("<")
+        names: set[str] = set()
+        named: list = []
+        self.bound.append(names)   # (the earlier ones are names in the later ones)
+        try:
+            while self.peek() != ">":
+                if self.peek() in ("const", "in", "out") and _is_ident(self.peek(1) or ""):
+                    self.take()
+                name = self.take()
+                if not _is_ident(name):
+                    raise _ParseError(f"bad type parameter {name!r}")
+                names.add(name)
+                if self.peek() == "extends":
+                    self.take()
+                    named += _ts_items(self.type())
+                if self.peek() == "=":
+                    self.take()
+                    named += _ts_items(self.type())
+                if self.peek() == ",":
+                    self.take()
+                elif self.peek() != ">":
+                    raise _ParseError("expected ',' or '>'")
+        finally:
+            self.bound.pop()
+        self.take(">")
+        return names, named
+
+    def params(self) -> tuple:
+        """`(a: A, b?: B, ...c: C[], { d }: D, this: E)`: the parameters' types."""
+        self.take("(")
+        out: list = []
+        while self.peek() != ")":
+            while self.peek() in ("public", "private", "protected", "readonly") \
+                    and self.peek(1) not in (":", "?", ",", ")"):
+                self.take()
+            if self.peek() == "...":
+                self.take()
+            if self.peek() in ("{", "["):   # a destructured parameter
+                self.skip_balanced(self.peek(), "}" if self.peek() == "{" else "]")
+            else:
+                name = self.take()
+                if not _is_ident(name):
+                    raise _ParseError(f"bad parameter {name!r}")
+            if self.peek() == "?":
+                self.take()
+            if self.peek() == ":":
+                self.take()
+                ref = self.type()
+                if ref is not None:
+                    out.append(ref)
+            if self.peek() == ",":
+                self.take()
+            elif self.peek() != ")":
+                raise _ParseError("expected ',' or ')'")
+        self.take(")")
+        return tuple(out)
+
+    def union(self) -> Optional[TypeRef]:
+        if self.peek() == "|":   # prettier's multi-line `| A | B`
+            self.take()
+        items = [self.intersection()]
+        while self.peek() == "|":
+            self.take()
+            items.append(self.intersection())
+        items = [x for x in items if x is not None]
+        if not items:
+            return None
+        return items[0] if len(items) == 1 else TypeUnion(tuple(items))
+
+    def intersection(self) -> Optional[TypeRef]:
+        if self.peek() == "&":
+            self.take()
+        items = [self.operator()]
+        while self.peek() == "&":
+            self.take()
+            items.append(self.operator())
+        items = [x for x in items if x is not None]
+        if not items:
+            return None
+        return items[0] if len(items) == 1 else TypeIntersection(tuple(items))
+
+    def operator(self) -> Optional[TypeRef]:
+        tok = self.peek()
+        if tok == "infer" and _is_ident(self.peek(1) or ""):
+            self.take()
+            name = self.take()
+            if self.infer is not None:
+                self.infer.add(name)
+            if self.peek() == "extends" and self.infer is not None:
+                # `infer U extends C ? ...`: a constraint only where a `?` does not follow
+                self.take()
+                return _mention(self.operator())
+            return None
+        if tok in ("keyof", "readonly", "unique"):   # (as the other languages: dropped)
+            self.take()
+            return self.operator()
+        if tok == "typeof":
+            self.take()
+            if self.peek() == "import":
+                return self.primary_ts()
+            name = self.qualified_name()
+            args = self.arg_list(">") if self.peek() == "<" and not self.broken() else ()
+            return self.postfix_ts(Named(name, args, True))
+        if tok in ("+", "-") and self.peek(1) == "#lit":   # `-1`
+            self.take()
+        return self.postfix_ts(self.primary_ts())
+
+    def postfix_ts(self, ref: Optional[TypeRef]) -> Optional[TypeRef]:
+        while self.peek() == "[" and not self.broken():
+            self.take()
+            if self.peek() == "]":
+                self.take()
+                ref = Array(ref) if ref is not None else None
+                continue
+            key = self.type()   # `Foo['bar']`, `T[number]`, `Foo[K]`
+            self.take("]")
+            ref = _mention(ref, key)
+        return ref
+
+    def primary_ts(self) -> Optional[TypeRef]:
+        tok = self.peek()
+        if tok is None:
+            raise _ParseError("type expected")
+        if tok == "(" and self.arrow_ahead():
+            return self.function_type()
+        if tok == "(":
+            self.take()
+            ref = self.type()
+            self.take(")")
+            return ref
+        if tok == "{":
+            return self.object_type()
+        if tok == "[":
+            return self.tuple_type()
+        if tok == "#lit":
+            self.take()
+            return None
+        if tok == _TS_TEMPLATE:
+            self.take()
+            self.take("(")
+            items = []
+            while self.peek() != ")":
+                items.append(self.type())
+                if self.peek() == ",":
+                    self.take()
+            self.take(")")
+            return _mention(*items)
+        if tok == "this":
+            self.take()
+            return None
+        if tok == "import" and self.peek(1) == "(":   # `import('x')` (a module's type)
+            self.take()
+            self.skip_balanced("(", ")")
+            if self.peek() == ".":
+                self.take()
+                self.qualified_name()
+            if self.peek() == "<":
+                self.arg_list(">")
+            return None
+        if not _is_ident(tok):
+            raise _ParseError(f"unexpected {tok!r}")
+        name = self.qualified_name()
+        args: tuple = ()
+        if self.peek() == "<" and not self.broken():
+            args = self.arg_list(">")
+        if "." not in name and self.is_bound(name):
+            return None
+        return Named(name, args)
+
+    def arg_list(self, close: str) -> tuple:
+        self.take("<")
+        args = []
+        while self.peek() != ">":
+            args.append(self.type())
+            if self.peek() == ",":
+                self.take()
+            elif self.peek() != ">":
+                raise _ParseError("expected ',' or '>'")
+        self.take(">")
+        return tuple(args)
+
+    def tuple_type(self) -> TypeTuple:
+        """`[A, B?, ...C[]]`, `[a: A, b?: B, ...rest: C[]]`."""
+        self.take("[")
+        items: list = []
+        while self.peek() != "]":
+            if self.peek() == "...":
+                self.take()
+            if _is_ident(self.peek() or "") and (
+                    self.peek(1) == ":" or self.peek(1) == "?" and self.peek(2) == ":"):
+                self.take()   # a label
+                if self.peek() == "?":
+                    self.take()
+                self.take(":")
+            ref = self.type()
+            if self.peek() == "?":
+                self.take()
+            if ref is not None:
+                items.append(ref)
+            if self.peek() == ",":
+                self.take()
+            elif self.peek() != "]":
+                raise _ParseError("expected ',' or ']'")
+        self.take("]")
+        return TypeTuple(tuple(items))
+
+    def object_type(self) -> Optional[TypeRef]:
+        """An object type literal or a mapped type: the types of its members."""
+        self.take("{")
+        items: list = []
+        while self.peek() != "}":
+            if self.peek() is None:
+                raise _ParseError("unterminated object type")
+            if self.peek() in (";", ","):
+                self.take()
+                continue
+            items += self.object_member()
+        self.take("}")
+        return _mention(*items)
+
+    def object_member(self) -> list:
+        while True:   # `readonly`, `-readonly`, `get`, unless it is the member's name
+            tok = self.peek()
+            if tok in ("+", "-") and self.peek(1) == "readonly" or tok in (
+                    "readonly", "get", "set") and self.peek(1) not in (
+                    ":", "?", "(", ";", ",", "}", "<", None):
+                self.take()
+                continue
+            break
+        if tok == "[":
+            # a mapped type's `[K in T as N]`, an index signature's `[key: K]`, or a
+            # computed property name `[Symbol.iterator]`
+            if _is_ident(self.peek(1) or "") and self.peek(2) == "in":
+                self.take()
+                key = self.take()
+                self.take("in")
+                self.bound.append({key})
+                try:
+                    over = self.type()
+                    named = None
+                    if self.peek() == "as":
+                        self.take()
+                        named = self.type()
+                    self.take("]")
+                    if self.peek() in ("?", "+?", "-?"):
+                        self.take()
+                    value = None
+                    if self.peek() == ":":
+                        self.take()
+                        value = self.type()
+                    return list(_ts_items(over, named, value))
+                finally:
+                    self.bound.pop()
+            if _is_ident(self.peek(1) or "") and self.peek(2) == ":":
+                self.take()
+                self.take()
+                self.take(":")
+                index = self.type()
+                self.take("]")
+                self.take(":")
+                return list(_ts_items(index, self.type()))
+            self.skip_balanced("[", "]")
+        elif tok == "new" and self.peek(1) in ("(", "<"):   # a construct signature
+            self.take()
+        elif tok in ("(", "<"):   # a call signature
+            pass
+        elif tok == "#lit" or _is_ident(tok or ""):
+            self.take()   # the member's name
+        else:
+            raise _ParseError(f"unexpected {tok!r} in an object type")
+        if self.peek() == "?":
+            self.take()
+        if self.peek() in ("(", "<"):   # a method: `m<T>(a: A): R`
+            bound, out = self.type_params() if self.peek() == "<" else (set(), [])
+            self.bound.append(bound)
+            try:
+                out += self.params()
+                if self.peek() == ":":
+                    self.take()
+                    out += _ts_items(self.type())
+                return out
+            finally:
+                self.bound.pop()
+        if self.peek() == ":":
+            self.take()
+            return list(_ts_items(self.type()))
+        return []
 
 
 def value_names(ref: Optional[TypeRef]) -> set[str]:

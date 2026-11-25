@@ -1,7 +1,8 @@
 import pytest
 
-from draftsman.typeref import (Array, FunctionType, Named, Nullable, Pointer, TypeTuple, TypeUnion,
-                               all_names, function_types, parse_type)
+from draftsman.typeref import (Array, FunctionType, Named, Nullable, Pointer, TypeIntersection,
+                               TypeMention, TypeTuple, TypeUnion, all_names, function_types,
+                               named_refs, parse_type)
 
 
 @pytest.mark.parametrize("text, expected", [
@@ -84,3 +85,50 @@ def test_unparseable_yields_none(text):
 def test_all_names_walks_arguments():
     assert all_names(parse_type("Map<String, List<Order>>")) == ["Map", "String", "List", "Order"]
     assert all_names(parse_type("Order | null")) == ["Order"]
+
+
+TS = "typescript"
+
+
+@pytest.mark.parametrize("text, expected", [
+    # #29: what the shared shapes did not read
+    ('| "simple" | Logger', Named("Logger")),
+    ("| A | B", TypeUnion((Named("A"), Named("B")))),
+    ("A & B", TypeIntersection((Named("A"), Named("B")))),
+    ("A & { x?: B }", TypeIntersection((Named("A"), TypeMention((Named("B"),))))),
+    ("{ item: A }[]", Array(TypeMention((Named("A"),)))),
+    ("(a?: A, b?: B) => C", FunctionType((Named("A"), Named("B")), Named("C"))),
+    ("Required<A>['options']", TypeMention((Named("Required", (Named("A"),)),))),
+    ("C extends A ? B : D", TypeMention((Named("C"), Named("A"), Named("B"), Named("D")))),
+    # #30: type predicates
+    ("x is A", TypeMention((Named("A"),))),
+    ("asserts x is A", TypeMention((Named("A"),))),
+    ("asserts x", None),
+    ("this is A", TypeMention((Named("A"),))),
+    # no names: property and parameter names, labels, literals, names the text declares
+    ("{ Logger: string }", TypeMention((Named("string"),))),
+    ("(Logger: string) => void", FunctionType((Named("string"),), Named("void"))),
+    ("[Logger: string, n?: number]", TypeTuple((Named("string"), Named("number")))),
+    ('"Logger" | Logger', Named("Logger")),
+    ("`Logger-${A}`", TypeMention((Named("A"),))),
+    ("`Logger`", None),
+    ("{ [K in keyof T]: A | K }", TypeMention((Named("T"), Named("A")))),
+    ("T extends Array<infer U> ? U : A", TypeMention((Named("T"), Named("Array", (None,)), Named("A")))),
+    ("<T = A>(x: T) => T", FunctionType((Named("A"),), None)),
+    ("A['Logger']", TypeMention((Named("A"),))),
+    ("typeof value", Named("value", (), True)),
+    ("this", None),
+    ("new () => A", FunctionType((), Named("A"))),
+    ("{ [key: string]: A }", TypeMention((Named("string"), Named("A")))),
+    # a line break ends a member: `[k: string]` below is an index signature, no indexed access
+    ("{\n a: A\n [k: string]: B\n}", TypeMention((Named("A"), Named("string"), Named("B")))),
+])
+def test_typescript_dialect(text, expected):
+    assert parse_type(text, TS) == expected
+
+
+@pytest.mark.parametrize("text", ["A & B", "| A | B", "{ a: A }", "x is A", "A['b']"])
+def test_the_typescript_dialect_is_typescripts_alone(text):
+    # the shapes the languages share read none of these (a C++ `A & b` is no intersection)
+    assert parse_type(text) in (None, Named("A", (None,), subscript=True))
+    assert named_refs(parse_type(text, TS))

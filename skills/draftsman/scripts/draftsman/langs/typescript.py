@@ -104,6 +104,7 @@ class TypeScriptSpec(LanguageSpec):
     query = "typescript"
     extensions = (".ts", ".mts", ".cts")
     separator = "."
+    type_dialect = "typescript"
     opaque_nodes = frozenset({
         "statement_block", "arrow_function", "function_expression", "function_declaration",
         "generator_function", "generator_function_declaration", "class",
@@ -218,6 +219,14 @@ class TypeScriptSpec(LanguageSpec):
 
     def is_abstract(self, owner_kind, member_kind, modifiers, has_body, marker=None):
         return "abstract" in modifiers or (owner_kind == "interface" and member_kind == "method")
+
+    def alias_params(self, node):
+        # `type Fn<T> = (x: T) => void`: T names no type of the sources
+        params = node.parent.child_by_field_name("type_parameters") if node.parent else None
+        if params is None:
+            return []
+        return [n.text.decode() for c in params.named_children
+                if c.type == "type_parameter" and (n := c.child_by_field_name("name")) is not None]
 
     def body_name(self, member_name):
         # `"Foo" = 1` and `'Foo' = 1` in an enum are Foo

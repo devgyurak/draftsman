@@ -154,7 +154,7 @@ def watch(builder) -> None:
 
     def _supers(rtype):
         for sup, res in zip(rtype.supers, builder._super_resolutions(rtype)):
-            ref = parse_type(sup.text)
+            ref = parse_type(sup.text, LANGUAGES[rtype.language].type_dialect)
             if not isinstance(ref, Named):
                 continue
             file = sup.scope.file if sup.scope else rtype.location.file
@@ -190,7 +190,7 @@ def watch(builder) -> None:
                 note(rtype, file, ann.line, ann.name, "annotation", last)
             for text, is_type, line in ann.args:
                 if is_type:
-                    ref = parse_type(spec.normalize_type(text))
+                    ref = parse_type(spec.normalize_type(text), spec.type_dialect)
                     for name, arity in named_refs(ref, lambda n: resolve(
                             n, rtype, None, scope=ann.scope).status == PROJECT):
                         if builder.wrappers.is_wrapper(name):

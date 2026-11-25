@@ -152,6 +152,9 @@ class LanguageSpec:
     query: str = ""                      # queries/<query>.scm; defaults to `name`
     extensions: tuple[str, ...] = ()
     separator: str = "."                 # namespace separator in qualified names
+    # typeref.parse_type's dialect for the language's type texts: "typescript" reads
+    # TypeScript's whole type syntax; None the shapes the languages share
+    type_dialect: Optional[str] = None
 
     # Node types that start a new lexical world (method bodies, lambdas,
     # anonymous classes). Declarations found below them are not members of

@@ -321,7 +321,7 @@ class Resolver:
         try:
             cached = []
             for sup in rtype.supers:
-                ref = parse_type(sup.text)
+                ref = _parse(sup.text, rtype.language)
                 if isinstance(ref, Named):
                     # a supertype clause cannot see the type's *own* inherited member
                     # types, but it does see those of its enclosing types
@@ -422,7 +422,7 @@ class Resolver:
                 if sup.status == PROJECT:
                     stack.append(self.index[sup.target])
                     continue
-                ref = parse_type(written.text)
+                ref = _parse(written.text, t.language)
                 name = ref.name if isinstance(ref, Named) else ""
                 for target in self._outside(name, sup, written.scope or t.scope, t, starred):
                     if target not in out:
@@ -1094,7 +1094,7 @@ class Resolver:
         def hides(m) -> bool:
             if m.name != name or m.kind == "constructor":
                 return False
-            written = parse_type(m.type_ref) if before_dot and m.type_ref else None
+            written = _parse(m.type_ref, rtype.language) if before_dot and m.type_ref else None
             return not (isinstance(written, Named) and written.name.rsplit(".", 1)[-1] == name)
         cur: Optional[RawType] = rtype
         while cur is not None:
@@ -1271,7 +1271,7 @@ class Resolver:
             for sup in supers:
                 # (an anonymous or local class's supertypes are not told apart: an
                 # interface's are taken for a superclass's too)
-                written = parse_type(sup)
+                written = _parse(sup, rtype.language)
                 if not isinstance(written, Named):
                     continue
                 res = self._in_body(written.name, rtype, ref, 0)
@@ -1316,7 +1316,7 @@ class Resolver:
                                            instance):
                     return True
                 continue
-            ref = parse_type(written.text)
+            ref = _parse(written.text, rtype.language)
             sname = ref.name if isinstance(ref, Named) else ""
             if any(spec.outside_instance_member(t, name) if instance
                    else spec.outside_member(t, name, nested_only) for t in self._outside_candidates(
@@ -1419,7 +1419,7 @@ class Resolver:
         Its nested types are no names there."""
         spec = LANGUAGES[rtype.language]
         for text in ref.member.receivers:
-            written = parse_type(text)
+            written = _parse(text, rtype.language)
             if not isinstance(written, Named):
                 continue
             res = self._in_body(written.name, rtype, ref, 0)
@@ -1505,7 +1505,7 @@ class Resolver:
         owner, member = found
         # the field's own type, where it is declared, must be the type the name is: not
         # `Lib.Order Order` in Shop, nor `Money? Money` of a struct (Nullable<Money>)
-        written = member.type_ref and parse_type(member.type_ref)
+        written = member.type_ref and _parse(member.type_ref, rtype.language)
         nullable = isinstance(written, Nullable)
         if nullable:
             written = written.inner
@@ -1570,7 +1570,7 @@ class Resolver:
             return self._declared_alias_type(alias, spec, 0)
         if not spec.body_aliases or entry is None or entry[1].file != ref.scope.file \
                 or alias in entry[1].conditional_aliases or not isinstance(
-                    written := parse_type(entry[0]), Named) or written.args:
+                    written := _parse(entry[0], rtype.language), Named) or written.args:
             return None
         chain = self._namespace_chain(rtype.namespace, spec.separator,
                                       spec.parent_namespace_lookup, ref.scope.namespace)
@@ -1600,7 +1600,7 @@ class Resolver:
         if entry is None or depth > 4:
             return None
         text, scope = entry
-        written = parse_type(text)
+        written = parse_type(text, spec.type_dialect)
         if not isinstance(written, Named) or written.args:
             return None
         sep = spec.separator
@@ -1671,7 +1671,7 @@ class Resolver:
         for i, supers in enumerate(ref.classes[depth:], depth + 1):
             project, outside = [], []
             for sup in supers:
-                written = parse_type(sup)
+                written = _parse(sup, rtype.language)
                 if not isinstance(written, Named):
                     continue
                 owner = self._in_body(written.name, rtype, ref, i)
@@ -1902,7 +1902,7 @@ class Resolver:
                 if sup.status == PROJECT:
                     found = self._unknown_base(self.index[sup.target])
                 else:
-                    ref = parse_type(written.text)
+                    ref = _parse(written.text, rtype.language)
                     name = ref.name if isinstance(ref, Named) else ""
                     last = name.rsplit(spec.separator, 1)[-1]
                     if not last or re.match(r"I[A-Z]", last):
@@ -2188,7 +2188,7 @@ class _Builder:
         answer."""
         if not LANGUAGES[rtype.language].declared_like_bodies:
             return res
-        ref = parse_type(sup.text)
+        ref = _parse(sup.text, rtype.language)
         found = self._like_body(ref.name, rtype, None, sup.scope or rtype.scope, len(ref.args),
                                 sup.line, sup.text, res, base=True)
         if found.status == ALIAS and found.target:
@@ -2210,10 +2210,10 @@ class _Builder:
         text, scope = entry
         if text.strip().startswith("typename "):
             return None
-        ref = parse_type(text)
+        spec = spec_for_path(scope.file)
+        ref = parse_type(text, spec.type_dialect)
         if not isinstance(ref, Named):
             return None
-        spec = spec_for_path(scope.file)
         sep = spec.separator
         owner = alias.rsplit(sep, 1)[0] if sep in alias else None
         ctx = RawType(alias, alias.rsplit(sep, 1)[-1], "alias", Location(scope.file, 0), scope,
@@ -2351,7 +2351,7 @@ class _Builder:
     def _supers(self, rtype: RawType) -> None:
         spec = LANGUAGES[rtype.language]
         for sup, res in zip(rtype.supers, self._super_resolutions(rtype)):
-            ref = parse_type(sup.text)
+            ref = parse_type(sup.text, spec.type_dialect)
             if not isinstance(ref, Named):
                 continue
             loc = Location(sup.scope.file if sup.scope else rtype.location.file, sup.line)
@@ -2412,7 +2412,7 @@ class _Builder:
             for text, is_type, line in ann.args:
                 loc = Location(ann.scope.file, line)
                 if is_type:
-                    ref = parse_type(spec.normalize_type(text))
+                    ref = parse_type(spec.normalize_type(text), spec.type_dialect)
                     for name, arity in named_refs(ref, lambda n: self.resolver.resolve(
                             n, rtype, None, scope=ann.scope).status == PROJECT):
                         if self.wrappers.is_wrapper(name):
@@ -2667,7 +2667,7 @@ class _Builder:
 
     def _association(self, rtype: RawType, rm: RawMember) -> None:
         m = rm.member
-        ref = parse_type(m.type_ref)
+        ref = _parse(m.type_ref, rtype.language)
         loc = Location(m.file or rtype.location.file, m.line)
         cpp = rtype.language == "cpp"
         others: list = []   # container arguments that are not the element: Map<K, V>'s K
@@ -2707,7 +2707,7 @@ class _Builder:
         m = rm.member
         loc = Location(m.file or rtype.location.file, m.line)
         for text in [m.type_ref, m.receiver] + [p.type_ref for p in m.params] + rm.throws:
-            self._depend_on(rtype, rm, parse_type(text), loc, text)
+            self._depend_on(rtype, rm, _parse(text, rtype.language), loc, text)
 
     def _depend_on(self, rtype: RawType, rm: RawMember, ref, loc: Location,
                    text: Optional[str] = None) -> None:
@@ -2733,9 +2733,10 @@ class _Builder:
                       qualifier_args: bool = True) -> tuple[list, list]:
         """What a type alias names, resolved where the alias is declared:
         ([(project type, multiplicity, ownership)] it points at as a field type would,
-        [every project type it mentions]). Aliases of aliases are followed. ``body``: for
-        a name in a body, where the alias's own type parameters name no type (`Hash` of
-        `template <class K, class Hash> using M = map<K, Hash>`). Without ``qualifier_args``
+        [every project type it mentions]). Aliases of aliases are followed; the alias's own
+        type parameters name no type (`Hash` of `template <class K, class Hash> using M =
+        map<K, Hash>`). ``body``: for a name in a body (a dependent `typename` names
+        nothing). Without ``qualifier_args``
         the template arguments of a qualifier name no type: `std::vector<Item>::const_iterator`
         is std's iterator, whatever it is instantiated with (C++'s declared relations)."""
         key = (alias, body) if body and qualifier_args else (alias, body, False) \
@@ -2746,7 +2747,9 @@ class _Builder:
         if entry is None or depth > 4:
             return [], []
         self._alias_cache[key] = ([], [])   # a cycle expands to nothing
-        own = self.resolver.alias_tparams.get(alias, set()) if body else set()
+        # the alias's own type parameters name no type (C++'s alias templates, whose every
+        # expansion is ``body``, and TypeScript's `type Fn<T> = (x: T) => void`)
+        own = self.resolver.alias_tparams.get(alias, set())
         written = entry[0].strip()
         if body and written.startswith("typename ") and (
                 qualifier_args or not written.endswith(">")):
@@ -2763,7 +2766,7 @@ class _Builder:
                       spec.name, namespace=self.types[owner].namespace if owner in self.types
                       else owner or scope.namespace,
                       outer=owner if owner in self.types else None)
-        ref = parse_type(text)
+        ref = parse_type(text, spec.type_dialect)
         leaves: list = []
         for leaf in self.wrappers.leaves(ref, self._is_project(ctx, None),
                                          track_ownership=spec.name == "cpp"):
@@ -2795,6 +2798,11 @@ class _Builder:
         # dependencies per pair is a presentation decision made by the renderer.
         unique = {r.key(): r for r in reversed(self.relations)}
         return sorted(unique.values(), key=lambda r: (r.from_, r.to, r.kind, r.via or ""))
+
+
+def _parse(text: Optional[str], language: str):
+    """parse_type in the language's dialect (LanguageSpec.type_dialect)."""
+    return parse_type(text, LANGUAGES[language].type_dialect)
 
 
 _REBOUND = ("{} is bound more than once where it is written ({} among the bindings): which "
