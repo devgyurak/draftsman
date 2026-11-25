@@ -6,11 +6,12 @@ script runs it in a container, joins the translation units each file is in, and 
 its records into the format bench/answer_key.py gives.
 
     uv run bench/clang_oracle/oracle.py selftest
-    uv run bench/clang_oracle/oracle.py key DIR [-o OUT.jsonl] [--compare] [-v]
+    uv run bench/clang_oracle/oracle.py key DIR [-o OUT.jsonl] [--compare [--declared]] [-v]
     uv run bench/clang_oracle/oracle.py review [SET ...]
     uv run bench/clang_oracle/oracle.py run REPO --checkout DIR -o OUT.jsonl [--raw DIR [--rejoin]]
     uv run bench/clang_oracle/oracle.py scope REPO OUT.jsonl ir.json
     uv run bench/clang_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR [-v]
+    uv run bench/clang_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR --declared [--save F]
     uv run bench/clang_oracle/oracle.py measure OUT.jsonl [--ir ir.json]
     uv run bench/clang_oracle/oracle.py table
 
@@ -27,8 +28,9 @@ needs) and records the translation units of the sources its end-to-end page extr
 (docs/e2e/cpp/); then, as a translation unit of its own each, the headers of those sources
 no translation unit includes. `scope` fails unless the key saw the same types, declared
 in the same files, as ir.json of those sources. `compare` extracts the same sources and
-checks every name a body relation is drawn from against what Clang resolved at its place.
-`measure` prints what the rules for hiding names are decided by. `table` writes the
+checks every name a body relation is drawn from against what Clang resolved at its place;
+with `--declared` (also for `key --compare`), the names declared relations are drawn from
+instead (bench/declared.py, issue #7). `measure` prints what the rules for hiding names are decided by. `table` writes the
 extractor's table of the classes of namespace `std` (libstdc++'s, the image's GCC 13).
 
 What a record says. A name in a body (a function's body, a constructor's initializers, a
@@ -89,6 +91,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(ROOT / "skills" / "draftsman" / "scripts"))
 import answer_key  # noqa: E402
+import declared  # noqa: E402
 from extract import discover  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "cpp" / "body"
@@ -233,6 +236,8 @@ def convert(r: dict, defined: set, aliases: Aliases) -> dict:
         out["spec"] = True
     if r["m"]:
         out["macro"] = r["m"]
+    if r.get("role"):
+        out.update(role=r["role"], in_args=bool(r["args"]))
     return out
 
 
@@ -499,7 +504,7 @@ def key(args) -> int:
     if not args.compare:
         return 0
     root = args.directory.resolve()
-    return check(root, discover(root, {"cpp"}, []), recs, args.verbose)
+    return check(root, discover(root, {"cpp"}, []), recs, args.verbose, args)
 
 
 def review(args) -> int:
@@ -575,10 +580,11 @@ def type_names(checkout: Path, files: list[tuple[Path, str]]) -> list[str]:
 def summary(recs: list[dict], name: str) -> None:
     head = next((r for r in recs if "units" in r and "use" not in r), {"units": 0, "errors": 0})
     errors = [r for r in recs if "diagnostic" in r]
-    uses = Counter(r["kind"] for r in recs if "use" in r)
+    uses = Counter(r["kind"] for r in answer_key.body(recs) if "use" in r)
     print(f"{name}: {head['units']} translation units ({head['errors']} with errors), "
           f"{len(errors)} compile errors in the sources ({len({r['file'] for r in errors})} files); "
-          "names: " + ", ".join(f"{k} {v}" for k, v in uses.most_common()))
+          "names: " + ", ".join(f"{k} {v}" for k, v in uses.most_common())
+          + f"; declared names: {len(declared.declared_records(recs))}")
     for unit in head.get("failed", ()):
         print(f"  with errors: {unit}")
     for r in errors[:20]:
@@ -729,7 +735,8 @@ def apart(ids: dict):
     return why
 
 
-def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: bool) -> int:
+def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: bool,
+          args=None) -> int:
     from draftsman.extractor import Extractor
     from draftsman.langs import spec_for_path
     from draftsman.resolve import _Builder
@@ -737,6 +744,8 @@ def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: 
 
     raw = [Extractor(spec_for_path(rel)).extract(f, rel, root) for f, rel in files]
     builder = _Builder(str(root), raw, Wrappers.load())
+    if args is not None and args.declared:
+        declared.watch(builder)
     ir = builder.build()
     where = {t.id: t.location.file for t in ir.types if t.language == "cpp"}
     if in_scope(recs, where, {t.id: t.location.line for t in ir.types if t.language == "cpp"}):
@@ -753,6 +762,9 @@ def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: 
         return r["target"] in ids or bool(r.get("targets")) or not files & defined.get(r["target"], set()) \
             or files <= builder.part_files.get(dst, set())
 
+    if args is not None and args.declared:
+        return declared.report(builder, recs, root, args, key="Clang", same=same,
+                               uncompiled=uncompiled(recs))
     # code outside every type and a template specialisation's draw nothing: no miss
     rc = answer_key.compare(builder.body_uses, recs, verbose, key="Clang", same=same,
                             drawable=lambda r: answer_key.drawable(r) and r["from"] is not None
@@ -776,7 +788,8 @@ def check(root: Path, files: list[tuple[Path, str]], recs: list[dict], verbose: 
 
 def compare(args) -> int:
     checkout = args.checkout.resolve()
-    return check(checkout, sources(args.repo, checkout), answer_key.read(args.oracle), args.verbose)
+    return check(checkout, sources(args.repo, checkout),
+                 answer_key.read(args.oracle, declared=args.declared), args.verbose, args)
 
 
 def measure(args) -> int:
@@ -863,6 +876,7 @@ def main(argv=None) -> int:
     d.add_argument("--compare", action="store_true",
                    help="check the extractor's body relations of the same files against it")
     d.add_argument("-v", "--verbose", action="store_true", help="list every miss and mismatch")
+    declared.arguments(d)
     d.set_defaults(fn=key)
     v = sub.add_parser("review")
     v.add_argument("sets", nargs="*", help="only these sets (directory names below review/)")
@@ -885,6 +899,7 @@ def main(argv=None) -> int:
     k.add_argument("oracle", type=Path)
     k.add_argument("--checkout", type=Path, required=True)
     k.add_argument("-v", "--verbose", action="store_true", help="list every miss and mismatch")
+    declared.arguments(k)
     k.set_defaults(fn=compare)
     m = sub.add_parser("measure")
     m.add_argument("oracle", type=Path)

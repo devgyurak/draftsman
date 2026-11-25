@@ -34,7 +34,8 @@ extractor's names of the same file, type and simple name, and counts:
     agreed     the rest of the key's names the extractor read; "unread" the key's names of
                types outside the sources at places the extractor reads none (a
                supertype's type arguments); a name outside every type (a top-level
-               function's signature) is left out
+               function's signature) and one in a C++ template specialisation, which
+               the extractor reads nothing of, are left out
 """
 
 from __future__ import annotations
@@ -262,6 +263,9 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
         by_place[(n["file"], n["from"], _simple(n["written"]))].append(n)
         by_type[(n["file"], n["from"])].append(n)
     src = _Sources(root)
+    # the pairs declared relations join: a name not drawn where another declaration of the
+    # type draws the same pair loses no relation ("pair drawn" on a miss)
+    pairs = {(r.from_, r.to) for r in builder.relations if r.evidence is None}
     counts: Counter = Counter()
     rows: list[dict] = []
     matched: set[int] = set()
@@ -272,6 +276,9 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
             continue   # a type naming itself draws nothing
         if not r["from"]:
             counts["outside types"] += 1   # a top-level function's: nothing is drawn (#8)
+            continue
+        if r.get("spec"):
+            counts["in template specialisations"] += 1   # C++: the extractor reads none
             continue
         written = src.written(r)
         here = by_place.get((r["file"], r["from"], r["use"])) or [
@@ -320,7 +327,9 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
                          "status": pick["status"] if pick is not None else "not read",
                          "where": pick["where"] if pick is not None else None,
                          "alias": pick["alias"] if pick is not None else None,
-                         "role": r.get("role"), "in_args": r.get("in_args")})
+                         "role": r.get("role"), "in_args": r.get("in_args"),
+                         "pair_drawn": any((r["from"], t) in pairs for t in wanted),
+                         "type_files": sorted(builder.part_files.get(r["from"], ()))})
     # what the extractor draws where the key resolved no name
     keyed = {(r["file"], r["from"], r["use"]) for r in declared_records(recs)}
     unkeyed = [n for n in names if n["targets"]

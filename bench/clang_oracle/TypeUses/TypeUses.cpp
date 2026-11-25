@@ -8,8 +8,12 @@
 // Only the written code is visited (a template's pattern, not its instances), and only
 // names in a body: a function's body, a constructor's initializers, a default argument, a
 // default member initializer, the initializer of a static member, an enumerator's value.
+// The names of a class's declarations are recorded too (issue #7), "pos" "declared" with
+// "role" ("super": a base; "field": a data member's type, a static one too; "signature": a
+// member function's return and parameter types, a friend function's declared in the class)
+// and "args" (inside template arguments): what the extractor draws declared relations from.
 // Records (oracle.py reads them):
-//   {"n","f","l","c","k","t","tf","pos","max","from","spec","m"}
+//   {"n","f","l","c","k","t","tf","pos","max","from","spec","m"[,"role","args"]}
 //     the name as written, its file below root, 1-based line, 0-based byte column; the
 //     kind (type, alias, tparam, var, member, global, function, method, enumconst,
 //     namespace, nsalias, dependent, local, other); the target's id as ir.json writes it
@@ -407,10 +411,13 @@ public:
     return RecursiveASTVisitor::TraverseNestedNameSpecifierLoc(L);
   }
   bool TraverseTemplateArgumentLoc(const TemplateArgumentLoc &A) {
+    Args++;
     if (A.getArgument().getKind() == TemplateArgument::Template)
       if (TemplateDecl *TD = A.getArgument().getAsTemplate().getAsTemplateDecl())
         rec(A.getTemplateNameLoc(), TD, "type");
-    return RecursiveASTVisitor::TraverseTemplateArgumentLoc(A);
+    bool r = RecursiveASTVisitor::TraverseTemplateArgumentLoc(A);
+    Args--;
+    return r;
   }
   bool VisitDeclRefExpr(DeclRefExpr *E) {
     rec(E->getLocation(), E->getFoundDecl(), "receiver");
@@ -569,9 +576,42 @@ public:
     return "";
   }
 
+  // outside bodies: where in a class's declaration a name stands, or null (module comment)
+  const char *declRole(SourceLocation Loc) {
+    if (Stack.empty()) return nullptr;
+    const Decl *D = Stack.back();
+    auto inClass = [](const Decl *X) {
+      auto *R = dyn_cast<CXXRecordDecl>(X->getLexicalDeclContext());
+      return R && !R->isLambda() && !isLocal(R);
+    };
+    if (auto *R = dyn_cast<CXXRecordDecl>(D)) {
+      // a base, not a specialisation's arguments (`struct Box<Money>`) or an attribute
+      if (R->isLambda() || isLocal(R) || !R->hasDefinition()) return nullptr;
+      SourceLocation L = SM.getExpansionLoc(Loc);
+      for (const CXXBaseSpecifier &B : R->bases())
+        if (SM.isPointWithin(L, SM.getExpansionLoc(B.getBeginLoc()), SM.getExpansionLoc(B.getEndLoc())))
+          return "super";
+      return nullptr;
+    }
+    if (isa<FieldDecl>(D)) return inClass(D) ? "field" : nullptr;
+    if (isa<ParmVarDecl>(D)) {
+      const Decl *P = Stack.size() > 1 ? Stack[Stack.size() - 2] : nullptr;
+      if (P && isa<FunctionDecl>(P)) return inClass(P) ? "signature" : nullptr;
+      if (P && isa<FieldDecl>(P)) return inClass(P) ? "field" : nullptr;
+      return nullptr;
+    }
+    if (auto *Vd = dyn_cast<VarDecl>(D)) return Vd->isStaticDataMember() && inClass(Vd) ? "field" : nullptr;
+    if (isa<FunctionDecl>(D)) return inClass(D) ? "signature" : nullptr;
+    return nullptr;
+  }
+
   void emit(SourceLocation Loc, const char *kind, const std::string &target, const std::string &tf,
             const char *pos) {
-    if (Depth == 0) return;   // no body
+    const char *role = nullptr;
+    if (Depth == 0) {   // no body: a declaration's name, or nothing
+      role = declRole(Loc);
+      if (!role) return;
+    }
     std::string file, name;
     unsigned line, col;
     const char *macro;
@@ -579,6 +619,7 @@ public:
     name = spelled(Loc);
     if (!AllOpt && !Names.count(name) && strcmp(kind, "type") && strcmp(kind, "alias")) return;
     if (Calls.count(Loc.getRawEncoding())) pos = "receiver";
+    if (role) pos = "declared";
     bool spec;
     std::string from = fromOf(spec);
     Line.clear();
@@ -587,7 +628,9 @@ public:
       << ",\"c\":" << col << ",\"k\":\"" << kind << "\",\"t\":\"" << esc(target)
       << "\",\"tf\":\"" << esc(tf) << "\",\"pos\":\"" << pos << "\",\"max\":"
       << !Parts.count(Loc.getRawEncoding()) << ",\"from\":\"" << esc(from) << "\",\"spec\":"
-      << spec << ",\"m\":\"" << macro << "\"}\n";
+      << spec << ",\"m\":\"" << macro << "\"";
+    if (role) s << ",\"role\":\"" << role << "\",\"args\":" << (Args > 0);
+    s << "}\n";
     s.flush();
     if (Seen.insert(Line).second) *O.os << Line;
   }
@@ -609,6 +652,7 @@ public:
   SourceManager &SM;
   std::vector<const Decl *> Stack;
   int Depth = 0;
+  int Args = 0;   // template arguments around
   std::unordered_set<unsigned> Calls, Parts;   // raw locations
   llvm::SmallVector<char, 64> Buf;
   std::string Line;
