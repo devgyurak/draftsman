@@ -242,6 +242,17 @@ class _Sources:
         return re.sub(r"^(global::|::)", "", head) + r["use"]
 
 
+def _defined_uncompiled(builder, target: str, uncompiled) -> bool:
+    """Whether every part of the project type ``target`` is defined in a file or at a line
+    the key lists as not compiled."""
+    t = builder.types.get(target)
+    files = builder.part_files.get(target, set())
+    if t is None or not files or not isinstance(uncompiled, dict):
+        return False
+    return all(uncompiled.get(f) == "all" or f == t.location.file
+               and t.location.line in uncompiled.get(f, ()) for f in files)
+
+
 def compare(builder, recs: list[dict], root: Optional[Path] = None,
             verbose: bool = False, key: str = "the answer key",
             same: Callable[[dict, str], bool] = lambda r, dst: True,
@@ -316,6 +327,12 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
             if r["file"] in broken:
                 verdict += " (file with compile errors)"
             elif skipped == "all" or r["line"] in skipped:
+                verdict += " (not compiled)"
+            elif not project and drawn == [r["target"]] and _defined_uncompiled(
+                    builder, r["target"], uncompiled):
+                # the key's id, which the key takes for no type of the sources: the file
+                # only declares it (`struct NTLMContextImpl;`), and every definition of it
+                # is in lines no unit compiles (a Windows branch)
                 verdict += " (not compiled)"
             elif r["kind"] in ("error", "disputed", "split", "dependent"):
                 verdict += f" (key: {r['kind']})"

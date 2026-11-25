@@ -94,3 +94,18 @@ def test_names_the_key_never_met_are_counted(tmp_path):
     assert [(n["line"], n["where"]) for n in out["uncompared"]] == [(4, "signature")]
     out = declared.compare(builder, [_use("B", 3, 4, "p.B"), _use("B", 4, 4, "p.B")], tmp_path)
     assert out["uncompared"] == []   # `B c(B x)`: one name compared stands for the other
+
+
+def test_a_type_defined_only_in_lines_not_compiled_is_counted_apart(tmp_path):
+    # the header declares Impl; its one definition is in a branch no unit compiles, so the
+    # key takes the id for no type of the sources: a mismatch, but counted apart
+    builder = _names(tmp_path, {
+        "n/h.h": "#pragma once\nnamespace n {\nstruct Impl;\nstruct Ctx { Impl* p; };\n}\n",
+        "n/s.cc": "#include \"h.h\"\nnamespace n {\n#ifdef _WIN32\nstruct Impl { int a; };\n#endif\n}\n"})
+    rec = {"use": "Impl", "file": "n/h.h", "line": 4, "col": 14, "pos": "declared",
+           "kind": "type", "target": "n::Impl", "project": False, "maximal": True,
+           "from": "n::Ctx"}
+    out = declared.compare(builder, [rec], tmp_path, uncompiled={"n/s.cc": {3, 4, 5}})
+    assert out["counts"]["mismatch (not compiled)"] == 1
+    out = declared.compare(builder, [rec], tmp_path, uncompiled={})
+    assert out["counts"]["mismatch"] == 1
