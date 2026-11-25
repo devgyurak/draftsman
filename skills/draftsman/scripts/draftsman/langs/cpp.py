@@ -341,6 +341,7 @@ class CppSpec(LanguageSpec):
     values_hide_types = True
     file_local_bodies = True
     include_visibility = True
+    declared_like_bodies = True
     # a base class of std hides a name by any member the table knows of it (by a member type
     # only before `::`); one the table does not know, or one written with the class's own
     # template parameters (`std::vector<T>`), hides nothing

@@ -89,14 +89,14 @@ def watch(builder) -> None:
                 ctors[(rm.member.file or rt.location.file, rt.qualified_name)].add(rm.member.line)
     resolver = builder.resolver
     resolve = resolver.resolve
-    state = {"depth": 0, "ctx": None}
+    state = {"ctx": None}
 
     def targets(res, rtype, where: str) -> list[str]:
         own = rtype.qualified_name
         if res.status == PROJECT:
             out = [res.target]
         elif res.status == ALIAS and res.target:
-            leaves, mentioned = builder._expand_alias(res.target)
+            leaves, mentioned = builder._alias_names(res.target, rtype)
             out = [t for t, _, _ in leaves] + list(mentioned) if where == "field" \
                 else list(mentioned)
         else:
@@ -116,26 +116,18 @@ def watch(builder) -> None:
                       "alias": resolver.alias_targets[res.target][0]
                       if res.status == ALIAS and res.target in resolver.alias_targets else None})
 
-    def watched(name, rtype, member=None, *more, **kw):
+    declared_resolution = builder._declared_resolution
+
+    def _declared_resolution(name, rtype, rm, arity, text=None):
+        res = declared_resolution(name, rtype, rm, arity, text)
         ctx = state["ctx"]
-        if not more and state["depth"] == 0 and ctx is not None and "arity" in kw \
-                and rtype is ctx[0]:
-            state["depth"] += 1
-            try:
-                res = resolve(name, rtype, member, **kw)
-            finally:
-                state["depth"] -= 1
-            rt, rm, where, values = ctx
+        if ctx is not None and rtype is ctx[0]:
+            rt, _, where, values = ctx
             m = rm.member
             note(rt, m.file or rt.location.file, m.line, name, where, res, values)
-            return res
-        state["depth"] += 1
-        try:
-            return resolve(name, rtype, member, *more, **kw)
-        finally:
-            state["depth"] -= 1
+        return res
 
-    resolver.resolve = watched
+    builder._declared_resolution = _declared_resolution
 
     association, depend_on = builder._association, builder._depend_on
 
@@ -147,12 +139,12 @@ def watch(builder) -> None:
         finally:
             state["ctx"] = was
 
-    def _depend_on(rtype, rm, ref, loc):
+    def _depend_on(rtype, rm, ref, loc, text=None):
         was = state["ctx"]
         where = "field" if was and was[2] == "field" else "signature"
         state["ctx"] = (rtype, rm, where, value_names(ref))
         try:
-            depend_on(rtype, rm, ref, loc)
+            depend_on(rtype, rm, ref, loc, text)
         finally:
             state["ctx"] = was
 
@@ -161,13 +153,13 @@ def watch(builder) -> None:
     supers = builder._supers
 
     def _supers(rtype):
-        for sup, res in zip(rtype.supers, resolver.supertypes(rtype)):
+        for sup, res in zip(rtype.supers, builder._super_resolutions(rtype)):
             ref = parse_type(sup.text)
             if not isinstance(ref, Named):
                 continue
             file = sup.scope.file if sup.scope else rtype.location.file
             if res.status == ALIAS and res.target:   # as _Builder._supers
-                leaves, _ = builder._expand_alias(res.target)
+                leaves, _ = builder._alias_names(res.target, rtype)
                 if len(leaves) == 1:
                     res = type(res)(PROJECT, leaves[0][0])
                 else:

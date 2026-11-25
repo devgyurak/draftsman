@@ -257,6 +257,13 @@ class LanguageSpec:
     # directly or through others, by the body's file (C++: a translation unit sees what it
     # includes; another program's class of the name is none). Bodies only
     include_visibility: bool = False
+    # Whether a name of a declaration (a base, a member's or a parameter's type) is looked
+    # up as a name in a body is (`::D`, a namespace alias of the file, the classes around
+    # first, using declarations where they stand, include visibility; an alias's own
+    # template parameters name no type), and is unresolved, with the reason, where a body
+    # draws nothing (C++, issue #7). A type the file cannot tell whether it sees (one its
+    # includer brings in) is still drawn
+    declared_like_bodies: bool = False
     # When one node is captured as names of several positions, the one kept, by position
     # (C++: what is called before what only a type may be)
     ref_priority: tuple[str, ...] = ()

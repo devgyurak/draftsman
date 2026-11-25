@@ -1099,11 +1099,12 @@ def test_cpp_qt_function_pointers_unions_and_inline_namespaces(tmp_path):
                 "class Cb {\n  void (*cb)(int);\n  union { int a; float b; };\n"
                 "  acme::Versioned v;\n};\n"
                 "namespace acme { class User { Versioned v; }; }\n"),
-        "q.h": ("QT_BEGIN_NAMESPACE\nclass QLabel;\nQT_END_NAMESPACE\nclass Model {};\n"
+        "q.h": ("#include \"w.h\"\nQT_BEGIN_NAMESPACE\nclass QLabel;\nQT_END_NAMESPACE\nclass Model {};\n"
                 "class Item : public QObject {\n  Q_OBJECT\n  QML_ELEMENT\n  QML_NAMED_ELEMENT(Thing)\n"
                 "  Q_PROPERTY(int x READ x) /* moc */\npublic:\n  Model* m;\n};\n"),
         # a forward-declaration header with no other Qt macro
-        "fwd.h": "QT_BEGIN_NAMESPACE\nclass Fwd;\nQT_END_NAMESPACE\nclass Panel { Model* m; };\n",
+        "fwd.h": ("#include \"w.h\"\nQT_BEGIN_NAMESPACE\nclass Fwd;\nQT_END_NAMESPACE\n"
+                  "class Panel { Model* m; };\n"),
         # C code may name constants like Qt's macros
         "e.h": "enum Flags {\n  Q_FIRST = 1,\n  Q_SECOND,\n  Q_FLAG = 4,\n  QML_LAST\n};\n",
     })

@@ -14,7 +14,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
 
-from .extractor import RawBodyRef, RawFile, RawMember, RawType
+from .extractor import BodyNames, RawBodyRef, RawFile, RawMember, RawType
 from .langs import LANGUAGES, FileScope, Import, Unseen, spec_for_path
 from .model import IR, External, Location, Member, Relation, Type, Unresolved
 from .typeref import Named, Nullable, function_types, named_refs, parse_type, value_names
@@ -1954,15 +1954,125 @@ class _Builder:
             members=[rm.member for rm in t.members],
         )
 
+    def _super_resolutions(self, rtype: RawType) -> list[Resolution]:
+        """What each supertype clause of ``rtype`` draws to (LanguageSpec.declared_like_bodies:
+        looked up as a body looks names up; the resolver's own supertypes stay as they are)."""
+        found = self.resolver.supertypes(rtype)
+        if not LANGUAGES[rtype.language].declared_like_bodies:
+            return found
+        out = []
+        for sup, res in zip(rtype.supers, found):
+            ref = parse_type(sup.text)
+            out.append(self._like_body(ref.name, rtype, None, sup.scope or rtype.scope,
+                                       len(ref.args), sup.line, sup.text, res, base=True)
+                       if isinstance(ref, Named) else res)
+        return out
+
+    def _declared_resolution(self, name: str, rtype: RawType, rm: Optional[RawMember],
+                             arity: Optional[int], text: Optional[str] = None) -> Resolution:
+        """What a name of a member's declaration (its type, a parameter's or the return
+        type, ``text`` as written) stands for."""
+        res = self.resolver.resolve(name, rtype, rm, arity=arity)
+        if not LANGUAGES[rtype.language].declared_like_bodies:
+            return res
+        scope = (rm.scope if rm is not None and rm.scope else None) or rtype.scope
+        line = rm.member.line if rm is not None else rtype.location.line
+        return self._like_body(name, rtype, rm, scope, arity, line, text, res)
+
+    def _like_body(self, name: str, rtype: RawType, rm: Optional[RawMember], scope: FileScope,
+                   arity: Optional[int], line: int, text: Optional[str], res: Resolution,
+                   base: bool = False) -> Resolution:
+        """``name`` of a declaration looked up as _body looks a name up
+        (LanguageSpec.declared_like_bodies); ``res`` is the resolver's own answer, kept for a
+        name outside the sources. Where a body draws nothing the name is unresolved, with the
+        reason."""
+        spec = LANGUAGES[rtype.language]
+        sep = spec.separator
+        parts = name.split(sep)
+        file = scope.file
+        ref = RawBodyRef(name, "type", [(line, 0)] * len(parts), rm.member.name if rm else "",
+                         scope, rm, BodyNames(), arities=[None] * (len(parts) - 1) + [arity])
+        # `::D`: the global namespace's (the type parser drops the leading `::`)
+        rooted = bool(text) and re.search(
+            rf"(?<![\w:])::\s*{re.escape(name)}(?![\w:])", text) is not None
+        renamed = scope.namespace_aliases.get(parts[0]) if len(parts) > 1 and not rooted else None
+        if renamed and (self.resolver._namespace_around(parts[0], rtype, alias=True)
+                        or self.resolver._in_body(parts[0], rtype, ref, 0).status
+                        in (PROJECT, ALIAS)):
+            renamed = None
+        target = alias = None
+        if rooted or renamed:
+            full = sep.join([renamed, *parts[1:]]) if renamed else name
+            if full in self.types and not self.resolver._elsewhere(full, file):
+                target = full
+            elif full in self.resolver.aliases:
+                alias = full
+            elif res.target and res.status in (PROJECT, ALIAS):
+                return Resolution(UNRESOLVED, hint=f"{full} is no type of the sources")
+            else:
+                return res
+        elif base:
+            # a base clause: the class's own (inherited) member types are not in scope yet
+            found = self.resolver.resolve(name, rtype, None, inherit=False, scope=scope,
+                                          arity=arity, body_file=file)
+            if found.status == PROJECT:
+                target = found.target
+            elif found.status == ALIAS and found.target:
+                alias = found.target
+            elif res.target and res.status in (PROJECT, ALIAS):
+                return Resolution(UNRESOLVED, hint=self._unseen_why(res.target, file)
+                                  or f"{name} is no type {file} sees")
+            else:
+                return found
+        else:
+            target = self.resolver.body_type(name, rtype, ref)
+            alias = None if target is not None else self.resolver.body_alias(name, rtype, ref)
+            if target is None and alias is None:
+                if res.target and res.status in (PROJECT, ALIAS):
+                    return Resolution(UNRESOLVED, hint=self._unseen_why(res.target, file) or (
+                        f"{name} may be a value, a namespace or a member of a base class "
+                        "outside the sources here, which bodies draw nothing for"))
+                return res
+        if alias is not None:
+            return Resolution(ALIAS, alias)
+        why = self._declared_stop(target, scope, line)
+        return Resolution(UNRESOLVED, hint=why) if why else Resolution(PROJECT, target)
+
+    def _declared_stop(self, target: str, scope: FileScope, line: int) -> Optional[str]:
+        """Why a body would draw nothing to ``target`` from ``line`` of ``scope``'s file
+        (_draw), as far as it holds for a declaration, or None."""
+        branches = self.types[target].branches
+        if branches is not None:
+            around = {cond for first, last, cond in scope.branches if first <= line <= last}
+            if not any(f == scope.file and first <= line <= last or cond in around
+                       for f, first, last, cond in branches):
+                return (f"{target} is declared in an #if branch this declaration is outside "
+                        "of: another type of the name may be meant")
+        return self._unseen_why(target, scope.file)
+
+    def _unseen_why(self, target: str, file: str) -> Optional[str]:
+        if target in self.types and self._unseen_from(target, file) == "skip":
+            return f"{target} is declared in a file {file} does not include"
+        return None
+
+    def _alias_names(self, alias: str, rtype: RawType) -> tuple[list, list]:
+        """_expand_alias for a declared relation: as a body expands it where the language
+        looks declared names up so (an alias's own template parameters name no type, a
+        dependent `typename X<T>::Y` none), and the template arguments of an alias's
+        qualifier (`std::vector<Item>::const_iterator`) name none."""
+        if LANGUAGES[rtype.language].declared_like_bodies:
+            return self._expand_alias(alias, body=True, qualifier_args=False)
+        return self._expand_alias(alias)
+
     def _supers(self, rtype: RawType) -> None:
         spec = LANGUAGES[rtype.language]
-        for sup, res in zip(rtype.supers, self.resolver.supertypes(rtype)):
+        for sup, res in zip(rtype.supers, self._super_resolutions(rtype)):
             ref = parse_type(sup.text)
             if not isinstance(ref, Named):
                 continue
             loc = Location(sup.scope.file if sup.scope else rtype.location.file, sup.line)
             if res.status == ALIAS and res.target:   # `class X : AliasOfBase()`
-                leaves, _ = self._expand_alias(res.target)
+                leaves, _ = self._alias_names(res.target, rtype)
                 if len(leaves) == 1:
                     res = Resolution(PROJECT, leaves[0][0])
             if res.status == PROJECT:
@@ -2273,13 +2383,13 @@ class _Builder:
         others: list = []   # container arguments that are not the element: Map<K, V>'s K
         for leaf in self.wrappers.leaves(ref, self._is_project(rtype, rm), track_ownership=cpp,
                                          dropped=others):
-            res = self.resolver.resolve(leaf.name, rtype, rm, arity=len(leaf.args))
+            res = self._declared_resolution(leaf.name, rtype, rm, len(leaf.args), m.type_ref)
             if res.status == PROJECT:
                 self.relations.append(Relation(
                     rtype.qualified_name, res.target, "association", loc,
                     multiplicity=leaf.multiplicity, ownership=leaf.ownership, via=m.name))
             elif res.status == ALIAS and res.target:   # `Pt p;` with `using Pt = ...Point;`
-                leaves, names = self._expand_alias(res.target)
+                leaves, names = self._alias_names(res.target, rtype)
                 for target, mult, own in leaves:
                     if target != rtype.qualified_name:
                         self.relations.append(Relation(
@@ -2296,30 +2406,32 @@ class _Builder:
             # Type<Factory>, Observable<Order>) are written in the source too: the field
             # depends on them, as a signature does
             for arg in leaf.args:
-                self._depend_on(rtype, rm, arg, loc)
+                self._depend_on(rtype, rm, arg, loc, m.type_ref)
         # a function-typed field (`config: HttpClientConfig.() -> Unit`, also inside a
         # container) holds no instance of those types; it depends on them, as on the
         # container arguments that are not its elements
         for other in [*function_types(ref), *others]:
-            self._depend_on(rtype, rm, other, loc)
+            self._depend_on(rtype, rm, other, loc, m.type_ref)
 
     def _dependencies(self, rtype: RawType, rm: RawMember) -> None:
         m = rm.member
         loc = Location(m.file or rtype.location.file, m.line)
         for text in [m.type_ref, m.receiver] + [p.type_ref for p in m.params] + rm.throws:
-            self._depend_on(rtype, rm, parse_type(text), loc)
+            self._depend_on(rtype, rm, parse_type(text), loc, text)
 
-    def _depend_on(self, rtype: RawType, rm: RawMember, ref, loc: Location) -> None:
-        """A dependency on every project type named in ``ref``, containers seen through."""
+    def _depend_on(self, rtype: RawType, rm: RawMember, ref, loc: Location,
+                   text: Optional[str] = None) -> None:
+        """A dependency on every project type named in ``ref`` (written ``text``),
+        containers seen through."""
         m = rm.member
         values = value_names(ref)   # `typeof setTimeout`: a value, not a missing type
         is_project = self._is_project(rtype, rm)
         for name, arity in named_refs(ref, is_project):
             if self.wrappers.is_wrapper(name) and not is_project(name):
                 continue
-            res = self.resolver.resolve(name, rtype, rm, arity=arity)
+            res = self._declared_resolution(name, rtype, rm, arity, text)
             targets = [res.target] if res.status == PROJECT else \
-                self._expand_alias(res.target)[1] if res.status == ALIAS and res.target else []
+                self._alias_names(res.target, rtype)[1] if res.status == ALIAS and res.target else []
             for target in targets:
                 if target != rtype.qualified_name:
                     self.relations.append(Relation(
@@ -2327,13 +2439,17 @@ class _Builder:
             if res.status == UNRESOLVED and name not in values:
                 self._unresolved(rtype, name, res, loc, via=m.name)
 
-    def _expand_alias(self, alias: str, depth: int = 0, body: bool = False) -> tuple[list, list]:
+    def _expand_alias(self, alias: str, depth: int = 0, body: bool = False,
+                      qualifier_args: bool = True) -> tuple[list, list]:
         """What a type alias names, resolved where the alias is declared:
         ([(project type, multiplicity, ownership)] it points at as a field type would,
         [every project type it mentions]). Aliases of aliases are followed. ``body``: for
         a name in a body, where the alias's own type parameters name no type (`Hash` of
-        `template <class K, class Hash> using M = map<K, Hash>`)."""
-        key = (alias, body) if body else alias
+        `template <class K, class Hash> using M = map<K, Hash>`). Without ``qualifier_args``
+        the template arguments of a qualifier name no type: `std::vector<Item>::const_iterator`
+        is std's iterator, whatever it is instantiated with (C++'s declared relations)."""
+        key = (alias, body) if body and qualifier_args else (alias, body, False) \
+            if not qualifier_args else alias
         if key in self._alias_cache:
             return self._alias_cache[key]
         entry = self.resolver.alias_targets.get(alias)
@@ -2341,9 +2457,15 @@ class _Builder:
             return [], []
         self._alias_cache[key] = ([], [])   # a cycle expands to nothing
         own = self.resolver.alias_tparams.get(alias, set()) if body else set()
-        if body and entry[0].lstrip().startswith("typename "):
-            return [], []   # `typename NObserver<C, N>::Ptr`: known once instantiated
+        written = entry[0].strip()
+        if body and written.startswith("typename ") and (
+                qualifier_args or not written.endswith(">")):
+            # `typename NObserver<C, N>::Ptr`: known once instantiated; a declared relation
+            # reads `typename std::pair<K, Var>`, which names no member, as it is
+            return [], []
         text, scope = entry
+        if not qualifier_args:
+            text = _without_qualifier_args(text)
         spec = spec_for_path(scope.file)
         sep = spec.separator
         owner = alias.rsplit(sep, 1)[0] if sep in alias else None
@@ -2362,7 +2484,8 @@ class _Builder:
             if res.status == PROJECT:
                 leaves.append((res.target, leaf.multiplicity, leaf.ownership))
             elif res.status == ALIAS and res.target:
-                for target, mult, owner in self._expand_alias(res.target, depth + 1, body)[0]:
+                for target, mult, owner in self._expand_alias(res.target, depth + 1, body,
+                                                              qualifier_args)[0]:
                     leaves.append((target, combine(leaf.multiplicity, mult), owner or leaf.ownership))
         names: list = []
         for name, arity in named_refs(ref, self._is_project(ctx, None)):
@@ -2373,7 +2496,7 @@ class _Builder:
             if res.status == PROJECT:
                 names.append(res.target)
             elif res.status == ALIAS and res.target and res.target != alias:
-                names += self._expand_alias(res.target, depth + 1, body)[1]
+                names += self._expand_alias(res.target, depth + 1, body, qualifier_args)[1]
         self._alias_cache[key] = (leaves, list(dict.fromkeys(names)))
         return self._alias_cache[key]
 
@@ -2382,6 +2505,26 @@ class _Builder:
         # dependencies per pair is a presentation decision made by the renderer.
         unique = {r.key(): r for r in reversed(self.relations)}
         return sorted(unique.values(), key=lambda r: (r.from_, r.to, r.kind, r.via or ""))
+
+
+def _without_qualifier_args(text: str) -> str:
+    """``text`` with the template arguments of each qualifier left out
+    (`std::vector<Item>::const_iterator` -> `std::vector::const_iterator`)."""
+    out, i = [], 0
+    while i < len(text):
+        if text[i] == "<":
+            depth, j = 0, i
+            while j < len(text):
+                depth += {"<": 1, ">": -1}.get(text[j], 0)
+                if depth == 0:
+                    break
+                j += 1
+            if text[j + 1:].lstrip().startswith("::"):
+                i = j + 1
+                continue
+        out.append(text[i])
+        i += 1
+    return "".join(out)
 
 
 def build_ir(root: str, files: list[RawFile], wrappers: Wrappers) -> IR:

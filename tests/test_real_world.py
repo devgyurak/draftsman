@@ -96,10 +96,12 @@ def test_cpp_directives_after_other_directives(tmp_path):
         "min.h": "#ifndef MIN\n#define MIN(a, b) ((a) < (b) ? (a) : (b))\n#endif\nclass P {};\n",
         "api.h": ("#if defined(_WIN32)\n#define API __declspec(dllexport)\n#else\n"
                   "#define API __attribute__((visibility(\"default\")))\n#endif\nclass Q {};\n"),
-        "pack.h": "#ifdef __GNUC__\n#pragma pack(push, 1)\n#endif\nclass R { P* p; };\n",
-        "loop.h": ("#if defined(__clang__)\n#pragma clang loop unroll(enable)\n"
+        "pack.h": ("#include \"min.h\"\n#ifdef __GNUC__\n#pragma pack(push, 1)\n#endif\n"
+                   "class R { P* p; };\n"),
+        "loop.h": ("#include \"api.h\"\n#if defined(__clang__)\n#pragma clang loop unroll(enable)\n"
                    "#elif defined(_MSC_VER)\n#pragma loop(ivdep)\n#endif\nclass S { Q* q; };\n"),
-        "cont.h": "#if X\n#define F(a, \\\n   b) (a + b)\n#endif\nclass T { R* r; };\n",
+        "cont.h": ("#include \"pack.h\"\n#if X\n#define F(a, \\\n   b) (a + b)\n#endif\n"
+                   "class T { R* r; };\n"),
     })
     assert not ir.diagnostics
     assert {(r.from_, r.to) for r in ir.relations} == {("R", "P"), ("S", "Q"), ("T", "R")}
