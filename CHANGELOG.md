@@ -155,7 +155,7 @@ Notes for anyone with `view.json` files written against a development build:
   compiles the line agrees. leveldb: 877 names drawn, POCO 21908, 0 mismatches. Not drawn:
   code outside every type (#8: 220 of leveldb's 1027 project type names in bodies, 990 of
   POCO's 21100) and template specialisations (1671 of POCO's). A fixture of 77 names and
-  review sets cpp1 to cpp5 pin the forms. leveldb gains 597 body dependencies and POCO 10885.
+  review sets cpp1 to cpp8 pin the forms. leveldb gains 597 body dependencies and POCO 10885.
   Declared relations are unchanged, but C++ and the other languages no longer name each
   other's types in a directory of both (a C# `Helper` took a C++ global struct); the
   lookup rules above apply to bodies only (#7 lists where declared relations differ).

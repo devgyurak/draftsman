@@ -17,6 +17,7 @@ has a real rival, so that a wrong draw is a mismatch.
 | `cpp5` | 23 | the second review, each rule with a rival type: bases of a base (`Leaf : ViaPtr<int>`, `ViaPtr<T> : TBase<T*>`) and dependent ones of several forms, namespace aliases beside a namespace and a class of the name, a header included at the end of the one that defines its types, template and enum forward declarations, a class's forward declaration, an include a macro makes, an `#if` condition over two lines, a macro defined after the include, a function of an `#if` branch, enumerators of a class, a base, a namespace and the global one beside types |
 | `cpp6` | 19 | the second review's rules again, with rivals of other forms: bases of a dependent base's own base (`Mid<T> : TBase<T>`), dependent bases of a class around, a member template, a rooted alias `::fs::D` and `fs::D::Sub`, forward declarations with an export macro and a default template argument, a friend declaration, a function of an `#if` branch beside a static method, enumerators of a class around, of an enclosing namespace and of a nested one beside types and a thrown `Error("x")` |
 | `cpp7` | 15 | a namespace's using declaration (`namespace app { using lib::Money; }`) in the header and in files including it, an alias of the namespace (`using Thing = lib::Item;`), `typedef struct Node0 {...} Node0;`, an enum in a member's body, an anonymous namespace's type in a `.cc` file beside a global one, `try`/`catch` and a range `for`, a type of the `#if` branch not taken beside the global one |
+| `cpp8` | 14 | using declarations through two includes, of a template, an alias, a function and a variable, beside a nearer namespace's type of the name, in another namespace and in a file not including them, of the file's scope, with a file not included declaring a type of the id; a member's named, unnamed and scoped enums |
 
 Known limits (mismatches that stay):
 
@@ -64,3 +65,7 @@ Names Clang finds that are not drawn (misses, no failure):
   struct Impl; }`, defined in a file not included)
 - `cpp5/shop/alias.cc:15:17` a namespace alias of a namespace (`namespace al = a::inner;`
   inside `shop`); one of the file's scope is read
+- `cpp8/app/use.cc:6:13` a using declaration relative to its namespace (`namespace app {
+  using detail::Impl; }`, `app::detail::Impl`)
+- `cpp8/app/use.cc:35:13` a header's `using namespace` (`namespace far { using namespace
+  lib; }`) in a file that includes it (`Coin` is `lib::Coin`)

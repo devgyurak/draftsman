@@ -744,7 +744,7 @@ is that type. Aliases of aliases are followed.
   does not know, or one written with the class's template parameters (`std::vector<T>`,
   looked into once T is known), nothing is hidden. C++ and the other languages name none
   of each other's types. Checked against Clang (`bench/clang_oracle`): leveldb 877 names,
-  POCO 21,908, no mismatch; review sets cpp2 to cpp5 pin the forms, each rule beside a
+  POCO 21,908, no mismatch; review sets cpp2 to cpp8 pin the forms, each rule beside a
   rival type
   (`bench/clang_oracle/review/README.md`).
 - Known limits of bodies. Not drawn: code outside every type (free functions, a
@@ -762,7 +762,9 @@ is that type. Aliases of aliases are followed.
   typedef (`int Ord::look()`); a namespace alias of a block or of a namespace (`namespace al = a::inner;` in
   `shop`); a class's forward declaration of a nested type (`struct Pim { struct Impl; }`); a
   type the sources only declare (`struct Fwd;` with no definition); a header with no
-  include of its own, which relies on what its includer included first. Includes are read
+  include of its own, which relies on what its includer included first; a using
+  declaration relative to its namespace (`namespace app { using detail::Impl; }`); a
+  header's `using namespace`, in the files that include it. Includes are read
   as a whole: a name above the `#include` of its file counts as included. An include path
   is matched by its suffix where the quoted path from the file's directory fails, which
   may take another directory's file of the name (`"sub/deep.h"` for `one/sub/deep.h`
