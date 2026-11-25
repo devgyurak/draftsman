@@ -15,6 +15,8 @@ has a real rival, so that a wrong draw is a mismatch.
 | `cpp3` | 10 | includes: another directory's type of the name (`one/util.h`, not included: `::Util`), a chain of includes, `"../sub/deep.h"`, a declaration `struct Fwd;` of a type whose file is not included (the name is that type), a header with no include of its own, an include below a use |
 | `cpp4` | 47 | macros (a string `STR(Money::Zero)`, `ID(...)`, `DECL(Money, d)`, `NEWOF(Money)`, `SIZE(Money)`), the vexing parse with a field, an enumerator of the namespace and a type (`Lock l2(Paid)`, `Lock l3(Money)`), `sizeof` and `typeid` of an enumerator, a function of a type's name beside the global type, aliases (`FeedPtr`, `Cash`, `Chan` through an alias template, `Channel::Ptr`), an inline namespace, `::Tag`, types of `#if` branches taken and not taken, casts, a lambda, a pointer to member, `decltype`, `static_assert`, `alignof`, `offsetof`, `noexcept`, a friend, default arguments and member initializers |
 | `cpp5` | 23 | the second review, each rule with a rival type: bases of a base (`Leaf : ViaPtr<int>`, `ViaPtr<T> : TBase<T*>`) and dependent ones of several forms, namespace aliases beside a namespace and a class of the name, a header included at the end of the one that defines its types, template and enum forward declarations, a class's forward declaration, an include a macro makes, an `#if` condition over two lines, a macro defined after the include, a function of an `#if` branch, enumerators of a class, a base, a namespace and the global one beside types |
+| `cpp6` | 19 | the second review's rules again, with rivals of other forms: bases of a dependent base's own base (`Mid<T> : TBase<T>`), dependent bases of a class around, a member template, a rooted alias `::fs::D` and `fs::D::Sub`, forward declarations with an export macro and a default template argument, a friend declaration, a function of an `#if` branch beside a static method, enumerators of a class around, of an enclosing namespace and of a nested one beside types and a thrown `Error("x")` |
+| `cpp7` | 15 | a namespace's using declaration (`namespace app { using lib::Money; }`) in the header and in files including it, an alias of the namespace (`using Thing = lib::Item;`), `typedef struct Node0 {...} Node0;`, an enum in a member's body, an anonymous namespace's type in a `.cc` file beside a global one, `try`/`catch` and a range `for`, a type of the `#if` branch not taken beside the global one |
 
 Known limits (mismatches that stay):
 
@@ -49,7 +51,11 @@ Names Clang finds that are not drawn (misses, no failure):
   condition (`Gate`, taken): another type of the name may be meant
 - `cpp4/shop/a.cc:57:5` the same, of a branch not taken (`Opt`, where `::Opt` is meant):
   the extractor does not know which branches a build takes; also `cpp5/shop/cond.cc:9:13`
-  (`Gate2` in a branch whose condition differs in its second line)
+  (`Gate2` in a branch whose condition differs in its second line), and
+  `cpp7/app/cond.cc:7:13` (`Sel` in the `#ifdef WIDE` branch, used in the `#else` one,
+  where `::Sel` is meant)
+- `cpp6/shop/enums.h:9:29` an enumerator of a class around (`Outer`'s `enum { Tag }`) is
+  taken to hide a nested class's member type (`Outer::In::Tag`, nearer)
 - `cpp5/app/foo_inl.h:3:25`, `4:37` a type a file including the body's file defines
   (`foo.h` includes `foo_inl.h` at its end): which one is meant is not known
 - `cpp5/app/macro.cc:6:13` the same in a file with an include a macro makes
