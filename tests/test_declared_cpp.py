@@ -218,3 +218,13 @@ def test_a_type_every_branch_of_an_if_chain_declares_is_drawn(tmp_path):
     assert _rels(ir, "plat::Uses") == {("plat::PlatBase", "b_")}   # no #else: Half is not
     assert "#if branch" in _unresolved(ir, "plat::Uses")["Half"]
 
+
+def test_a_base_written_as_an_alias_of_one_class_is_looked_into(tmp_path):
+    ir = extract_source(tmp_path, {"c.h": (
+        "#pragma once\nstruct Inner {};\nnamespace lib { struct Base { struct Inner {}; }; }\n"
+        "typedef lib::Base LB;\nusing LU = lib::Base;\n"
+        "struct D : LB { Inner i_; int f() { Inner x; return 0; } };\n"
+        "struct E : LU { Inner i_; };\n")})
+    assert _rels(ir, "D") == {("lib::Base", None), ("lib::Base::Inner", "i_")}
+    assert _body(ir, "D") == {"lib::Base::Inner"}
+    assert _rels(ir, "E") == {("lib::Base", None), ("lib::Base::Inner", "i_")}

@@ -2059,8 +2059,15 @@ class _Builder:
         if not LANGUAGES[rtype.language].declared_like_bodies:
             return res
         ref = parse_type(sup.text)
-        return self._like_body(ref.name, rtype, None, sup.scope or rtype.scope, len(ref.args),
-                               sup.line, sup.text, res, base=True)
+        found = self._like_body(ref.name, rtype, None, sup.scope or rtype.scope, len(ref.args),
+                                sup.line, sup.text, res, base=True)
+        if found.status == ALIAS and found.target:
+            # `typedef lib::Base LB; struct D : LB`: an alias of one class is that class,
+            # looked into as a base is
+            leaves, _ = self._alias_names(found.target, rtype)
+            if len(leaves) == 1 and leaves[0][0] in self.types:
+                return Resolution(PROJECT, leaves[0][0])
+        return found
 
     def _declared_resolution(self, name: str, rtype: RawType, rm: Optional[RawMember],
                              arity: Optional[int], text: Optional[str] = None) -> Resolution:
