@@ -486,6 +486,15 @@ class Extractor:
                         imp.block = spec.separator.join(p for p in [scope.namespace, *parts] if p)
                     elif package_at is not None and node.start_byte > package_at:
                         imp.block = scope.namespace   # after C#'s `namespace A;`: A's
+                if imp is not None and spec.include_visibility and not imp.wildcard:
+                    parts, cur = [], node.parent
+                    while cur is not None and cur.type not in (
+                            "compound_statement", "field_declaration_list"):
+                        if cur.id in namespaces:
+                            parts.insert(0, namespaces[cur.id])
+                        cur = cur.parent
+                    if cur is None:   # at a namespace's scope or the file's
+                        imp.namespace = spec.separator.join(p for p in [scope.namespace, *parts] if p)
                 if imp is not None:
                     around = self._enclosing(node, type_ids) if spec.local_imports else None
                     if around is None:

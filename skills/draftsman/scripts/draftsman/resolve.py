@@ -110,6 +110,8 @@ class Resolver:
         self._unscoped: Optional[dict[str, set[str]]] = None   # _enum_constant_around
         # (id, file) -> None, "skip" or "stop" (_Builder._unseen_from)
         self.unseen_from = None
+        # (scope, file) -> the scope a body of the file looks names up in (_Builder._body_scope)
+        self.body_scope = None
         self.shared_ids: set[str] = set()
 
     def _elsewhere(self, qname: str, file: Optional[str]) -> bool:
@@ -640,6 +642,10 @@ class Resolver:
         spec = LANGUAGES[rtype.language]
         sep = spec.separator
         scope = scope or (member.scope if member and member.scope else None) or rtype.scope
+        if body_file is not None and spec.include_visibility and self.body_scope:
+            # C++: a using declaration of a file it includes (`namespace app { using
+            # lib::Money; }`) is its namespace's name there too
+            scope = self.body_scope(scope, body_file)
         # C++ and the other languages name none of each other's types (no interop): in a
         # directory of both, a C++ `Helper` of the global namespace is no C# `Helper`
         cpp = spec.name == "cpp"
@@ -1824,6 +1830,9 @@ class _Builder:
         self._includers: Optional[dict[str, set[str]]] = None   # _unseen_from
         self.unknown_includes = {f.path for f in files if f.scope.unknown_include}
         self.resolver.unseen_from = self._unseen_from
+        self.resolver.body_scope = self._body_scope
+        self._body_scopes: dict[str, FileScope] = {}
+        self.file_scopes = {f.path: f.scope for f in files}
         # names in bodies of members defined outside their type: the type's
         for f in files:
             for written, ns, ref in f.scope.detached_refs:
@@ -2153,6 +2162,28 @@ class _Builder:
                 where & self._included(f) for f in self._including(file)):
             return "unknown"
         return "skip"
+
+    def _body_scope(self, scope: FileScope, file: str) -> FileScope:
+        """``scope`` as a body of ``file`` looks names up in it (LanguageSpec.include_visibility):
+        a using declaration of a namespace or of the file's scope (`namespace app { using
+        lib::Money; }`) is a name of that namespace, after a type it declares nearer
+        (Import.block), also in every file that includes its file, directly or through others."""
+        if scope is not self.file_scopes.get(file):
+            return scope
+        if file not in self._body_scopes:
+            imports = [replace(i, block=i.namespace) if i.namespace is not None else i
+                       for i in scope.imports]
+            have = {(i.path, i.local_name, i.block) for i in imports}
+            for f in sorted(self._included(file) - {file}):
+                for imp in self.file_scopes[f].imports:
+                    if imp.namespace is None:
+                        continue   # (in a class or a function of that file)
+                    key = (imp.path, imp.local_name, imp.namespace)
+                    if key not in have:
+                        imports.append(replace(imp, block=imp.namespace))
+                        have.add(key)
+            self._body_scopes[file] = replace(scope, imports=imports)
+        return self._body_scopes[file]
 
     def _including(self, file: str) -> set[str]:
         """The files that include ``file``, directly or through others."""

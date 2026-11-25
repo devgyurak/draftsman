@@ -49,6 +49,10 @@ class Import:
     # in code a build may leave out (LanguageSpec.conditional_ranges): not every build
     # resolves a name through it
     conditional: bool = False
+    # C++: the namespace a using declaration stands in ("" for the file's scope; None in a
+    # class or a function): a name of that namespace, which bodies look up with its types
+    # (and in every file that includes it: LanguageSpec.include_visibility)
+    namespace: Optional[str] = None
 
     @property
     def local_name(self) -> str:

@@ -308,6 +308,23 @@ def test_an_enumerator_hides_a_type_only_where_a_value_may_stand_and_as_near(tmp
     assert _body(ir) == [("s::M", "Gold", 6), ("s::M", "s::Cash", 4)]
 
 
+def test_a_using_declaration_of_an_included_file_is_its_namespaces_name(tmp_path):
+    # `using lib::Money;` in `namespace app` of types.h: app's Money where types.h is
+    # included, not where it is not; a type declared nearer comes first; one of the
+    # file's scope too
+    ir = extract_source(tmp_path, {
+        "g.h": "struct Money {};\n",
+        "lib/money.h": "namespace lib { struct Money {}; struct Item {}; }\n",
+        "app/types.h": '#include "g.h"\n#include "lib/money.h"\nnamespace app { using lib::Money; }\n'
+                       "using lib::Item;\n",
+        "app/a.cc": '#include "app/types.h"\nnamespace app { struct U { void f() { Money m; Item i; } }; }\n',
+        "app/b.cc": '#include "g.h"\nnamespace app { struct V { void f() { Money m; } }; }\n',
+        "app/c.cc": '#include "app/types.h"\nnamespace app { namespace in { struct Money {};\n'
+                    "struct W { void f() { Money m; } }; } }\n"})
+    assert _body(ir) == [("app::U", "lib::Item", 2), ("app::U", "lib::Money", 2), ("app::V", "Money", 2),
+                         ("app::in::W", "app::in::Money", 3)]
+
+
 def test_an_enumerator_of_an_enum_in_a_body_hides_a_type(tmp_path):
     # as a local variable does; not one of an `enum class`
     ir = extract_source(tmp_path, {
