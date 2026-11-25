@@ -13,6 +13,20 @@ def _body(ir, src: str) -> set[str]:
     return {r.to for r in ir.relations if r.from_ == src and r.evidence == "body"}
 
 
+def test_an_import_alias_hides_the_name_from_the_package_and_star_imports(tmp_path):
+    # #9: once p.Money is imported as Coin, `Money` is r.Money through `import r.*`
+    ir = extract_source(tmp_path, {
+        "p/T.kt": "package p\nclass Money\n",
+        "r/T.kt": "package r\nclass Money\n",
+        "p/Self.kt": ("package p\nimport p.Money as Coin\nimport r.*\n"
+                      "class Same(val a: Money, val b: Coin) { fun g(): Any = Money() }\n"),
+        "q/H.kt": ("package q\nimport p.*\nimport p.Money as Coin\nimport r.*\n"
+                   "class H(val a: Money, val b: Coin, val c: p.Money)\n")})
+    assert _rels(ir, "p.Same") == {("r.Money", "a"), ("p.Money", "b")}
+    assert _body(ir, "p.Same") == {"r.Money"}
+    assert _rels(ir, "q.H") == {("r.Money", "a"), ("p.Money", "b"), ("p.Money", "c")}
+
+
 def test_an_interface_passes_on_no_nested_type(tmp_path):
     # #11: `N` in a class implementing Face is the package's; a superclass's is inherited
     ir = extract_source(tmp_path, {"shop/F.kt": (

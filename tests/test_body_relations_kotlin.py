@@ -225,14 +225,16 @@ def test_a_kotlin_files_top_level_names_are_no_names_of_java_code_beside_it(tmp_
 
 
 def test_importing_a_type_under_another_name_hides_its_own(tmp_path):
-    # `Token` is other.Token after `import shop.Token as Tok`, even in package shop (kt7)
+    # `Token` is other.Token after `import shop.Token as Tok`, even in package shop (kt7):
+    # the lookup goes on past shop.Token to the star import
     ir = extract_source(tmp_path, {
         "shop/Token.kt": "package shop\nclass Token\n",
         "other/Token.kt": "package other\nclass Token\n",
         "shop/AH.kt": "package shop\nimport other.*\nimport shop.Token as Tok\n"
                       "class AH {\n  fun a() = Token()\n  fun b() { val t: Token? = null }\n"
                       "  fun d() = Tok()\n}\n"})
-    assert _body(ir) == [("shop.AH", "shop.Token", 7)]
+    assert _body(ir) == [("shop.AH", "other.Token", 5), ("shop.AH", "other.Token", 6),
+                         ("shop.AH", "shop.Token", 7)]
 
 
 def test_an_extensions_receiver_hides_a_name_by_a_member_of_it(tmp_path):

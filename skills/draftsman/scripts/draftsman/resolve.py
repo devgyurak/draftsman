@@ -669,6 +669,11 @@ class Resolver:
         # of the name there (`struct Fwd;`): the name is that type (LanguageSpec.include_visibility)
         unseen = (lambda q: self.unseen_from(q, body_file)) \
             if body_file is not None and spec.include_visibility and self.unseen_from else (lambda q: None)
+        # Kotlin: `import p.Money as Coin` hides p.Money's own name in the file, from its
+        # package and its star imports (LanguageSpec.alias_import_hides)
+        renamed = {i.path for i in scope.imports if not i.wildcard and i.alias
+                   and i.local_name != i.path.rsplit(sep, 1)[-1]} \
+            if spec.alias_import_hides else set()
         away = (lambda q: (q in self.index and (self.index[q].language == "cpp") != cpp)
                 or (body_file is not None and self._elsewhere(q, body_file))
                 or unseen(q) == "skip")
@@ -780,7 +785,7 @@ class Resolver:
                 cand = ns + sep + name if ns else name
                 if cand in self.index and unseen(cand) == "stop":
                     return Resolution(PROJECT, cand)   # `struct Fwd;` here: that type
-                if not self._sees(rtype, cand) or away(cand):
+                if not self._sees(rtype, cand) or away(cand) or cand in renamed:
                     pass
                 elif cand in self.index:
                     return Resolution(PROJECT, cand)
@@ -841,8 +846,9 @@ class Resolver:
             if imp.wildcard:
                 found = None if imp.external or not self._exports(imp.path, name, spec, strict) \
                     else self.lookup(imp.path + sep + name, spec, certain=strict)
-                if found and unseen(found) == "skip":
-                    found = None   # a type of a file the body's file does not include
+                if found and (unseen(found) == "skip" or found in renamed):
+                    found = None   # a type of a file the body's file does not include, or
+                    # one the file imports under another name
                 if found and not strict:
                     return self._found(found)
                 if found:
