@@ -37,6 +37,10 @@ Notes for anyone with `view.json` files written against a development build:
   focus diagram draws those that touch the focus; results measured with 0.3.0 (the
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
+- **After 0.9.0**: C#'s declared relations and bodies share Roslyn's lookup (below):
+  eShop's declared relations change (19 retargeted, 1 unresolved) and its bodies gain 6;
+  eShopOnWeb loses 4 declared relations (1 unresolved with a reason); Serilog's `ir.json`
+  is the same.
 - **After 0.9.0**: Kotlin's declared relations and bodies share the compiler's lookup
   (below); Ktor's two `Json` names are resolved, nowinandroid's `ir.json` is the same.
 - **After 0.9.0**: C++'s declared relations look names up as bodies do (below); POCO's
@@ -44,6 +48,18 @@ Notes for anyone with `view.json` files written against a development build:
   unresolved names, of classes whose base is an alias of a class template, read as
   maybe inherited from that template's `std::basic_streambuf`), leveldb's and
   every other language's `ir.json` are the same, and so are the body relations of both.
+- **C#'s declarations and bodies share Roslyn's lookup** (#7, after 0.9.0). A `using X =
+  ...` alias is its file's, at the namespace it stands in: a namespace-less file's no
+  longer reaches every file (eShop's `Order` and `CardType` of Ordering.API's queries, 19
+  relations now to the domain's and the client's types), and one before `namespace A;`
+  comes after the namespaces around. Another project's `internal` type and one of another
+  arity are passed over, the lookup going on to a using's (eShopOnWeb's `List<T>` fields of a
+  class `List` no longer draw the class); below a package's namespace around the code a
+  declared name is unresolved with that reason (eShopOnWeb's `BasketGuards`, in
+  `Ardalis.GuardClauses`); `nameof(X)` in an attribute beside a member X draws nothing; a
+  name after `global::` is the global namespace's. Bodies draw where they drew nothing
+  (eShop 7 names). Review set `bench/roslyn_oracle/review/cs18`; `oracle.py review` compares
+  declared relations too.
 - **Kotlin's declarations and bodies share the compiler's lookup** (#7, after 0.9.0). An
   interface's nested types and those of a superclass's companion are not inherited: the
   package's type of the name is found (declared relations drew the nested type; bodies drew

@@ -221,11 +221,9 @@ is that type. Aliases of aliases are followed.
   (`M.Order` with `using M = Shop.Models;`); a `file` type's name, and in another file a name it
   shares; a Color Color name before a member an extension method shares (`Of`); names in
   top-level statements
-  (no type the extractor sees holds them), after `global::`, through an alias another
-  file declares, a parameter or a local of its type's name (Color Color, whose type is
+  (no type the extractor sees holds them), after `global::`, a parameter or a local of its type's name (Color Color, whose type is
   not kept), a static member beside an instance overload of its name, a name a file's
-  `using static` brings a field of (C# looks at the namespaces around first), a type of
-  another arity further out (`Lib.Box` beyond `Box<T>`), and a name a switch arm's
+  `using static` brings a field of (C# looks at the namespaces around first), and a name a switch arm's
   pattern variable shares elsewhere in the member, a local function's type parameter's
   (`typeof(Money)` elsewhere in a method whose local function is `M<Money>()`), a type
   named as a pointer's (`Point* p`), and a type named `var` or `nameof` where a declaration
@@ -234,11 +232,19 @@ is that type. Aliases of aliases are followed.
   comes through another package or the SDK) is taken for the project's.
 - Not handled: extension methods (they stay members of their static class, which is
   correct but not linked to the extended type), the .NET 8 rule that drops `System.Net.Http` for .NET Framework targets.
-  Declared relations ignore project references and the arity written (`Repo<int>` may
-  resolve to a `Repo` of the namespace around), take types of one id from two projects
-  for one (`Program`), see the `using X = ...` alias of a file without a namespace in
-  every file, and in a file-scoped namespace look at the file's aliases before the
-  namespaces around it (C# after).
+  Declared relations take types of one id from two projects for one (`Program`, #10).
+- Declared relations and bodies share one lookup (#7): a `using X = ...` alias is its
+  file's only, at the namespace it stands in (one at the top of the file, also before
+  `namespace A;`, after every namespace around the code), and no member of its namespace
+  for another file's using of it; a type the file's project does not see (another
+  project's `internal` one, an unreferenced project's) or one the arity written does not
+  fit (`Repo<int>` beside a `Repo` around the code) is passed over, the lookup going on to
+  a using's (bodies drew nothing there, now that type); below a package's namespace around
+  the code a declaration's name is unresolved with that reason too, as a body draws nothing
+  there; a member of the class or of a base hides a name in an attribute's argument
+  (`[Obsolete(nameof(Order))]` beside a property Order); a name after `global::` is the
+  global namespace's. Review set `bench/roslyn_oracle/review/cs18`; the review compares
+  declared relations too.
 
 ## Kotlin
 
