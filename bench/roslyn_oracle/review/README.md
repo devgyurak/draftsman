@@ -31,6 +31,7 @@ names drawn or declared names agreed than the table gives.
 | `cs16` | 31 | 2 | forms tree-sitter and Roslyn may read apart: `F(a < b, c > d)`, `x is T ? a : b`, pointers, `(A)(b)`, `(A)!b`, `(A)~b`, collection expressions and ranges, types named `var`, `dynamic`, `nameof`, `value`, `field` |
 | `cs17` | 73 | 7 | the rest of tree-sitter's declarations in a collection expression and an indexer, type positions (async lambdas, `await foreach`, LINQ with types, combined patterns), array, tuple and generic aliases, where nested and odd members' bodies belong, a record's base arguments, `#if` lines in strings and comments |
 | `cs18` | 5 | 27 | declared relations (issue #7: cases 2, 3, 4, 5, 35), each beside a rival type: a namespace-less file's alias (`using Order = Lib.Order;`) and a file without it, an alias before a file-scoped namespace beside the namespace's type, another project's `internal` type before a using's, the arity written (`Repo<int>`), a package's namespace around the code (CommunityToolkit.Mvvm.Input), `nameof(Order)` beside a base's property, the same names in bodies. The extractor before the fix: 19 declared mismatches, 1 body name |
+| `cs19` | 8 | 32 | a review's probe of the fix: a `global using` alias in every file of its project, aliases of a file in two namespaces of it, a namespace block's alias beside another block of the namespace, a namespace alias (`L.Order`, `L::Order`), an alias of a generic, `InternalsVisibleTo`, an unreferenced project's public type, arity of two type arguments, `nameof` and `typeof` beside members and nested types, `Kind.A` beside `public Kind Kind`, a namespace of the shared framework around the code |
 
 ## Known limits
 
@@ -51,12 +52,19 @@ although Roslyn finds a type of the sources there:
   that references CommunityToolkit.Mvvm, a type `using` brings in (`Item`), one of a
   namespace around (`Helper`), a fully qualified and a partly qualified name (`Box`)
 
+- cs19/P/Block.cs line 8: a namespace block's alias (`using Order = Lib.Order;` in
+  `namespace Shop.Sub4 { }`) where a namespace around declares a type of the name
+  (Shop.Order): a body draws nothing, though the block's alias is nearer (Roslyn: Lib.Order;
+  declared relations draw it)
+
 ## Declared names Roslyn finds that are not drawn (misses, no failure)
 
 - `cs18/P/Pkg.cs:10:16` in a namespace of a package the project references
   (`namespace CommunityToolkit.Mvvm.Input.Mine`), `Order`, which `using Shop;` brings in:
   the package may declare any type, so the name is unresolved with that reason, as a body
   draws nothing there (Roslyn: Shop.Order, the package has none)
+- `cs19/P/Aliases.cs:10:18`, `11:19` a type through a namespace alias (`using L = Lib;`:
+  `L.Order`, `L::Order`): not read (#9)
 
 ## Known limits of declared relations (mismatches that stay)
 
