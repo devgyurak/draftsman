@@ -508,16 +508,22 @@ def key(args) -> int:
 
 
 def review(args) -> int:
-    """Every set of hand-written sources below review/ through `key --compare`: the names
-    drawn and the mismatches of each. Fails on a mismatch review/README.md does not list
-    as a known limit (`- `set/file:line:col``) and on fewer names drawn than it lists for
-    the set (`| `set` | n |`). A set compiles without errors: a mismatch in a file with
-    compile errors counts too."""
+    """Every set of hand-written sources below review/ through `key --compare` and
+    `key --compare --declared`: the names drawn and the mismatches of each, of body and of
+    declared relations. Fails on a mismatch review/README.md does not list as a known limit
+    (`- `set/file:line:col``; a declared one under "Known limits of declared relations")
+    and on fewer names drawn than it lists for the set (`| `set` | n |`). A set compiles
+    without errors: a mismatch in a file with compile errors counts too."""
     import contextlib
     import io
+    from types import SimpleNamespace
     readme = (REVIEW / "README.md").read_text()
     limits = readme.split("Known limits", 1)[-1].split("Names Clang finds", 1)[0]
     known = set(re.findall(r"^- `([^`]+)`", limits, re.M))
+    dlimits = readme.split("Known limits of declared relations", 1)[-1] \
+        if "Known limits of declared relations" in readme else ""
+    dknown = set(re.findall(r"^- `([^`]+)`", dlimits, re.M))
+    dseen: set = set()
     counts = {k: int(v) for k, v in re.findall(r"^\| `(\w+)` \| (\d+) \|", readme, re.M)}
     sets = sorted((d for d in REVIEW.iterdir() if d.is_dir() and not args.sets
                    or d.name in (args.sets or ())), key=lambda d: (len(d.name), d.name))
@@ -525,10 +531,21 @@ def review(args) -> int:
     for d in sets:
         with tempfile.TemporaryDirectory() as tmp:
             text = io.StringIO()
+            dtext = io.StringIO()
             with contextlib.redirect_stdout(text), contextlib.redirect_stderr(io.StringIO()):
                 recs = key_dir(d, Path(tmp, "key.jsonl"))
                 check(d.resolve(), discover(d.resolve(), {"cpp"}, []), recs, True)
+            with contextlib.redirect_stdout(dtext), contextlib.redirect_stderr(io.StringIO()):
+                check(d.resolve(), discover(d.resolve(), {"cpp"}, []), recs, True,
+                      SimpleNamespace(declared=True, verbose=True, save=None))
         out = text.getvalue()
+        dout = dtext.getvalue()
+        dnames = re.search(r"^declared: (\d+) names", dout, re.M)
+        dwrong = re.findall(r"^  mismatch(?: \(file with compile errors\))?: (\S+)", dout, re.M)
+        dplaces = list(dict.fromkeys(f"{d.name}/{w.rstrip(':')}" for w in dwrong))
+        dseen.update(dplaces)
+        dfresh = [p for p in dplaces if p not in dknown]
+        new += dfresh
         drawn = re.search(r"compare: (\d+) names drawn", out)
         wrong = re.findall(r"^  (?:mismatch|in a file with compile errors): (\S+)", out, re.M)
         places = list(dict.fromkeys(f"{d.name}/{w.rstrip(':')}" for w in wrong))
@@ -544,15 +561,24 @@ def review(args) -> int:
               + (f", {errors} compile errors" if errors else "")
               + (f", {len(fresh)} not among the known limits" if fresh else "")
               + (f", fewer than the {counts[d.name]} README.md lists" if fewer else "")
-              + (" (scope check failed)" if not drawn else ""))
+              + (" (scope check failed)" if not drawn else "")
+              + f"; declared: {dnames.group(1) if dnames else '?'} names, "
+              f"{len(dplaces)} mismatches"
+              + (f", {len(dfresh)} not among the known limits" if dfresh else ""))
         for line in out.splitlines():
             m = re.match(r"  (?:mismatch|in a file with compile errors): (\S+)", line)
             if m and f"{d.name}/{m.group(1).rstrip(':')}" in fresh:
                 print(line)
+        for line in dout.splitlines():
+            m = re.match(r"  mismatch(?: \(file with compile errors\))?: (\S+)", line)
+            if m and f"{d.name}/{m.group(1).rstrip(':')}" in dfresh:
+                print("  declared" + line[1:])
         for r in recs:
             if "diagnostic" in r:
                 print(f"  compile error: {r['file']}:{r['line']}: {r['diagnostic']}")
-    gone = sorted(k for k in known if k.split("/", 1)[0] in {d.name for d in sets} and k not in seen)
+    names_ = {d.name for d in sets}
+    gone = sorted(k for k in known if k.split("/", 1)[0] in names_ and k not in seen)
+    gone += sorted(k for k in dknown if k.split("/", 1)[0] in names_ and k not in dseen)
     for k in gone:
         print(f"known limit no longer a mismatch: {k}")
     return 1 if new else 0

@@ -4,8 +4,8 @@ Each directory is a set of sources a review wrote to put the extractor and Clang
 side on forms the end-to-end repositories lack. `oracle.py review` compiles each (every
 `.cc` file a translation unit, C++17, the directory as include path, and each header no
 unit includes a unit of its own) and compares the body relations the extractor draws from
-it with Clang's answers; it fails on a mismatch not listed below as a known limit, and on
-fewer names drawn than the table says. The sets compile without errors: a wrong candidate
+it, and its declared relations (issue #7), with Clang's answers; it fails on a mismatch
+not listed below as a known limit, and on fewer body names drawn than the table says. The sets compile without errors: a wrong candidate
 has a real rival, so that a wrong draw is a mismatch.
 
 | Set | Names drawn | What it holds |
@@ -18,6 +18,7 @@ has a real rival, so that a wrong draw is a mismatch.
 | `cpp6` | 19 | the second review's rules again, with rivals of other forms: bases of a dependent base's own base (`Mid<T> : TBase<T>`), dependent bases of a class around, a member template, a rooted alias `::fs::D` and `fs::D::Sub`, forward declarations with an export macro and a default template argument, a friend declaration, a function of an `#if` branch beside a static method, enumerators of a class around, of an enclosing namespace and of a nested one beside types and a thrown `Error("x")` |
 | `cpp7` | 15 | a namespace's using declaration (`namespace app { using lib::Money; }`) in the header and in files including it, an alias of the namespace (`using Thing = lib::Item;`), `typedef struct Node0 {...} Node0;`, an enum in a member's body, an anonymous namespace's type in a `.cc` file beside a global one, `try`/`catch` and a range `for`, a type of the `#if` branch not taken beside the global one |
 | `cpp8` | 14 | using declarations through two includes, of a template, an alias, a function and a variable, beside a nearer namespace's type of the name, in another namespace and in a file not including them, of the file's scope, with a file not included declaring a type of the id; a member's named, unnamed and scoped enums |
+| `cpp9` | 0 | declared relations (issue #7), each form beside a rival type: an alias template's own parameter (`Hash`), a qualified name whose head is the class's own alias (`Mutex::ScopedLock`), another program's type of the name (`a/util.h`'s `Utility` beside `gen::Utility` through `using namespace`), a type of an `#if` branch not taken beside the system's `timeval`, a dependent base (`Vec : TBase<T>`) beside `Fixed : TBase<int>`, `::D`, a namespace alias of the file beside a nearer namespace of the name, a header's using declaration where it is included, a nearer namespace's type beside an outer one's using declaration, an alias of `std::vector<Item>::const_iterator`, `typename std::pair<K, Var>`, a class's own nested type it only declares. No body names: it checks declared relations only (32 names, no mismatch; the extractor of 0.9.0 has 20 mismatches and 3 misses on it) |
 
 Known limits (mismatches that stay):
 
@@ -69,3 +70,7 @@ Names Clang finds that are not drawn (misses, no failure):
   using detail::Impl; }`, `app::detail::Impl`)
 - `cpp8/app/use.cc:35:13` a header's `using namespace` (`namespace far { using namespace
   lib; }`) in a file that includes it (`Coin` is `lib::Coin`)
+
+Known limits of declared relations (mismatches that stay):
+
+- none
