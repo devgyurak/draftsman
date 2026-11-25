@@ -180,6 +180,16 @@ def watch(builder) -> None:
 
     builder._supers = _supers
 
+    super_arg = builder._super_arg_resolution
+
+    def _super_arg_resolution(name, rtype, sup, arity):
+        res = super_arg(name, rtype, sup, arity)
+        note(rtype, sup.scope.file if sup.scope else rtype.location.file, sup.line, name,
+             "super", res)
+        return res
+
+    builder._super_arg_resolution = _super_arg_resolution
+
     annotations = builder._annotations
 
     def _annotations(rtype):

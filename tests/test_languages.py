@@ -1260,6 +1260,7 @@ def test_kotlin_library_types_under_known_library_supertypes(tmp_path):
     assert {(r.from_, r.to) for r in ir.relations} == {
         ("io.app.Ctx", "kotlin.coroutines.CoroutineContext.Element"),
         ("io.app.Ctx.MyKey", "kotlin.coroutines.CoroutineContext.Key"),
+        ("io.app.Ctx.MyKey", "io.app.Ctx"),   # a supertype's type argument (#9, case 24)
         ("io.app.Tracer", "kotlinx.coroutines.channels.ChannelIterator")}
 
 

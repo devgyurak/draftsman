@@ -34,6 +34,9 @@ class Named:
     args: tuple = field(default_factory=tuple)
     value: bool = False   # `typeof x`: names a value, which may or may not be a class
     subscript: bool = field(default=False, compare=False)   # arguments in `[...]` (Python)
+    # a qualifier's type arguments where the name has its own (`A` of `Outer<A>.Inner<B>`;
+    # `Outer<A>.Inner` keeps A in `args`)
+    outer_args: tuple = field(default=(), compare=False)
 
 
 @dataclass(frozen=True)
@@ -282,14 +285,15 @@ class _Parser:
                 and (isinstance(args[0], _ParamList) or args[0] is None):   # Python
             params = args[0].items if isinstance(args[0], _ParamList) else ()
             return FunctionType(params, args[1])
+        outer: tuple = ()
         if self.peek() in (".", "::") and args:
             # Outer<T>.Inner -> treat as Inner nested in Outer
             sep = self.take()
             rest = self.qualified_name()
             name = name + sep + rest
             if self.peek() == "<":
-                args = self.arg_list(">")
-        return Named(name, args, value, subscript)
+                outer, args = args, self.arg_list(">")
+        return Named(name, args, value, subscript, outer)
 
     def param_list(self, opener: str = "(", close: str = ")") -> tuple[tuple, bool]:
         """`(A, b: B, ...rest: C[])` -> (types, whether it was a plain `(Type)`)."""

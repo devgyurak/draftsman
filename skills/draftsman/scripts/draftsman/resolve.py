@@ -2387,6 +2387,44 @@ class _Builder:
                 self.relations.append(Relation(rtype.qualified_name, ext_id, kind, loc))
             elif res.status == UNRESOLVED:
                 self._unresolved(rtype, ref.name, res, loc, via=None)
+            self._super_args(rtype, sup, ref, loc)
+
+    def _super_args(self, rtype: RawType, sup: Any, ref: Named, loc: Location) -> None:
+        """A dependency on every project type a supertype's type arguments name
+        (`class NodeList extends ArrayList<Node>`), the supertype in the sources or not;
+        containers are seen through, as in a signature. A type parameter and the type
+        itself draw nothing; a name that names nothing of the project draws nothing and is
+        not unresolved."""
+        is_project = self._is_project(rtype, None)
+        for arg in ref.outer_args + ref.args:   # (`Base.WithRequest<A>.WithResult<B>`)
+            for name, arity in named_refs(arg, is_project):
+                if self.wrappers.is_wrapper(name) and not is_project(name):
+                    continue
+                res = self._super_arg_resolution(name, rtype, sup, arity)
+                targets = [res.target] if res.status == PROJECT else \
+                    self._alias_names(res.target, rtype)[1] if res.status == ALIAS and res.target \
+                    else []
+                for target in targets:
+                    if target != rtype.qualified_name:
+                        self.relations.append(Relation(
+                            rtype.qualified_name, target, "dependency", loc))
+
+    def _super_arg_resolution(self, name: str, rtype: RawType, sup: Any,
+                              arity: Optional[int]) -> Resolution:
+        """What a name in a supertype's type arguments stands for: looked up as the
+        supertype itself is (Resolver.supertypes; C++ as a base clause of a body,
+        _base_like_body), where the type's own inherited member types are not in scope."""
+        spec = LANGUAGES[rtype.language]
+        scope = sup.scope or rtype.scope
+        res = self.resolver.rooted(name, sup.text, rtype) or self.resolver.resolve(
+            name, rtype, inherit=False, scope=scope, arity=arity)
+        if res.status == PROJECT and self.resolver.rebinding(name, res.target, scope, spec,
+                                                             stars=False):
+            return Resolution(UNRESOLVED, hint=_REBOUND.format(name, res.target))
+        if not spec.declared_like_bodies:
+            return res
+        return self._like_body(name, rtype, None, scope, arity, sup.line, sup.text, res,
+                               base=True)
 
     def _annotations(self, rtype: RawType) -> None:
         """A dependency on the annotation type when it is the project's, and on the project
