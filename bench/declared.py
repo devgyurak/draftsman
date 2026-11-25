@@ -9,14 +9,15 @@ module lists what the extractor made of each name there and compares the two.
 `watch(builder)` is called on a _Builder before its build(); afterwards
 `builder.declared_names` lists, for every name a declared relation is resolved from:
 
-    {"file", "line", "from", "written", "where", "status", "targets", "external"}
+    {"file", "line", "from", "written", "where", "status", "targets", "external", "alias"}
 
 "line" is the declaration's (a member's first line, a supertype's or an annotation's
 line), not the name's; "written" the name as the extractor resolved it (`Outer.Inner`,
 `p::Foo`); "where" one of "super", "annotation", "field", "signature"; "status" the
 resolver's, and "targets" the project types a relation is drawn to from it (an alias's
 expansion included, the type itself left out). A supertype outside the sources is drawn
-too, as an external node: "external" holds its id then. Building with the watch on gives
+too, as an external node: "external" holds its id then; "alias" is the text an alias's
+expansion was read from, when the name is one. Building with the watch on gives
 the same ir.json as without (tests/test_declared_key.py).
 
 `compare(names, recs)` matches each name the key resolved in a declared position with the
@@ -32,7 +33,8 @@ extractor's names of the same file, type and simple name, and counts:
                name to nothing of the project, leaves it unresolved, or reads no name there
     agreed     the rest of the key's names the extractor read; "unread" the key's names of
                types outside the sources at places the extractor reads none (a
-               supertype's type arguments)
+               supertype's type arguments); a name outside every type (a top-level
+               function's signature) is left out
 """
 
 from __future__ import annotations
@@ -70,10 +72,17 @@ def watch(builder) -> None:
     # the nearest one at or above it, or to a supertype or annotation on its own line
     lines: dict[tuple, set] = defaultdict(set)
     builder.declaration_lines = lines
+    # the constructors' first lines: a parameter after a parameter property (TypeScript's
+    # `private a: A`, a record's or a primary constructor's) is the constructor's, though
+    # the property is a member of its own on a line between
+    ctors: dict[tuple, set] = defaultdict(set)
+    builder.constructor_lines = ctors
     for rt in builder.types.values():
         lines[(rt.location.file, rt.qualified_name)].add(rt.location.line)
         for rm in rt.members:
             lines[(rm.member.file or rt.location.file, rt.qualified_name)].add(rm.member.line)
+            if rm.member.kind == "constructor":
+                ctors[(rm.member.file or rt.location.file, rt.qualified_name)].add(rm.member.line)
     resolver = builder.resolver
     resolve = resolver.resolve
     state = {"depth": 0, "ctx": None}
@@ -98,7 +107,10 @@ def watch(builder) -> None:
         names.append({"file": file, "line": line, "from": rtype.qualified_name,
                       "written": written, "where": where, "status": status,
                       "targets": targets(res, rtype, where), "external":
-                      (res.target or written) if res.status in (EXTERNAL, BUILTIN) else None})
+                      (res.target or written) if res.status in (EXTERNAL, BUILTIN) else None,
+                      # an alias's declaration: what its expansion was read from
+                      "alias": resolver.alias_targets[res.target][0]
+                      if res.status == ALIAS and res.target in resolver.alias_targets else None})
 
     def watched(name, rtype, member=None, *more, **kw):
         ctx = state["ctx"]
@@ -242,6 +254,7 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
     summary and returns the counts and the listed places."""
     names = builder.declared_names
     starts = {k: sorted(v) for k, v in builder.declaration_lines.items()}
+    ctors = {k: sorted(v) for k, v in builder.constructor_lines.items()}
     broken = {r["file"] for r in recs if "diagnostic" in r}
     by_place: dict[tuple, list[dict]] = defaultdict(list)
     by_type: dict[tuple, list[dict]] = defaultdict(list)
@@ -257,12 +270,16 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
             continue
         if r["kind"] == "type" and r["target"] == r["from"]:
             continue   # a type naming itself draws nothing
+        if not r["from"]:
+            counts["outside types"] += 1   # a top-level function's: nothing is drawn (#8)
+            continue
         written = src.written(r)
         here = by_place.get((r["file"], r["from"], r["use"])) or [
             # `Kind.A` read as one name, where the key has the type Kind and a value A
             n for n in by_type.get((r["file"], r["from"]), ())
             if n["written"].replace(" ", "").startswith(written + ".")]
-        pick = _pick(here, r, written, starts.get((r["file"], r["from"]), []))
+        pick = _pick(here, r, written, starts.get((r["file"], r["from"]), [])) or \
+            _pick(here, r, written, ctors.get((r["file"], r["from"]), []))
         # what the key says a relation may go to: a type of the sources, or the ones an
         # alias names (a TypeScript type alias, a C++ alias of a template)
         wanted = r.get("targets") or (
@@ -302,6 +319,7 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
                          "drawn": drawn or ([f"external {ext}"] if ext else []),
                          "status": pick["status"] if pick is not None else "not read",
                          "where": pick["where"] if pick is not None else None,
+                         "alias": pick["alias"] if pick is not None else None,
                          "role": r.get("role"), "in_args": r.get("in_args")})
     # what the extractor draws where the key resolved no name
     keyed = {(r["file"], r["from"], r["use"]) for r in declared_records(recs)}
