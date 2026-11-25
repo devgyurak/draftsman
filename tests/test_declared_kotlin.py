@@ -13,6 +13,18 @@ def _body(ir, src: str) -> set[str]:
     return {r.to for r in ir.relations if r.from_ == src and r.evidence == "body"}
 
 
+def test_a_star_import_comes_before_the_default_imports(tmp_path):
+    # #8: kotlinx.serialization's Transient and kotlinx.serialization.json's Json, not the
+    # default imports kotlin.jvm.Transient and kotlin.js.Json; a project package's Result
+    # under `import p.*`, not kotlin.Result
+    ir = extract_source(tmp_path, {
+        "p/Result.kt": "package p\nclass Result\n",
+        "q/A.kt": ("package q\nimport kotlinx.serialization.json.*\nimport p.*\n"
+                   "class A(val j: Json, val r: Result)\n")})
+    assert "Json" not in {u.raw_type for u in ir.unresolved}
+    assert ("p.Result", "r") in _rels(ir, "q.A")
+
+
 def test_an_import_alias_hides_the_name_from_the_package_and_star_imports(tmp_path):
     # #9: once p.Money is imported as Coin, `Money` is r.Money through `import r.*`
     ir = extract_source(tmp_path, {

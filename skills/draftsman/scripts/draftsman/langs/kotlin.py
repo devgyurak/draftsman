@@ -374,11 +374,11 @@ class KotlinSpec(LanguageSpec):
 
     def library_type(self, name, imported, arity=None, external_supers=None):
         # only through a star import of the package, and only when exactly one of the
-        # star-imported packages has the name: two would be an ambiguity error in Kotlin
-        # a core type or default import of the name (`Transient`, kotlin.js `Json`) is not
-        # overruled: which of the two a star import gets is not decided here either
-        if name in _CORE or name in _DEFAULTS:
-            return None
+        # star-imported packages has the name: two would be an ambiguity error in Kotlin.
+        # A star import comes before the default imports: `Transient` under
+        # `import kotlinx.serialization.*` is kotlinx.serialization's, not kotlin.jvm's (#7).
+        # Where the package lacks a default import's name the default import is not taken:
+        # the lists leave out the packages' typealiases
         packages = [p for p in _LIBRARY.get(name, ()) if p in imported]
         if len(packages) != 1:
             return None

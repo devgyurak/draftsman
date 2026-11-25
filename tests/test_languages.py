@@ -1265,7 +1265,8 @@ def test_kotlin_library_types_under_known_library_supertypes(tmp_path):
 
 def test_kotlin_serialization_types_through_star_imports(tmp_path):
     """kotlinx.serialization through star imports; the project's own Decoder wins where its
-    package is imported; Json (also kotlin.js's default import) is not decided by the table."""
+    package is imported; Json (also kotlin.js's default import) is the star-imported package's:
+    a star import comes before the default imports (#7, case 8)."""
     from conftest import extract_source
     ir = extract_source(tmp_path, {
         "own/Decoder.kt": "package io.app.charsets\nclass Decoder\n",
@@ -1280,9 +1281,7 @@ def test_kotlin_serialization_types_through_star_imports(tmp_path):
     assert ("io.app.a.D", "extends", "kotlinx.serialization.encoding.AbstractDecoder") in rels
     assert ("io.app.a.E", "implements", "kotlinx.serialization.encoding.Encoder") in rels
     assert ("io.app.b.U", "association", "io.app.charsets.Decoder") in rels
-    (u,) = ir.unresolved
-    assert (u.from_, u.raw_type, u.reason) == ("io.app.c.J", "Json", "outside")
-    assert "may be the default import kotlin.js.Json" in u.hint
+    assert not ir.unresolved
 
 
 def test_kotlin_core_supertypes_have_known_nested_types(tmp_path):
