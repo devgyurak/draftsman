@@ -66,9 +66,7 @@ def test_body_relations_go_where_the_hand_written_answers_say():
             wrong.append((file, line, answer))
     assert wrong == []
     # every project type is drawn, but a type's own name, the part of a longer name
-    # (`Order` in `Order.Line`), in top-level statements, after `global::`, through an
-    # alias where a namespace around declares a type of the name (Roslyn's is that type,
-    # which in a file-scoped namespace the extractor puts after the alias), where a
+    # (`Order` in `Order.Line`), in top-level statements, after `global::`, where a
     # parameter of the name has the type's name for its type (`Customer Customer`:
     # Roslyn reads `Customer.Guest` as the type; the extractor knows a field's type, not a
     # parameter's) or a field does and the member after it has a static and an instance
@@ -94,14 +92,15 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     top_level = [("Program.cs", 4, "Shop.Order"), ("Program.cs", 5, "Shop.Customer"),
                  ("Program.cs", 5, "Shop.Order")]
     global_ = [("Shop/Positions.cs", 28, "Shop.Order"), ("Shop/Positions.cs", 47, "Shop.Status")]
-    alias = [("Shop/Members.cs", 9, "Shop.Order"), ("Shop/Members.cs", 10, "Shop.Order")]
     color_color = [("Shop/Hiding.cs", 77, "Shop.Customer"), ("Shop/ColorColor.cs", 13, "Shop.Order")]
     arity = [("Shop/Signatures.cs", 14, "Lib.Box")]
     using_static = [("Shop/Inner.cs", 17, "Shop.Money")]
     file_types = [("Shop/Review/FileA.cs", 9, "Shop.Rev.Files.Local"),
                   ("Shop/Review/FileB.cs", 7, "Shop.Rev.Helper"),
                   ("Shop/Review/FileB.cs", 8, "Shop.Rev.Files.Local")]
-    assert sorted(missed) == sorted(own + parts + top_level + global_ + alias + color_color
+    # (through an alias where a namespace around declares a type of the name, Roslyn's
+    # type is drawn: #7)
+    assert sorted(missed) == sorted(own + parts + top_level + global_ + color_color
                                     + arity + using_static + file_types)
 
 
