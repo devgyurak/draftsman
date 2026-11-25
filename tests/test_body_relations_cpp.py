@@ -255,6 +255,30 @@ def test_a_namespace_alias_gives_way_to_a_nearer_namespace_or_class(tmp_path):
                          ("shop::Y", "a::inner::E", 7)]
 
 
+def test_a_type_a_file_may_see_without_including_it_stops_the_lookup(tmp_path):
+    # a file including the body's file sees the type (`foo_inl.h` at the end of `foo.h`),
+    # or the file includes a path a macro makes: no draw, and no other type of the name
+    ir = extract_source(tmp_path, {
+        "g.h": "struct Helper {}; struct Util {};\n",
+        "app/foo.h": '#pragma once\nnamespace app { struct Helper {}; struct Foo { int run(); }; }\n'
+                     '#include "app/foo_inl.h"\n',
+        "app/foo_inl.h": '#include "g.h"\nnamespace app { inline int Foo::run() { Helper h; return 0; } }\n',
+        "app/util.h": "namespace app { struct Util {}; }\n",
+        "app/macro.cc": '#include "g.h"\n#define U "app/util.h"\n#include U\n'
+                        "namespace app { struct M { void f() { Util u; } }; }\n"})
+    assert _body(ir) == []
+
+
+def test_a_template_or_enum_declared_only_is_that_type(tmp_path):
+    ir = extract_source(tmp_path, {
+        "g.h": "struct Mode {}; template <class T> struct Box {};\n",
+        "app/defs.h": "namespace app { template <class T> struct Box {}; enum class Mode : int { On }; }\n",
+        "app/fwd.h": "namespace app { template <class T> struct Box; enum class Mode : int; }\n",
+        "app/use.cc": '#include "g.h"\n#include "app/fwd.h"\n'
+                      "namespace app { struct F { void f(Box<int>* b, Mode m) { Box<int>* c = b; Mode n = m; } }; }\n"})
+    assert _body(ir) == [("app::F", "app::Box", 3), ("app::F", "app::Mode", 3)]
+
+
 def test_an_enumerator_hides_a_type_only_where_a_value_may_stand_and_as_near(tmp_path):
     # the namespace's struct Cash is nearer than the global `enum Coin { Cash }`
     ir = extract_source(tmp_path, {

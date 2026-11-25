@@ -846,6 +846,8 @@ class Extractor:
                     blind.add(n.id)
                 elif cap == "body.include":
                     scope.includes.append(_text(n, src))
+                elif cap == "body.include_unknown":
+                    scope.unknown_include = True
                 elif cap == "body.nsalias":
                     target = _text(n.parent, src).split("=", 1)[-1].strip().rstrip(";").strip()
                     scope.namespace_aliases[_text(n, src)] = target.lstrip(":").replace(" ", "")

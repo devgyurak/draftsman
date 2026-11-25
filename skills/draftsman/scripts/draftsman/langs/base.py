@@ -127,6 +127,9 @@ class FileScope:
     namespace_aliases: dict[str, str] = field(default_factory=dict)
     # the types the file declares without defining them (C++'s `struct Fwd;`, `@body.forward`)
     forward_types: set[str] = field(default_factory=set)
+    # whether the file includes a path a macro makes (C++'s `#include APP_UTIL`,
+    # `@body.include_unknown`): what it sees is not known
+    unknown_include: bool = False
     # every namespace the file opens a block of, also one declaring no type (C++'s
     # `namespace Keywords { int now(); }`): LanguageSpec.values_hide_types
     declared_namespaces: set[str] = field(default_factory=set)

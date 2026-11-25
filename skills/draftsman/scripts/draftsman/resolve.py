@@ -1821,6 +1821,8 @@ class _Builder:
         self.file_includes = {f.path: f.scope.includes for f in files}
         self.file_forwards = {f.path: f.scope.forward_types for f in files}
         self._closures: Optional[dict[str, set[str]]] = None
+        self._includers: Optional[dict[str, set[str]]] = None   # _unseen_from
+        self.unknown_includes = {f.path for f in files if f.scope.unknown_include}
         self.resolver.unseen_from = self._unseen_from
         # names in bodies of members defined outside their type: the type's
         for f in files:
@@ -2111,8 +2113,9 @@ class _Builder:
                        for f, first, last, cond in branches):
                 return   # declared in an `#if` branch, used outside it (or one of the same
                 # condition): another type may be meant
-        if spec.include_visibility and self._unseen_from(target, ref.scope.file) == "skip":
-            return   # declared in a file the body's file does not include (another program's)
+        if spec.include_visibility and self._unseen_from(target, ref.scope.file) in ("skip", "unknown"):
+            return   # declared in a file the body's file does not include (another program's),
+            # or one it may see through a file around it or an include a macro makes
         if any(imp.conditional for imp in ref.scope.imports) and target != self._without(
                 ref, rtype, n):
             return   # through an import some build leaves out
@@ -2132,14 +2135,34 @@ class _Builder:
 
     def _unseen_from(self, target: str, file: str) -> Optional[str]:
         """How a body of ``file`` sees the project type ``target`` (include_visibility):
-        None when a file it includes defines it, "stop" when one only declares it (`struct
-        Fwd;`: the name is that type, whose definition it does not see), else "skip"."""
+        None when a file it includes defines it; "stop" when one only declares it (`struct
+        Fwd;`, `template <class T> struct Box;`, `enum class Mode : int;`: the name is that
+        type, whose definition it does not see); "unknown" when what the file sees is not
+        known: it or a file it includes has an include a macro makes, or a file including
+        it sees the type (`foo_inl.h` included at the end of the `foo.h` that defines
+        Helper); else "skip": lookup goes on past it."""
         if target not in self.types or self.types[target].language != "cpp":
             return None
         seen = self._included(file)
-        if self.part_files.get(target, set()) & seen:
+        where = self.part_files.get(target, set())
+        if where & seen:
             return None
-        return "stop" if any(target in self.file_forwards.get(f, ()) for f in seen) else "skip"
+        if any(target in self.file_forwards.get(f, ()) for f in seen):
+            return "stop"
+        if seen & self.unknown_includes or any(
+                where & self._included(f) for f in self._including(file)):
+            return "unknown"
+        return "skip"
+
+    def _including(self, file: str) -> set[str]:
+        """The files that include ``file``, directly or through others."""
+        if self._includers is None:
+            self._includers = {}
+            for f in self.file_includes:
+                for g in self._included(f):
+                    if g != f:
+                        self._includers.setdefault(g, set()).add(f)
+        return self._includers.get(file, set())
 
     def _included(self, file: str) -> set[str]:
         """The file and the files it includes, directly or through others
