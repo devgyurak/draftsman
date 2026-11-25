@@ -244,7 +244,7 @@ class _Sources:
         line = lines[r["line"] - 1]
         # the key's columns are UTF-16 units; the qualifier is ASCII in practice
         before = line.encode("utf-16-le")[:2 * r["col"]].decode("utf-16-le", "replace")
-        head = _HEAD.search(before).group(0)
+        head = _HEAD.search(before).group(0).lstrip(".")   # (`import("./x").Foo`)
         return re.sub(r"^(global::|::)", "", head) + r["use"]
 
 
@@ -293,16 +293,28 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
             counts["in template specialisations"] += 1   # C++: the extractor reads none
             continue
         written = src.written(r)
-        here = by_place.get((r["file"], r["from"], r["use"])) or [
-            # `Kind.A` read as one name, where the key has the type Kind and a value A
-            n for n in by_type.get((r["file"], r["from"]), ())
-            if n["written"].replace(" ", "").startswith(written + ".")]
-        pick = _pick(here, r, written, starts.get((r["file"], r["from"]), [])) or \
-            _pick(here, r, written, ctors.get((r["file"], r["from"]), []))
+        # `Kind.A` read as one name, where the key has the type Kind and a value A (an
+        # enum member's type `HttpStatus.OK`): also where the type's other declarations
+        # write the name alone
+        longer = [n for n in by_type.get((r["file"], r["from"]), ())
+                  if n["written"].replace(" ", "").startswith(written + ".")]
+        pick = None
+        for here in (by_place.get((r["file"], r["from"], r["use"])), longer):
+            pick = _pick(here or [], r, written, starts.get((r["file"], r["from"]), [])) or \
+                _pick(here or [], r, written, ctors.get((r["file"], r["from"]), []))
+            if pick is not None:
+                break
+        here = here or []
         # what the key says a relation may go to: a type of the sources, or the ones an
         # alias names (a TypeScript type alias, a C++ alias of a template)
         wanted = r.get("targets") or (
             [r["target"]] if r["kind"] == "type" and r["project"] else [])
+        if r.get("targets") and r["from"] in wanted:
+            # an alias naming the type it is written in (`WithTransactionCallback` =
+            # `(session: ClientSession) => ...` in ClientSession): as the type naming itself
+            wanted = [t for t in wanted if t != r["from"]]
+            if not wanted:
+                continue
         project = bool(wanted)
         skipped = uncompiled.get(r["file"], ()) if isinstance(uncompiled, dict) else \
             ("all" if r["file"] in uncompiled else ())

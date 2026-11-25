@@ -1,7 +1,7 @@
 """Review sets: sources written by hand below an oracle's review/ directory, one directory
 per set, each put through the oracle's key and compared with the extractor, body and
 declared relations (issue #7). Shared by the oracles whose review is written here (javac,
-Python); Clang's, Roslyn's and Kotlin's have the same format in their own oracle.py.
+Python, tsc); Clang's, Roslyn's and Kotlin's have the same format in their own oracle.py.
 
 README.md in review/ lists for each set `| `set` | body names drawn | declared names
 agreed | ...`, the known limits (`- `set/file:line:col`` under "Known limits", and under

@@ -9,6 +9,8 @@ format bench/answer_key.py gives; this script runs it and reads its output.
     uv run bench/tsc_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR [-v]
     uv run bench/tsc_oracle/oracle.py compare REPO OUT.jsonl --checkout DIR --declared [--save F]
     uv run bench/tsc_oracle/oracle.py measure OUT.jsonl [--ir ir.json]
+    uv run bench/tsc_oracle/oracle.py key DIR [-o OUT.jsonl] [--compare [--declared]] [-v]
+    uv run bench/tsc_oracle/oracle.py review [SET ...]
 
 `selftest` checks the key against the hand-written answers in
 tests/fixtures/typescript/body (tests/fixtures/java/body/README.md gives the marker
@@ -20,7 +22,10 @@ the same files, as ir.json of those sources. `compare` extracts the same sources
 checks every name a body relation is drawn from against what the compiler resolved at
 its place; with `--declared`, the names declared relations are drawn from instead
 (bench/declared.py, issue #7). `measure` prints what the rules for hiding names are
-decided by.
+decided by. `key` runs the compiler over a directory of sources (the compiler's default
+options, strict) and, with `--compare`, compares them with the extractor as `compare`
+does; `review` does so for every set of hand-written sources below review/
+(bench/review_sets.py, review/README.md).
 
 The compiler is the `typescript` package pinned in package.json here: `npm ci` in
 bench/tsc_oracle first. Node runs it.
@@ -168,6 +173,52 @@ def measure(args) -> int:
     return 0
 
 
+REVIEW = HERE / "review"
+
+
+def _dir_sources(d: Path) -> list[tuple[Path, str]]:
+    return discover(d, {"typescript", "tsx"}, [])
+
+
+def key_dir(d: Path, out: Path) -> list[dict]:
+    return oracle(d, [f for f, _ in _dir_sources(d)], Path("-"), out)
+
+
+def check_dir(root: Path, recs: list[dict], verbose: bool, args=None) -> int:
+    from draftsman.extractor import Extractor
+    from draftsman.langs import spec_for_path
+    from draftsman.resolve import _Builder
+    from draftsman.wrappers import Wrappers
+    builder = _Builder(str(root), [Extractor(spec_for_path(rel)).extract(f, rel, root)
+                                   for f, rel in _dir_sources(root)], Wrappers.load())
+    if args is not None and args.declared:
+        declared.watch(builder)
+        builder.build()
+        return declared.report(builder, recs, root, args, key="tsc")
+    builder.build()
+    return answer_key.compare(builder.body_uses, recs, verbose, key="tsc")
+
+
+def key(args) -> int:
+    d = args.dir.resolve()
+    with tempfile.TemporaryDirectory() as tmp:
+        out = args.output or Path(tmp, "key.jsonl")
+        recs = key_dir(d, out)
+        errors = [r for r in recs if "diagnostic" in r]
+        print(f"{args.dir}: {sum(1 for r in recs if 'use' in r)} names, {len(errors)} compile errors")
+        for r in errors:
+            print(f"  compile error: {r.get('file')}:{r.get('line')}: {r['diagnostic']}")
+        if args.compare:
+            return check_dir(d, answer_key.body(recs) if not args.declared else recs,
+                             args.verbose, args)
+    return 0
+
+
+def review(args) -> int:
+    import review_sets
+    return review_sets.review(REVIEW, args.sets, key_dir, check_dir)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -194,6 +245,17 @@ def main(argv=None) -> int:
     m.add_argument("--ir", type=Path, help="ir.json of the same sources: count only what it lacks")
     m.add_argument("-v", "--verbose", action="store_true", help="list the shadowing variables")
     m.set_defaults(fn=measure)
+    kd = sub.add_parser("key")
+    kd.add_argument("dir", type=Path)
+    kd.add_argument("-o", "--output", type=Path)
+    kd.add_argument("--compare", action="store_true")
+    kd.add_argument("--declared", action="store_true")
+    kd.add_argument("--save", type=Path)
+    kd.add_argument("-v", "--verbose", action="store_true")
+    kd.set_defaults(fn=key)
+    rv = sub.add_parser("review")
+    rv.add_argument("sets", nargs="*")
+    rv.set_defaults(fn=review)
     args = ap.parse_args(argv)
     return args.fn(args)
 

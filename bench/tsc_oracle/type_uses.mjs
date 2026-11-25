@@ -181,12 +181,20 @@ function aliasTargets(sym, seen = new Set()) {
     else if (ts.isImportTypeNode(n) && !n.isTypeOf) name = n.qualifier;
     else if (ts.isExpressionWithTypeArguments(n)) name = n.expression;
     if (name) {
-      const last = ts.isQualifiedName(name) ? name.right
-        : ts.isPropertyAccessExpression(name) ? name.name : name;
-      const s = resolved(checker.getSymbolAtLocation(last));
-      const c = classify(s, false);
-      if (c.kind === "type" && c.project) out.push(c.target);
-      else if (c.kind === "alias") out.push(...aliasTargets(s, seen));
+      // as a name written in a declared position is recorded (chain): the last part that
+      // is a type, after namespaces and types (`HttpStatus.OK`, an enum member's type,
+      // names HttpStatus)
+      const parts = ts.isQualifiedName(name) ? entityParts(name)
+        : ts.isPropertyAccessExpression(name) ? (accessParts(name) ?? [name.name]) : [name];
+      let last = null;
+      for (const part of parts) {
+        const s = resolved(checker.getSymbolAtLocation(part));
+        const c = classify(s, false);
+        if (c.kind === "type" || c.kind === "alias") last = [s, c];
+        else if (c.kind !== "namespace") break;
+      }
+      if (last && last[1].kind === "type" && last[1].project) out.push(last[1].target);
+      else if (last && last[1].kind === "alias") out.push(...aliasTargets(last[0], seen));
     }
     ts.forEachChild(n, walk);
   };
