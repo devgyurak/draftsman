@@ -1154,8 +1154,11 @@ class Resolver:
     def _imported_under_another_name(self, target: str, head: str, ref: RawBodyRef) -> bool:
         """Whether the file imports ``target`` under another name than ``head``, its own
         (LanguageSpec.alias_import_hides: Kotlin then finds no ``head`` through it)."""
-        return any(not imp.wildcard and imp.path == target and imp.local_name != head
-                   and imp.path.rsplit(".", 1)[-1] == head for imp in ref.scope.imports)
+        imports = [imp for imp in ref.scope.imports if not imp.wildcard and imp.path == target
+                   and imp.path.rsplit(".", 1)[-1] == head]
+        # (`import p.Money` beside `import p.Money as Coin` still brings in `Money`)
+        return any(imp.local_name != head for imp in imports) \
+            and not any(imp.local_name == head for imp in imports)
 
     def _own_nested(self, target: str, rtype: RawType) -> bool:
         """Whether ``target`` is nested in ``rtype`` or a type around it: found before

@@ -70,6 +70,16 @@ def test_a_superclass_companions_nested_type_is_not_inherited(tmp_path):
     assert _body(ir, "shop.Sub") == {"shop.InComp"}
 
 
+def test_an_import_under_its_own_name_beside_an_alias_still_brings_the_name_in(tmp_path):
+    # `import p.Money` beside `import p.Money as Coin`: `Money` is p.Money (kt16)
+    ir = extract_source(tmp_path, {
+        "p/T.kt": "package p\nclass Money\n",
+        "q/B.kt": ("package q\nimport p.Money\nimport p.Money as Coin\n"
+                   "class Both(val a: Money, val b: Coin) { fun f(): Any = Money() }\n")})
+    assert _rels(ir, "q.Both") == {("p.Money", "a"), ("p.Money", "b")}
+    assert _body(ir, "q.Both") == {"p.Money"}
+
+
 def test_a_library_interfaces_nested_type_is_not_inherited(tmp_path):
     # `Map`'s `Entry` is no member of a class implementing it, nor of a Java class
     # implementing it (`java.util.AbstractMap`), whose own `SimpleEntry` is (kt16)
