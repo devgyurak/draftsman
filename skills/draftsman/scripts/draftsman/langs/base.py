@@ -301,6 +301,10 @@ class LanguageSpec:
     # sources: its types may hide any name found further out, which a body then draws
     # nothing from
     enclosing_outside_hides: bool = False
+    # Whether the number of type arguments written chooses the type (C#'s `Repo<int>` is
+    # no `Repo`), and a project the file's project does not see holds no candidate: the
+    # lookup passes such a type over (Resolver.resolve, issue #7)
+    arity_selects: bool = False
     # Whether `import a.b` binds the head `a`, so that `a.b.Foo()` in a body goes through it
     # (Python)
     module_imports_bind_heads: bool = False

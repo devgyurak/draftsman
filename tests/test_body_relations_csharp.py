@@ -70,8 +70,7 @@ def test_body_relations_go_where_the_hand_written_answers_say():
     # parameter of the name has the type's name for its type (`Customer Customer`:
     # Roslyn reads `Customer.Guest` as the type; the extractor knows a field's type, not a
     # parameter's) or a field does and the member after it has a static and an instance
-    # overload (`Order.Of()`), where the arity written is not the nearest type's (`Box`
-    # beside Shop.Box<T>: Roslyn's is Lib.Box further out), and where a static field a
+    # overload (`Order.Of()`), and where a static field a
     # file's `using static` brings in shares the name (Roslyn looks at the namespaces
     # around first; the extractor takes the field wherever), and a `file` type's name in
     # any file but its only one (two files' `file class Local` are one id in ir.json; in
@@ -93,15 +92,14 @@ def test_body_relations_go_where_the_hand_written_answers_say():
                  ("Program.cs", 5, "Shop.Order")]
     global_ = [("Shop/Positions.cs", 28, "Shop.Order"), ("Shop/Positions.cs", 47, "Shop.Status")]
     color_color = [("Shop/Hiding.cs", 77, "Shop.Customer"), ("Shop/ColorColor.cs", 13, "Shop.Order")]
-    arity = [("Shop/Signatures.cs", 14, "Lib.Box")]
     using_static = [("Shop/Inner.cs", 17, "Shop.Money")]
     file_types = [("Shop/Review/FileA.cs", 9, "Shop.Rev.Files.Local"),
                   ("Shop/Review/FileB.cs", 7, "Shop.Rev.Helper"),
                   ("Shop/Review/FileB.cs", 8, "Shop.Rev.Files.Local")]
-    # (through an alias where a namespace around declares a type of the name, Roslyn's
-    # type is drawn: #7)
+    # (through an alias where a namespace around declares a type of the name, and where the
+    # arity written is not the nearest type's, Roslyn's type is drawn: #7)
     assert sorted(missed) == sorted(own + parts + top_level + global_ + color_color
-                                    + arity + using_static + file_types)
+                                    + using_static + file_types)
 
 
 def _body(ir) -> list[tuple]:
@@ -292,7 +290,7 @@ public partial class Ctx
 
 def test_a_type_of_a_project_the_file_does_not_reference_draws_nothing(tmp_path):
     # B does not reference A, whose Shop.Order is around Shop.B: Roslyn takes Lib.Order
-    # from L through `using Lib;` (the extractor draws nothing there)
+    # from L through `using Lib;`, and so does the lookup, passing Shop.Order over (#7)
     sdk = '<Project Sdk="Microsoft.NET.Sdk">{}</Project>'
     ir = extract_source(tmp_path, {
         "L/L.csproj": sdk.format(""), "L/Lib.cs": "namespace Lib { public class Order { } }\n",
@@ -302,7 +300,7 @@ def test_a_type_of_a_project_the_file_does_not_reference_draws_nothing(tmp_path)
         "C/C.csproj": sdk.format('<ItemGroup><ProjectReference Include="../B/B.csproj" /></ItemGroup>'),
         "C/Use.cs": "namespace C { public class Use { object M() => new Lib.Order(); } }\n"})
     # C sees L through B
-    assert _body(ir) == [("C.Use", "Lib.Order", "M", 1)]
+    assert _body(ir) == [("C.Use", "Lib.Order", "M", 1), ("Shop.B.Use", "Lib.Order", "M", 2)]
 
 
 def test_a_using_item_of_the_project_file_is_a_using_of_every_file(tmp_path):

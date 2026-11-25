@@ -46,3 +46,27 @@ def test_an_alias_before_a_file_scoped_namespace_comes_after_the_namespaces_arou
     assert _body(ir, "Shop.Sub.X") == {"Shop.Order"}
     assert ("Shop.Order", None) in _rels(ir, "Shop.Sub.X2")
 
+
+def test_another_projects_internal_type_is_no_candidate(tmp_path):
+    # #4: L's internal Core.Order is not B's: lookup goes on to `using Lib2;`
+    ir = extract_source(tmp_path, {
+        "L/L.csproj": SDK.format(""),
+        "L/Lib.cs": "namespace Core { internal class Order {} }\n",
+        "B/B.csproj": SDK.format('<ItemGroup><ProjectReference Include="../L/L.csproj" /></ItemGroup>'),
+        "B/Lib2.cs": "namespace Lib2 { public class Order {} }\n",
+        "B/Use.cs": ("using Lib2;\nnamespace Core.Sub { public class X { public Order O; "
+                     "public object M() => new Order(); } }\n")})
+    assert _rels(ir, "Core.Sub.X") == {("Lib2.Order", "O")}
+    assert _body(ir, "Core.Sub.X") == {"Lib2.Order"}
+
+
+def test_the_arity_written_chooses_the_type(tmp_path):
+    # #4: `Repo<int>` is Lib.Repo<T>, not Shop.Repo around the code
+    ir = extract_source(tmp_path, {
+        "T.cs": ("namespace Lib { public class Repo<T> {} }\n"
+                 "namespace Shop { public class Repo {} }\n"),
+        "X.cs": ("using Lib;\nnamespace Shop.Sub { public class X { public Repo<int> R; "
+                 "public Repo P; public object M() => new Repo<int>(); } }\n")})
+    assert _rels(ir, "Shop.Sub.X") == {("Lib.Repo", "R"), ("Shop.Repo", "P")}
+    assert _body(ir, "Shop.Sub.X") == {"Lib.Repo"}
+

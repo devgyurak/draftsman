@@ -97,6 +97,9 @@ class Resolver:
                 for a in s.alias_targets:
                     block = s.alias_blocks.get(a, "")
                     self.file_aliases.setdefault((s.file, block), {})[a.rsplit(".", 1)[-1]] = a
+        # whether a project type is one the file's project sees (_Builder._visible: C#'s
+        # project references and `internal`), set by the builder
+        self.visible: Optional[Callable[[str, FileScope], bool]] = None
         # C++ inline namespaces: acme::v1::Versioned is also acme::Versioned
         inline = set().union(*(s.inline_namespaces for s in scopes)) if scopes else set()
         if inline:
@@ -680,6 +683,13 @@ class Resolver:
             if body_file is not None and spec.include_visibility and self.unseen_from else (lambda q: None)
         # Kotlin: `import p.Money as Coin` hides p.Money's own name in the file, from its
         # package and its star imports (LanguageSpec.alias_import_hides)
+        # C#: a type the file's project does not see (another project's `internal` one, an
+        # unreferenced project's), or one of another arity (`Repo<int>` is no `Repo`), is no
+        # candidate: the lookup goes on
+        unfit = (lambda q: (self.visible is not None and not self.visible(q, scope))
+                 or (arity is not None and q in self.index and self.index[q].arities
+                     and arity not in self.index[q].arities)) \
+            if spec.arity_selects else (lambda q: False)
         renamed = {i.path for i in scope.imports if not i.wildcard and i.alias
                    and i.local_name != i.path.rsplit(sep, 1)[-1]} \
             if spec.alias_import_hides else set()
@@ -794,7 +804,8 @@ class Resolver:
                 cand = ns + sep + name if ns else name
                 if cand in self.index and unseen(cand) == "stop":
                     return Resolution(PROJECT, cand)   # `struct Fwd;` here: that type
-                if not self._sees(rtype, cand) or away(cand) or cand in renamed:
+                if not self._sees(rtype, cand) or away(cand) or cand in renamed \
+                        or cand in self.index and unfit(cand):
                     pass
                 elif cand in self.index:
                     return Resolution(PROJECT, cand)
@@ -860,7 +871,7 @@ class Resolver:
                     else self.lookup(imp.path + sep + name, spec, certain=strict)
                 if found and spec.body_aliases and found not in self.index:
                     found = None   # C#: a file's `using X = ...` is no member of its namespace
-                if found and (unseen(found) == "skip" or found in renamed):
+                if found and (unseen(found) == "skip" or found in renamed or unfit(found)):
                     found = None   # a type of a file the body's file does not include, or
                     # one the file imports under another name
                 if found and not strict:
@@ -1626,6 +1637,7 @@ class Resolver:
                 return Resolution(EXTERNAL, found + sep + rest if rest else found)
         res = self.resolve(name, rtype, ref.member, scope=ref.scope, strict=True,
                            nested=spec.nested_types_in_bodies,
+                           arity=ref.arities[0] if ref.arities and sep not in name else None,
                            head_arity=ref.arities[0] if ref.arities and sep in name else None,
                            body_file=ref.scope.file if spec.file_local_bodies else None)
         if res.status == PROJECT and spec.rebinding_hides and (
@@ -1947,6 +1959,8 @@ class _Builder:
         self.file_forwards = {f.path: f.scope.forward_types for f in files}
         self.file_plain_forwards = {f.path: f.scope.plain_forwards for f in files}
         self.resolver.base_lookup = self._base_like_body
+        self.resolver.visible = lambda q, scope: self._visible(
+            q, scope.project, LANGUAGES[spec_for_path(scope.file).name])
         self._closures: Optional[dict[str, set[str]]] = None
         self._includers: Optional[dict[str, set[str]]] = None   # _unseen_from
         self.unknown_includes = {f.path for f in files if f.scope.unknown_include}
