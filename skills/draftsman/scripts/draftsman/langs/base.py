@@ -308,6 +308,8 @@ class LanguageSpec:
     # Whether a member of the class (or of a base) hides a name in an attribute's argument
     # (C#'s `[Obsolete(nameof(Order))]` beside a property Order)
     members_hide_annotation_args: bool = False
+    # The prefix that roots a name at the global namespace in a declaration (C#'s `global::`)
+    rooted_prefix: Optional[str] = None
     # Whether `import a.b` binds the head `a`, so that `a.b.Foo()` in a body goes through it
     # (Python)
     module_imports_bind_heads: bool = False

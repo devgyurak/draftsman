@@ -95,3 +95,13 @@ def test_a_member_of_the_class_hides_a_name_in_an_attributes_argument(tmp_path):
     assert _rels(ir, "Shop.Bodies") == {("Shop.Base2", None)}
     assert _rels(ir, "Shop.Plain2") == {("Shop.Order", "@Obsolete")}
 
+
+def test_a_name_after_global_is_the_global_namespaces(tmp_path):
+    # `global::Lib.Order` beside a Shop.Lib.Order nearer: the global namespace's (cs1)
+    ir = extract_source(tmp_path, {
+        "T.cs": ("namespace Lib { public class Order {} public class Base {} }\n"
+                 "namespace Shop.Lib { public class Order {} public class Base {} }\n"),
+        "X.cs": ("namespace Shop.CC { public class X { public global::Lib.Order O; "
+                 "public Lib.Order N; }\n  public class D : global::Lib.Base {} }\n")})
+    assert _rels(ir, "Shop.CC.X") == {("Lib.Order", "O"), ("Shop.Lib.Order", "N")}
+    assert _rels(ir, "Shop.CC.D") == {("Lib.Base", None)}

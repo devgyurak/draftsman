@@ -318,8 +318,8 @@ class Resolver:
                 if isinstance(ref, Named):
                     # a supertype clause cannot see the type's *own* inherited member
                     # types, but it does see those of its enclosing types
-                    res = self.resolve(ref.name, rtype, inherit=False, scope=sup.scope,
-                                       arity=len(ref.args))
+                    res = self.rooted(ref.name, sup.text, rtype) or self.resolve(
+                        ref.name, rtype, inherit=False, scope=sup.scope, arity=len(ref.args))
                     if self.base_lookup is not None:
                         res = self.base_lookup(rtype, sup, res)
                     cached.append(res)
@@ -1042,6 +1042,19 @@ class Resolver:
             if hidden is not None:
                 return hidden
         return None
+
+    def rooted(self, name: str, text: Optional[str], rtype: RawType) -> Optional[Resolution]:
+        """What ``name`` is where ``text`` writes it from the global namespace (C#'s
+        `global::Lib.Order`, LanguageSpec.rooted_prefix; the type parser drops the prefix):
+        the project type of that id, else a type outside the sources; None where it is not
+        written so."""
+        prefix = LANGUAGES[rtype.language].rooted_prefix
+        if not prefix or not text or not re.search(
+                rf"(?<![\w:]){re.escape(prefix)}\s*{re.escape(name)}(?![\w.])", text):
+            return None
+        if name in self.index:
+            return Resolution(PROJECT, name)
+        return Resolution(ALIAS, name) if name in self.aliases else Resolution(EXTERNAL, name)
 
     def member_named(self, rtype: RawType, name: str) -> bool:
         """Whether ``rtype``, a type around it or a base of either has a member (a field,
@@ -2162,7 +2175,8 @@ class _Builder:
                              arity: Optional[int], text: Optional[str] = None) -> Resolution:
         """What a name of a member's declaration (its type, a parameter's or the return
         type, ``text`` as written) stands for."""
-        res = self.resolver.resolve(name, rtype, rm, arity=arity)
+        res = self.resolver.rooted(name, text, rtype) or self.resolver.resolve(
+            name, rtype, rm, arity=arity)
         if not LANGUAGES[rtype.language].declared_like_bodies:
             return res
         scope = (rm.scope if rm is not None and rm.scope else None) or rtype.scope

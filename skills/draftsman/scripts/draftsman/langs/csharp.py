@@ -747,6 +747,7 @@ class CSharpSpec(LanguageSpec):
     enclosing_outside_hides = True
     arity_selects = True
     members_hide_annotation_args = True
+    rooted_prefix = "global::"
     block_imports = True
     body_aliases = True
     color_color = True
