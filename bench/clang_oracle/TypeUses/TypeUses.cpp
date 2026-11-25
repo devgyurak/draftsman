@@ -595,9 +595,13 @@ public:
     }
     if (isa<FieldDecl>(D)) return inClass(D) ? "field" : nullptr;
     if (isa<ParmVarDecl>(D)) {
-      const Decl *P = Stack.size() > 1 ? Stack[Stack.size() - 2] : nullptr;
+      // the declaration the parameter is of; through the parameters of a function pointer
+      // type (`void (*cb)(Order*)` as a parameter or a member)
+      size_t i = Stack.size() - 1;
+      while (i > 0 && isa<ParmVarDecl>(Stack[i])) --i;
+      const Decl *P = isa<ParmVarDecl>(Stack[i]) ? nullptr : Stack[i];
       if (P && isa<FunctionDecl>(P)) return inClass(P) ? "signature" : nullptr;
-      if (P && isa<FieldDecl>(P)) return inClass(P) ? "field" : nullptr;
+      if (P && (isa<FieldDecl>(P) || isa<VarDecl>(P))) return inClass(P) ? "field" : nullptr;
       return nullptr;
     }
     if (auto *Vd = dyn_cast<VarDecl>(D)) return Vd->isStaticDataMember() && inClass(Vd) ? "field" : nullptr;
