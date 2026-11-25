@@ -69,6 +69,7 @@ but Docker.
 from __future__ import annotations
 
 import argparse
+import bisect
 import json
 import re
 import shutil
@@ -185,7 +186,11 @@ def ident(class_id: str) -> str:
 class Types:
     """The types the sources declare: what ir.json has of them."""
 
+    # typealias class id -> the class ids its type names (TypeUses' "decl" "alias")
+    alias_names: dict[str, set[str]]
+
     def __init__(self, declared: list[dict]):
+        self.alias_names = defaultdict(set)
         # a companion object without supertypes is a static scope of its class
         self.folded = {d["declared"] for d in declared
                        if d["kind"] == "companion" and not d.get("supertypes")}
@@ -207,6 +212,21 @@ class Types:
             else:
                 i += 1
         return ident(f"{package}/{'.'.join(parts)}")
+
+    def alias_targets(self, alias: str, seen: Optional[set] = None) -> list[str]:
+        """The project types a typealias names, through the aliases it names: in a
+        declared position the extractor draws those (issue #7)."""
+        seen = set() if seen is None else seen
+        if alias in seen:
+            return []
+        seen.add(alias)
+        out: list[str] = []
+        for t in sorted(self.alias_names.get(alias, ())):
+            if t in self.aliases:
+                out += self.alias_targets(t, seen)
+            elif self.id(t) in self.ids:
+                out.append(self.id(t))
+        return list(dict.fromkeys(out))
 
     def owner(self, owners: list[str]) -> Optional[str]:
         """The named type code is in, ``owners`` the classes around it, innermost last."""
@@ -258,6 +278,9 @@ def convert(r: dict, file: str, types: Types) -> Optional[dict]:
     if not r["body"]:
         out.update(pos="declared", role=r["decl"], in_args=r.get("in_args", False),
                    **({"qualifier_role": r["role"]} if r.get("role") else {}))
+        if raw in TYPES and r["target"] in types.aliases:
+            out["targets"] = types.alias_targets(r["target"])
+            out["project"] = bool(out["targets"])
     return out
 
 
@@ -279,6 +302,19 @@ def join(comps: list[dict], raw: dict[str, dict[str, list[dict]]], files: dict[s
             for c, rs in by.items():
                 declared += [{**d, "file": files[path]} for d in rs if "declared" in d]
     types = Types(declared)
+    # what each typealias of the sources names: the names on its declaration's lines
+    for path, by in raw.items():
+        if path not in files:
+            continue
+        for rs in by.values():
+            heads = sorted((d["line"], d["declared"]) for d in rs
+                           if "declared" in d and d["kind"] == "typealias" and d.get("line"))
+            lines = [line for line, _ in heads]
+            for r in rs:
+                if "use" in r and r.get("decl") == "alias" and r["kind"] in TYPES and r["target"]:
+                    i = bisect.bisect_right(lines, r["line"])
+                    if i:
+                        types.alias_names[heads[i - 1][1]].add(r["target"])
     out: list[dict] = [{"compilation": c["compilation"], "language": c["language"],
                         "sources": len(c["sources"])} for c in comps]
     out += diagnostics
