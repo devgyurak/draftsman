@@ -241,8 +241,10 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
     starts = {k: sorted(v) for k, v in builder.declaration_lines.items()}
     broken = {r["file"] for r in recs if "diagnostic" in r}
     by_place: dict[tuple, list[dict]] = defaultdict(list)
+    by_type: dict[tuple, list[dict]] = defaultdict(list)
     for n in names:
         by_place[(n["file"], n["from"], _simple(n["written"]))].append(n)
+        by_type[(n["file"], n["from"])].append(n)
     src = _Sources(root)
     counts: Counter = Counter()
     rows: list[dict] = []
@@ -252,10 +254,17 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
             continue
         if r["kind"] == "type" and r["target"] == r["from"]:
             continue   # a type naming itself draws nothing
-        here = by_place.get((r["file"], r["from"], r["use"]), [])
         written = src.written(r)
+        here = by_place.get((r["file"], r["from"], r["use"])) or [
+            # `Kind.A` read as one name, where the key has the type Kind and a value A
+            n for n in by_type.get((r["file"], r["from"]), ())
+            if n["written"].replace(" ", "").startswith(written + ".")]
         pick = _pick(here, r, written, starts.get((r["file"], r["from"]), []))
-        project = r["kind"] == "type" and r["project"]
+        # what the key says a relation may go to: a type of the sources, or the ones an
+        # alias names (a TypeScript type alias, a C++ alias of a template)
+        wanted = r.get("targets") or (
+            [r["target"]] if r["kind"] == "type" and r["project"] else [])
+        project = bool(wanted)
         skipped = uncompiled.get(r["file"], ()) if isinstance(uncompiled, dict) else \
             ("all" if r["file"] in uncompiled else ())
         if pick is not None:
@@ -263,8 +272,7 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
         drawn = pick["targets"] if pick is not None else []
         ext = pick["external"] if pick is not None and pick["where"] == "super" else None
         if project:
-            wanted = r.get("targets") or [r["target"]]
-            if any(t in drawn and same(r, t) for t in wanted):
+            if drawn and all(t in wanted and same(r, t) for t in drawn):
                 verdict = "agreed"
             elif drawn or ext:
                 verdict = "mismatch"
@@ -295,7 +303,8 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
     # what the extractor draws where the key resolved no name
     keyed = {(r["file"], r["from"], r["use"]) for r in declared_records(recs)}
     unkeyed = [n for n in names if n["targets"]
-               and (n["file"], n["from"], _simple(n["written"])) not in keyed]
+               and not any((n["file"], n["from"], part) in keyed
+                           for part in re.split(r"::|\.|/", n["written"]))]
     counts["drawn where the key has no name"] = len(unkeyed)
     print(f"declared: {counts['names']} names {key} resolved in declared positions "
           f"({counts['project names']} of project types); "
@@ -329,7 +338,8 @@ def _pick(here: list[dict], r: dict, written: str, starts: list[int]) -> Optiona
     pool = [n for n in here if n["line"] in (start, r["line"])]
     if not pool:
         return None
-    exact = [n for n in pool if n["written"].replace(" ", "") == written]
+    exact = [n for n in pool if n["written"].replace(" ", "") == written
+             or n["written"].replace(" ", "").startswith(written + ".")]
     if exact:
         return exact[0]
     if "." in written or "::" in written:
