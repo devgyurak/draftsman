@@ -394,7 +394,11 @@ is that type. Aliases of aliases are followed.
   under another name is no candidate through its package or a star import, and the lookup
   goes on (`Money` after `import p.Money as Coin` and `import r.*` is `r.Money`); a nested
   type of a library superclass `kotlin_outside.json` knows comes before the package's
-  (`class T : Thread() { val s: State }` is `java.lang.Thread.State`). Under a superclass
+  (`class T : Thread() { val s: State }` is `java.lang.Thread.State`), but not one of a
+  library interface, also where a Java class implements it (`Map`'s and
+  `java.util.AbstractMap`'s `Entry` is the package's; the table lists a Java class's
+  interfaces' nested types as its own, which are read apart); `import p.Money` beside
+  `import p.Money as Coin` still brings in `Money`. Under a superclass
   the table does not know (androidx.work's `CoroutineWorker` and its `Result`) the
   package's type is still taken. Review set `bench/kotlin_oracle/review/kt15`; the review
   compares declared relations too.
