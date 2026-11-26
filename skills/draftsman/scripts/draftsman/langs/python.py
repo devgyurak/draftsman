@@ -123,6 +123,12 @@ class PythonSpec(LanguageSpec):
     def is_abstract(self, owner_kind, member_kind, modifiers, has_body, marker=None):
         return False
 
+    def annotation_type_names(self, name):
+        # `@Field.register`, `@HttpResponse.content.setter`: a class's attribute; the class
+        # is the longest part that is one (the checkers name it there)
+        parts = name.split(".")
+        return [".".join(parts[:k]) for k in range(len(parts), 0, -1)]
+
     def finalize_type(self, raw):
         kept = []
         for sup in raw.supers:

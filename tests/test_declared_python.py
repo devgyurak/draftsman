@@ -56,3 +56,18 @@ def test_a_name_bound_twice_draws_nothing(tmp_path):
     assert "bound more than once" in _unresolved(ir, "q.t.X")["Foo"]
     assert _rels(ir, "q.t.Y") == {("q.x.foo.Bar", None), ("q.x.foo.Bar", "b")}
     assert "bound more than once" in _unresolved(ir, "q.t.Y")["Foo"]
+
+
+def test_a_decorator_that_is_a_classs_attribute_is_the_class(tmp_path):
+    # #9, case 33: `@Field.register` depends on Field; a property's `@content.setter` the
+    # class body binds names nothing, though the module has a class `content`
+    ir = extract_source(tmp_path, {
+        "q/__init__.py": "",
+        "q/f.py": ("class Field:\n    @classmethod\n    def register(cls, f): return f\n\n\n"
+                   "class content: ...\n"),
+        "q/u.py": ("from q.f import Field, content\n\n\n@Field.register\nclass Lookup: ...\n\n\n"
+                   "class S:\n    @property\n    def content(self): return 1\n\n"
+                   "    @content.setter\n    def content(self, v): ...\n")})
+    assert _rels(ir, "q.u.Lookup") == {("q.f.Field", "@Field.register")}
+    assert not _rels(ir, "q.u.S")
+
