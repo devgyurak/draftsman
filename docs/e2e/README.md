@@ -12,7 +12,7 @@ project.
 | Java | [jsoup](java/jsoup.md) | `d90d57521d` (2026-11-04) | 105 | 230 | 1326 + 1724 body | 0 | 0 |
 | Java | [Netty](java/netty.md) | `e3cab70052` (2026-11-16) | 2076 | 2752 | 18003 + 13818 body | 3 (2 outside, 1 unexplained) | 0 |
 | C# | [eShopOnWeb](csharp/eshoponweb.md) | `4da8212117` (2025-01-13) | 209 | 208 | 407 + 206 body | 195 (1 ambiguous, 194 outside) | 0 |
-| C# | [eShop](csharp/eshop.md) | `5e526931f7` (2026-11-16) | 497 | 506 | 1025 + 448 body | 455 (2 ambiguous, 449 outside, 4 unexplained) | 0 |
+| C# | [eShop](csharp/eshop.md) | `5e526931f7` (2026-11-16) | 497 | 506 | 1038 + 448 body | 455 (2 ambiguous, 449 outside, 4 unexplained) | 0 |
 | C# | [Serilog](csharp/serilog.md) | `43105b3509` (2026-10-24) | 113 | 119 | 569 + 363 body | 23 (23 outside) | 0 |
 | Kotlin | [nowinandroid](kotlin/nowinandroid.md) | `2982e63cb6` (2026-10-20) | 226 | 237 | 420 + 110 body | 4 (3 outside, 1 unexplained) | 0 |
 | Kotlin | [Ktor](kotlin/ktor.md) | `cc3d345bc2` (2026-11-16) | 1578 | 2137 | 7344 + 2970 body | 584 (49 ambiguous, 535 outside) | 0 |
@@ -50,7 +50,10 @@ Re-run every page after a change to extraction or resolution. When a number move
    and new `ir.json` relations is enough to find them). A new relation must be in the
    code; a lost one is a regression unless it was wrong.
 2. Update the page: the summary line, the table, and the unresolved and diagnostics
-   sections.
+   sections. `uv run bench/e2e_pages.py DIR` (each repository's `ir.json` in DIR as
+   `<page name>.json`) counts the numbers the pages and the tables below quote again and
+   lists every place that writes another; `--key poco=...` adds the few numbers that are
+   the answer key's.
 3. Update the matching row of the table above and of the status table in `README.md` and
    `README-KO.md`.
 4. Say in `CHANGELOG.md` what moved and why (`nest 2172 -> 2304 relations: ...`).
