@@ -295,6 +295,14 @@ def test_function_pointer_types(tmp_path):
     assert _deps(ir, "M") == {("Item", "s_"), ("Order", "direct_")}
 
 
+def test_a_member_of_an_alias_of_a_class(tmp_path):
+    # #9, case 47: `ModelAlias::Ptr` is Model::Ptr, not the global Ptr
+    ir = extract_source(tmp_path, {"h.h": (
+        "struct Order {}; struct Ptr {};\nstruct Model { using Ptr = Order*; };\n"
+        "using ModelAlias = Model;\nstruct User { ModelAlias::Ptr p_; };\n")})
+    assert _deps(ir, "User") == {("Order", "p_")}
+
+
 def test_conversion_operators_and_abstract_function_pointers(tmp_path):
     # #9, cases 43 and 44: `operator const Item&()`, `using G = void (*)(const Order*)`, a
     # typedef returning a pointer; an assignment operator leaves an interface one
@@ -307,3 +315,16 @@ def test_conversion_operators_and_abstract_function_pointers(tmp_path):
     assert _deps(ir, "Conv") == {("Item", "operator const Item&"), ("Money", "operator Money")}
     assert _deps(ir, "E") == {("Order", "g_"), ("Money", "m_"), ("Item", "m_")}
     assert next(t for t in ir.types if t.id == "Face").kind == "interface"
+
+
+def test_a_member_of_an_alias_of_a_template_specialisation(tmp_path):
+    # #9, case 47: `typedef SkipList<int> Table;` then `Table::Iterator`, also through the
+    # class; a specialisation of the template's own parameters is not looked into
+    ir = extract_source(tmp_path, {"h.h": (
+        "struct Iterator {};\ntemplate <class K> struct SkipList { struct Iterator { K k; }; };\n"
+        "struct T2 { typedef SkipList<int> Table; Table::Iterator it_; };\n"
+        "struct U2 { T2::Table::Iterator it_; };\n"
+        "template <class S> struct D { using P = SkipList<S>; typename P::Iterator it_; };\n")})
+    assert _deps(ir, "T2") == {("SkipList::Iterator", "it_")}
+    assert _deps(ir, "U2") == {("SkipList::Iterator", "it_")}
+    assert ("SkipList::Iterator", "it_") not in _deps(ir, "D")

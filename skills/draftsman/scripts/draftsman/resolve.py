@@ -587,6 +587,10 @@ class Resolver:
     def _nested_path(self, target: str, rest: str, sep: str, inherit: bool,
                      spec=None) -> Optional[Resolution]:
         for part in rest.split(sep):
+            if target not in self.index and spec is not None and target in self.aliases:
+                # `MemTable::Table::Iterator` with `typedef SkipList<...> Table;`: the
+                # members of the class (or template) the alias names
+                target = self._alias_head_class(target, spec) or target
             if target not in self.index:
                 # `NamespaceManager::NamespaceMap::const_iterator`: a member of what the
                 # alias names, as `NamespaceMap::const_iterator` inside the class
@@ -836,6 +840,13 @@ class Resolver:
                         # `using pb = global::Google.Protobuf;` then `pb::CodedInputStream`:
                         # a namespace (or type) outside the sources
                         return Resolution(EXTERNAL, written + sep + rest)
+                # `using ModelAlias = Model;` then `ModelAlias::Ptr`: an alias of one class
+                # is that class, its members looked up there
+                cls = self._alias_head_class(first.target, spec) if first.target else None
+                if cls is not None:
+                    found = self._nested_path(cls, rest, sep, inherit, spec)
+                    if found:
+                        return found
                 return Resolution(ALIAS)
             if first.status == TPARAM:   # `typename R::Ptr`: a member of whatever R is
                 return Resolution(TPARAM)
@@ -1053,10 +1064,11 @@ class Resolver:
         head, rest = name.split(sep, 1)
         found = self._in_types(head, rtype, inherit, nested, spec, True)
         if found is not None and found.status == ALIAS and found.target:
-            aliased = self._alias_resolution(found.target, spec, 0)
-            if aliased is None or aliased.status != PROJECT:
+            # (also an alias of a template's specialisation: `Table::Iterator`)
+            cls = self._alias_head_class(found.target, spec)
+            if cls is None:
                 return Resolution(UNRESOLVED)
-            found = aliased
+            found = Resolution(PROJECT, cls)
         if found is not None and found.status == PROJECT:
             return self._nested_path(found.target, rest, sep, inherit, spec) or Resolution(UNRESOLVED)
         return None
@@ -1621,6 +1633,32 @@ class Resolver:
         # from that namespace)
         res = self.resolve(written.name, rtype, None, scope=entry[1], strict=True,
                            at_namespace=entry[1].alias_blocks.get(alias, ""))
+        return res.target if res.status == PROJECT else None
+
+    def _alias_head_class(self, alias: str, spec, depth: int = 0) -> Optional[str]:
+        """The project class whose members a qualified name through ``alias`` is looked up
+        in: the class it names (_declared_alias_type), or the template a specialisation of
+        it is (`typedef SkipList<const char*, Cmp> Table;` then `Table::Iterator`)."""
+        cls = self._declared_alias_type(alias, spec, depth)
+        if cls is not None or depth > 4:
+            return cls
+        entry = self.alias_targets.get(alias)
+        written = parse_type(entry[0], spec.type_dialect) if entry else None
+        if not isinstance(written, Named) or not written.args:
+            return None
+        sep = spec.separator
+        owner = alias.rsplit(sep, 1)[0] if sep in alias else None
+        scope = entry[1]
+        ctx = RawType(alias, alias.rsplit(sep, 1)[-1], "alias", Location(scope.file, 0), scope,
+                      spec.name, namespace=self.index[owner].namespace if owner in self.index
+                      else owner or scope.namespace,
+                      outer=owner if owner in self.index else None)
+        tparams = self._type_params(ctx, None) | self.alias_tparams.get(alias, set())
+        if any(n.split(sep, 1)[0] in tparams for arg in written.args for n, _ in named_refs(arg)):
+            return None   # `ParallelSocketReactor<SR>`: known once the template is instantiated
+        res = self.resolve(written.name, ctx, None, strict=True)
+        if res.status == ALIAS and res.target and res.target != alias:
+            return self._alias_head_class(res.target, spec, depth + 1)
         return res.target if res.status == PROJECT else None
 
     def _declared_alias_type(self, alias: str, spec, depth: int) -> Optional[str]:
