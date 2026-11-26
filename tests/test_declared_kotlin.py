@@ -133,3 +133,12 @@ def test_an_extension_propertys_receiver(tmp_path):
     # #9, case 42
     ir = _pipe(tmp_path, "    private val Box<out Job?>.done: Boolean get() = true")
     assert _decl(ir, "shop.Pipe") == {("dependency", "Box", "done"), ("dependency", "Job", "done")}
+
+
+def test_annotations_on_accessors_and_enum_entries_are_the_classs(tmp_path):
+    # #9, case 41
+    ir = extract_source(tmp_path, {"shop/T.kt": KT_TYPES, "shop/E.kt": (
+        "package shop\nclass Engine {\n    var flag: Int = 0\n        @Api set\n}\n"
+        "enum class Mode { A, @Api B }\n")})
+    assert ("dependency", "Api", "@Api") in _decl(ir, "shop.Engine")
+    assert ("dependency", "Api", "@Api") in _decl(ir, "shop.Mode")

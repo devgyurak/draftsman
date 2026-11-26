@@ -33,6 +33,38 @@
 (annotation (user_type) @annotation.ref.name) @annotation.ref
 (annotation (constructor_invocation (user_type) @annotation.ref.name
                                     (value_arguments) @annotation.ref.args)) @annotation.ref
+; on an accessor or an enum entry (opaque, as bodies are): the class's
+(class_declaration (enum_class_body (enum_entry (modifiers
+  (annotation (user_type) @annotation.ref.name) @annotation.ref)))) @annotation.ref.target
+(class_declaration (enum_class_body (enum_entry (modifiers
+  (annotation (constructor_invocation (user_type) @annotation.ref.name
+                                      (value_arguments) @annotation.ref.args)) @annotation.ref))))
+  @annotation.ref.target
+(class_declaration (class_body (getter (modifiers
+  (annotation (user_type) @annotation.ref.name) @annotation.ref)))) @annotation.ref.target
+(class_declaration (class_body (getter (modifiers
+  (annotation (constructor_invocation (user_type) @annotation.ref.name
+                                      (value_arguments) @annotation.ref.args)) @annotation.ref))))
+  @annotation.ref.target
+(class_declaration (class_body (setter (modifiers
+  (annotation (user_type) @annotation.ref.name) @annotation.ref)))) @annotation.ref.target
+(class_declaration (class_body (setter (modifiers
+  (annotation (constructor_invocation (user_type) @annotation.ref.name
+                                      (value_arguments) @annotation.ref.args)) @annotation.ref))))
+  @annotation.ref.target
+(object_declaration (class_body (getter (modifiers
+  (annotation (user_type) @annotation.ref.name) @annotation.ref)))) @annotation.ref.target
+(object_declaration (class_body (getter (modifiers
+  (annotation (constructor_invocation (user_type) @annotation.ref.name
+                                      (value_arguments) @annotation.ref.args)) @annotation.ref))))
+  @annotation.ref.target
+(object_declaration (class_body (setter (modifiers
+  (annotation (user_type) @annotation.ref.name) @annotation.ref)))) @annotation.ref.target
+(object_declaration (class_body (setter (modifiers
+  (annotation (constructor_invocation (user_type) @annotation.ref.name
+                                      (value_arguments) @annotation.ref.args)) @annotation.ref))))
+  @annotation.ref.target
+
 ; ---------------------------------------------------------------- members
 (property_declaration
   (modifiers)? @modifiers
