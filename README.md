@@ -183,7 +183,7 @@ checked), an SVG and an HTML viewer — on real projects, tests and generated co
 | Java | [jsoup](docs/e2e/java/jsoup.md) | 105 | 230 | 1326 + 1724 body | 0 | 0 |
 | Java | [Netty](docs/e2e/java/netty.md) | 2076 | 2752 | 18003 + 13818 body | 3 (2 outside, 1 unexplained) | 0 |
 | C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 407 + 206 body | 195 (1 ambiguous, 194 outside) | 0 |
-| C# | [eShop](docs/e2e/csharp/eshop.md) `src/` | 497 | 506 | 1038 + 448 body | 455 (2 ambiguous, 449 outside, 4 unexplained) | 0 |
+| C# | [eShop](docs/e2e/csharp/eshop.md) `src/` | 497 | 506 | 1038 + 468 body | 455 (2 ambiguous, 449 outside, 4 unexplained) | 0 |
 | C# | [Serilog](docs/e2e/csharp/serilog.md) `src/Serilog` | 113 | 119 | 569 + 363 body | 23 (23 outside) | 0 |
 | Kotlin | [nowinandroid](docs/e2e/kotlin/nowinandroid.md) | 226 | 237 | 420 + 110 body | 4 (3 outside, 1 unexplained) | 0 |
 | Kotlin | [Ktor](docs/e2e/kotlin/ktor.md) | 1578 | 2137 | 7344 + 2970 body | 584 (49 ambiguous, 535 outside) | 0 |

@@ -7,6 +7,10 @@ Notes for anyone with `view.json` files written against a development build:
 - **0.3.0**: the entries below on nested types and annotations change the default
   focus diagram and the relations in `ir.json`; results measured with 0.2.0 (the
   benchmark's runs among them) are not comparable with 0.3.0 ones.
+- **0.11.1**: only C#'s names written with `::` and its aliases' targets change (#11,
+  cases 64-68, below): eShop gains 13 base relations (its generated gRPC classes' bases
+  written `pb::IMessage<X>`) and 20 body relations (26 names after `global::` in that
+  code), all Roslyn's; the other 13 e2e repositories' `ir.json` are the same as 0.11.0's.
 - **0.11.0**: declarations name more in every language (#9, below): a supertype's type
   arguments, TypeScript types the type parser read no name from, and each language's
   forms that drew nothing. Results measured with 0.10.0 are not comparable with 0.11.0
@@ -66,7 +70,16 @@ Notes for anyone with `view.json` files written against a development build:
   focus diagram draws those that touch the focus; results measured with 0.3.0 (the
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
-- **C#: `::` in bodies, bases and alias targets** (#11, after 0.11.0). The name before the
+- **C#: a target after `global::`, and a body name after it** (#11, 0.11.1). An alias's
+  target written from the global namespace (`using M = global::Lib.Sub;`, `using P =
+  global::Lib.Order;`) is looked up there alone: it was taken for a namespace outside the
+  sources (bases then put the project's own ids in `externals`), or beside a class
+  `Shop.Lib` for that class's member, since 8015528. A body name after `global::`
+  (`new global::Shop.Order()` beside a nearer `App.Shop`) is the global namespace's: eShop
+  draws 26 more body names, its gRPC code's. Review sets `cs25` to `cs28`.
+  `bench/e2e_pages.py` lists a page whose common sentence (the view's render, the viewer,
+  the bodies' count) it does not find.
+- **C#: `::` in bodies, bases and alias targets** (#11, 0.11.1). The name before the
   alias qualifier is a using alias in a body too (`new L::Order()`, `typeof(L::Sub.Deep)`,
   `(G::Order)o` beside a class `Shop.L` or `Shop.G` drew Shop's; `L::Order.Make()` and
   `o is M::Deep` are read now), a base written with it is read (`class C : L::Order`;
