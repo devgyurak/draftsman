@@ -239,3 +239,22 @@ def test_a_base_written_as_an_alias_of_an_outside_class_is_that_class(tmp_path):
     assert _rels(ir, "D4") == {("std::vector", None)}
     assert "value_type" in _unresolved(ir, "D4")
     assert not _body(ir, "D4")
+
+
+def test_a_dependent_member_names_its_template_alone(tmp_path):
+    # `typename H<S>::List`: List is H's once H<S> is instantiated (Clang: dependent); the
+    # name is H, what List names (`AutoPtr<H>`) is not expanded. A member naming nothing
+    # (`CONST` of `const T`) draws nothing
+    ir = extract_source(tmp_path, {"h.h": (
+        "#include <vector>\n"
+        "template <class T> struct AutoPtr { T* p; };\n"
+        "template <class S> struct H {\n"
+        "  typedef std::vector<AutoPtr<H> > List;\n"
+        "  typedef const S CONST;\n"
+        "};\n"
+        "template <class S> struct R {\n"
+        "  R(typename H<S>::List& l);\n"
+        "  void f(typename H<S>::CONST& c);\n"
+        "};\n")})
+    rels = {(r.to, r.via) for r in ir.relations if r.from_ == "R" and r.evidence is None}
+    assert rels == {("H", "R")}

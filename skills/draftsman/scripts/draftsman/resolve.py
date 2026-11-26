@@ -2267,6 +2267,19 @@ class _Builder:
         sep = spec.separator
         parts = name.split(sep)
         file = scope.file
+        if not base and len(parts) > 1 and _dependent_member(text, parts, sep):
+            # `typename UDPHandlerImpl<S>::List`: List is a member of the template once it is
+            # instantiated (Clang: dependent). Where the member is found (an alias, a nested
+            # type), the name stands for the template alone: what the member names is not
+            # expanded, as an alias of it (`using L = typename X<S>::List;`) names nothing
+            inner = self._like_body(name, rtype, rm, scope, arity, line, None, res)
+            if inner.status != PROJECT and not (
+                    inner.status == ALIAS and inner.target
+                    and any(self._alias_names(inner.target, rtype))):
+                return inner   # (a member drawing nothing, `CONSTTYPE` of `const T`)
+            qual = sep.join(parts[:-1])
+            return self._like_body(qual, rtype, rm, scope, None, line, None,
+                                   self.resolver.resolve(qual, rtype, rm, scope=scope))
         ref = RawBodyRef(name, "type", [(line, 0)] * len(parts), rm.member.name if rm else "",
                          scope, rm, BodyNames(), arities=[None] * (len(parts) - 1) + [arity])
         # `::D`: the global namespace's (the type parser drops the leading `::`)
@@ -2863,6 +2876,21 @@ class _Builder:
         # dependencies per pair is a presentation decision made by the renderer.
         unique = {r.key(): r for r in reversed(self.relations)}
         return sorted(unique.values(), key=lambda r: (r.from_, r.to, r.kind, r.via or ""))
+
+
+_TEMPLATE_ARGS = re.compile(r"<[^<>]*(?:<[^<>]*(?:<[^<>]*>[^<>]*)*>[^<>]*)*>")
+
+
+def _dependent_member(text: Optional[str], parts: list[str], sep: str) -> bool:
+    """Whether ``text`` writes the name ``parts`` as `typename Q<...>::Last`: a member of a
+    template written with arguments, which only an instantiation tells."""
+    if not text or "typename" not in text:
+        return False
+    m = re.search(r"\btypename\s+(.*?)::\s*" + re.escape(parts[-1]) + r"\b", text)
+    if not m or "<" not in m.group(1):
+        return False
+    qual = _TEMPLATE_ARGS.sub("", m.group(1)).replace(" ", "")
+    return qual.lstrip(":") == sep.join(parts[:-1])
 
 
 def _parse(text: Optional[str], language: str):
