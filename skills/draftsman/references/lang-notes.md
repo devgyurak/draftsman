@@ -251,7 +251,10 @@ is that type. Aliases of aliases are followed.
   type of its name (`L::Order` beside a class `Shop.L` is Lib.Order, `L.Order` Shop.L's),
   in declarations, bases (`class C : pb::IMessage<C>`) and bodies (`new L::Order()`,
   `L::Order.Make()`, `o is L::Order`), and in an alias's target (`using LS = L::Sub;`,
-  where an alias beside it in the same block is not seen; #11); a type the file's project does not see (another
+  where an alias beside it in the same block is not seen; #11). After `global::`, a name
+  is the global namespace's alone, in a body too (`new global::Shop.Order()` beside a
+  nearer `App.Shop`) and in an alias's target (`using M = global::Lib.Sub;` beside a class
+  `Shop.Lib`); a type the file's project does not see (another
   project's `internal` one, an unreferenced project's) or one the arity written does not
   fit (`Repo<int>` beside a `Repo` around the code) is passed over, the lookup going on to
   a using's (bodies drew nothing there, now that type); below a package's namespace around
