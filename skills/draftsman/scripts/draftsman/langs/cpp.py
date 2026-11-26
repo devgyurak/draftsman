@@ -319,6 +319,18 @@ def _template_params(tmpl) -> list[str]:
     return out
 
 
+def _member_pointer(fn) -> str:
+    """`(C::*)` of a pointer to a member function `void (C::*m)(A)` (the grammar leaves `C::`
+    in an error node), so the type reads `void(C::*)(A)`; "" for a plain function pointer."""
+    inner = fn.child_by_field_name("declarator")
+    err = next((c for c in inner.children if c.type == "ERROR"), None) \
+        if inner is not None and inner.type == "parenthesized_declarator" else None
+    if err is None:
+        return ""
+    cls = "".join(err.text.decode().split())
+    return f"({cls}*)" if cls.endswith("::") else ""
+
+
 class CppSpec(LanguageSpec):
     name = "cpp"
     grammar = "cpp"
@@ -556,6 +568,23 @@ class CppSpec(LanguageSpec):
         return " ".join(text[len("operator"):].split()) or None
 
     def alias_target(self, alias_node, type_node, text):
+        # `typedef void (*Callback)(const Order*);`, `typedef void (E::*Method)(Item&);`: a
+        # pointer to a function of those parameters
+        fn = alias_node.parent
+        while fn is not None and fn.type in ("pointer_declarator", "parenthesized_declarator",
+                                             "ERROR"):
+            fn = fn.parent
+        if fn is not None and fn.type == "function_declarator" and type_node is not None \
+                and type_node.parent is not None and type_node.parent.type == "type_definition":
+            params = fn.child_by_field_name("parameters")
+            return f"{text}{' '.join(params.text.decode().split()) if params else '()'}*"
+        # `using M = void (C::*)(A)`: the alias names A, not C (Clang's key reads an alias's
+        # names leaving out the class of a member pointer, as a qualifier)
+        if text:
+            text = re.sub(r"\(\s*(?:::\s*)?\w+(?:\s*::\s*\w+)*\s*::\s*\*\s*\)", "(*)", text)
+        return self._alias_target(alias_node, type_node, text)
+
+    def _alias_target(self, alias_node, type_node, text):
         if type_node.child_by_field_name("body") is not None:
             # `typedef struct Legacy {...} Legacy_t, *LegacyPtr;` names struct Legacy;
             # `typedef struct {...} Point;` is the struct itself, called Point
@@ -657,7 +686,8 @@ class CppSpec(LanguageSpec):
                 if inner is not None and inner.type == "parenthesized_declarator":
                     # `void (*cb)(int)`: a pointer to a function, so a field of type void(int)*
                     params = cur.child_by_field_name("parameters")
-                    suffix += " ".join(params.text.decode().split()) if params else "()"
+                    suffix += _member_pointer(cur) + (
+                        " ".join(params.text.decode().split()) if params else "()")
                 else:
                     is_function = True
             elif t in _DECL_CHILD:

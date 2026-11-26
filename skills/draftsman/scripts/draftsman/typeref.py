@@ -194,6 +194,9 @@ class _Parser:
             elif tok in ("*", "&", "&&"):
                 self.take()
                 ref = Pointer(ref, tok) if ref is not None else None
+                if self.peek() == "(" and ref is not None:   # `std::function<Session*(A)>`
+                    params, _ = self.param_list()
+                    return FunctionType(params, ref)
             elif tok in _QUALIFIERS:  # C++ east const: `Foo const*`
                 self.take()
             elif tok == "@":  # Java type annotation on an array level: `String @Nullable []`
@@ -277,6 +280,12 @@ class _Parser:
             params, _ = self.param_list()
             self.take("->")
             return FunctionType(params, self.union(), Named(name, args, value))
+        if self.peek() == "(" and (owner := self._abstract_pointer()) is not None:
+            # C++ `R (*)(A)`, `R (C::*)(A)`
+            params, _ = self.param_list()
+            if owner:
+                params = (Named(owner),) + params
+            return Pointer(FunctionType(params, Named(name, args, value)), "*")
         if self.peek() == "(":   # C++ std::function<R(A)>
             params, _ = self.param_list()
             return FunctionType(params, Named(name, args, value))
@@ -293,6 +302,19 @@ class _Parser:
             if self.peek() == "<":
                 outer, args = args, self.arg_list(">")
         return Named(name, args, value, subscript, outer)
+
+    def _abstract_pointer(self) -> Optional[str]:
+        """`(*)` or `(C::*)` at hand (a C++ pointer to a function or a member function, its
+        name left out), taken: "" or the member pointer's class (C, which the function type
+        names as its first parameter); None where it is not."""
+        j = self.i + 1
+        while j + 1 < len(self.toks) and _is_ident(self.toks[j]) and self.toks[j + 1] == "::":
+            j += 2
+        if j + 1 < len(self.toks) and self.toks[j] == "*" and self.toks[j + 1] == ")":
+            owner = "".join(self.toks[self.i + 1:j])[:-2]
+            self.i = j + 2
+            return owner
+        return None
 
     def param_list(self, opener: str = "(", close: str = ")") -> tuple[tuple, bool]:
         """`(A, b: B, ...rest: C[])` -> (types, whether it was a plain `(Type)`)."""

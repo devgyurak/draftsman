@@ -342,7 +342,9 @@ def test_cpp_macro_calls_in_class_bodies_are_no_members(tmp_path):
         "  poco_static_assert (offsetof(Hdr, checksum) == 0x02);\n"
         "  void (P::*method)(int);\n  int x;\n};\n}\n")})
     assert [m.name for m in next(t for t in ir.types if t.id == "n::Impl").members] == ["method", "x"]
-    assert not any(r.from_ == "n::Impl" for r in ir.relations)
+    # (the member pointer's class is a name of the field's type: #9, case 44)
+    assert {(r.to, r.kind) for r in ir.relations if r.from_ == "n::Impl"} == {
+        ("n::P", "dependency")}
     assert not ir.unresolved
 
 

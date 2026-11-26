@@ -273,3 +273,37 @@ def test_operators_and_member_templates_are_members(tmp_path):
         "  template <class Order> Order* make(Order o); };\n")})
     assert _deps(ir, "Cmp") == {("Item", "operator()"), ("Item", "operator[]")}
     assert _deps(ir, "P") == {("Item", "pick")}
+
+
+def test_function_pointer_types(tmp_path):
+    # #9, case 44: a pointer to a function or a member function, std::function<R*(A)>; a
+    # parameter named like a class names none
+    ir = extract_source(tmp_path, {"h.h": (
+        "#include <functional>\nstruct Item {}; struct Order {}; struct Session {};\n"
+        "struct Engine {\n  typedef void (*Callback)(const Order* Item);\n"
+        "  typedef void (Engine::*Method)(Item&);\n"
+        "  using Factory = std::function<Session*(const Order&)>;\n"
+        "  void onOrder(Callback cb);\n  Method method_;\n  Factory factory_;\n};\n")})
+    assert _deps(ir, "Engine") == {("Order", "onOrder"), ("Item", "method_"),
+                                   ("Session", "factory_"), ("Order", "factory_")}
+    # a member pointer written directly names its class; an alias of one does not (as
+    # Clang's key reads aliases)
+    ir = extract_source(tmp_path / "m", {"h.h": (
+        "struct Item {}; struct Handler {}; struct Order {};\n"
+        "struct M {\n  using Start = void (Handler::*)(const Item&);\n  Start s_;\n"
+        "  void (Order::*direct_)(int);\n};\n")})
+    assert _deps(ir, "M") == {("Item", "s_"), ("Order", "direct_")}
+
+
+def test_conversion_operators_and_abstract_function_pointers(tmp_path):
+    # #9, cases 43 and 44: `operator const Item&()`, `using G = void (*)(const Order*)`, a
+    # typedef returning a pointer; an assignment operator leaves an interface one
+    ir = extract_source(tmp_path, {"h.h": (
+        "struct Item {}; struct Money {}; struct Order {};\n"
+        "struct Conv { operator const Item&() const; operator Money() const; };\n"
+        "struct E {\n  using G = void (*)(const Order*);\n  typedef Money* (*Make)(const Item&);\n"
+        "  G g_;\n  Make m_;\n};\n"
+        "struct Face { virtual void run() = 0; Face& operator=(const Face&); };\n")})
+    assert _deps(ir, "Conv") == {("Item", "operator const Item&"), ("Money", "operator Money")}
+    assert _deps(ir, "E") == {("Order", "g_"), ("Money", "m_"), ("Item", "m_")}
+    assert next(t for t in ir.types if t.id == "Face").kind == "interface"
