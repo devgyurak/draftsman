@@ -545,6 +545,16 @@ class CppSpec(LanguageSpec):
         src = _blank_leading_macros(src)
         return _blank_inline_directives(src)
 
+    def declarator_type(self, node, src):
+        # `operator const Item&() const`: the conversion's type
+        cur = node
+        while cur is not None and cur.type != "operator_cast":
+            cur = cur.child_by_field_name("declarator")
+        if cur is None:
+            return None
+        text = cur.text.decode().split("(")[0]
+        return " ".join(text[len("operator"):].split()) or None
+
     def alias_target(self, alias_node, type_node, text):
         if type_node.child_by_field_name("body") is not None:
             # `typedef struct Legacy {...} Legacy_t, *LegacyPtr;` names struct Legacy;
@@ -635,7 +645,12 @@ class CppSpec(LanguageSpec):
             if t == "qualified_identifier":  # out-of-class definition: A::f
                 name = cur.child_by_field_name("name")
                 return (name.text.decode() if name is not None else None), suffix, is_function
-            if t in ("destructor_name", "operator_name", "operator_cast"):
+            if t == "operator_name":   # `bool operator()(const Item& a) const`, named as
+                # written, as an operator's body is (init_via)
+                return " ".join(cur.text.decode().split()), suffix, is_function
+            if t == "operator_cast":   # named as its body is (init_via)
+                return " ".join(cur.text.decode().split("(")[0].split()), suffix, True
+            if t == "destructor_name":
                 return None, suffix, is_function
             if t == "function_declarator":
                 inner = cur.child_by_field_name("declarator")
@@ -684,7 +699,9 @@ class CppSpec(LanguageSpec):
     def finalize_type(self, raw):
         if raw.kind not in ("class", "struct"):
             return
-        methods = [rm.member for rm in raw.members if rm.member.kind == "method"]
+        # (an assignment operator is as a constructor: no behaviour of the interface)
+        methods = [rm.member for rm in raw.members
+                   if rm.member.kind == "method" and rm.member.name.replace(" ", "") != "operator="]
         if not any(m.abstract for m in methods):
             return
         fields = [rm.member for rm in raw.members

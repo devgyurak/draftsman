@@ -554,6 +554,11 @@ class LanguageSpec:
         the type node (Kotlin `suspend`, `context(A)`)."""
         return text
 
+    def declarator_type(self, node, src: bytes) -> Optional[str]:
+        """A member's type written inside its declarator where no `@type` is captured (C++'s
+        conversion operator `operator const Item&()`), or None."""
+        return None
+
     def call_names(self, text: str) -> list[str]:
         """The names a base written as a call (`@super.call`) writes, which may be classes
         it depends on."""

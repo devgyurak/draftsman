@@ -1189,6 +1189,8 @@ class Extractor:
             name = dname or name
             if type_ref is not None and suffix:
                 type_ref += suffix
+            if type_ref is None:
+                type_ref = spec.declarator_type(d, src)
             if is_function and kind == "field":
                 kind = "method"
             elif not is_function and kind != "field":

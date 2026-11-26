@@ -258,3 +258,7 @@ def test_a_dependent_member_names_its_template_alone(tmp_path):
         "};\n")})
     rels = {(r.to, r.via) for r in ir.relations if r.from_ == "R" and r.evidence is None}
     assert rels == {("H", "R")}
+
+
+def _deps(ir, src: str) -> set[tuple[str, str]]:
+    return {(r.to, r.via) for r in ir.relations if r.from_ == src and r.evidence is None}

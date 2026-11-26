@@ -63,6 +63,8 @@
 ; constructor declarations inside a class body
 (field_declaration_list
   (declaration declarator: (function_declarator) @declarator) @member.method)
+; conversion operators (`operator const Item&() const;`): their type is in the declarator
+(field_declaration_list (declaration declarator: (operator_cast) @declarator) @member.method)
 (field_declaration_list
   (template_declaration
     (declaration type: (_)? @type declarator: (function_declarator) @declarator) @member.method))
