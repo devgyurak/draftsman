@@ -16,6 +16,8 @@ from draftsman.typeref import (Array, FunctionType, Named, Nullable, Pointer, Ty
     ("list[Order]", Named("list", (Named("Order"),))),
     ("Optional<? extends Shape>", Named("Optional", (Named("Shape"),))),
     ("Optional<? super Shape>", Named("Optional", (Named("Shape"),))),   # #9, case 26
+    ("Connection.@Nullable Response", Named("Connection.Response")),     # #9, case 27
+    ("a.b.@A(x = 1) @B C<D>", Named("a.b.C", (Named("D"),))),
     ("@NonNull Order", Named("Order")),
     ("const std::vector<Node>&", Pointer(Named("std::vector", (Named("Node"),)), "&")),
     ("Node const*", Pointer(Named("Node"), "*")),

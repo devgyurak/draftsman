@@ -333,10 +333,18 @@ class _Parser:
         parts.append(self.take())
         if not _is_ident(parts[0]):
             raise _ParseError(f"bad name {parts[0]!r}")
-        while self.peek() in (".", "::") and _is_ident(self.peek(1) or ""):
+        while self.peek() in (".", "::") and (_is_ident(self.peek(1) or "")
+                                              or self.peek() == "." and self.peek(1) == "@"):
             sep = self.take()
+            while self.peek() == "@":   # Java `Connection.@Nullable Response`
+                self.take()
+                self.qualified_name()
+                if self.peek() == "(":
+                    self.skip_balanced("(", ")")
             parts.append(sep)
             parts.append(self.take())
+            if not _is_ident(parts[-1]):
+                raise _ParseError(f"bad name {parts[-1]!r}")
         return "".join(parts)
 
     def arg_list(self, close: str) -> tuple:
