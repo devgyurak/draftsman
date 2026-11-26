@@ -385,7 +385,9 @@ def key_dir(directory: Path, out: Path) -> list[dict]:
     v = KEY_COMPILER
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
+        # (context parameters are experimental in this compiler: review sets write them)
         done = container(["kotlinc", v, "-no-stdlib", "-no-reflect", "-nowarn",
+                          "-Xcontext-parameters",
                           "-cp", ":".join(f"/opt/kotlin/{j}" for j in TABLE_JARS),
                           f"-Xplugin=/opt/type-uses/type-uses-{v}.jar",
                           "-P", "plugin:draftsman.typeuses:out=/work/out", "-d", "/work/classes",
