@@ -179,20 +179,20 @@ checked), an SVG and an HTML viewer — on real projects, tests and generated co
 
 | Language | Project | Files | Types | Relations | Unresolved | Parse diagnostics |
 |---|---|---:|---:|---:|---:|---:|
-| Java | [spring-petclinic](docs/e2e/java/spring-petclinic.md) | 30 | 25 | 74 + 27 body | 0 | 0 |
-| Java | [jsoup](docs/e2e/java/jsoup.md) | 105 | 230 | 1310 + 1724 body | 0 | 0 |
-| Java | [Netty](docs/e2e/java/netty.md) | 2076 | 2752 | 17812 + 13818 body | 3 (2 outside, 1 unexplained) | 0 |
-| C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 366 + 206 body | 194 (1 ambiguous, 193 outside) | 0 |
-| C# | [eShop](docs/e2e/csharp/eshop.md) `src/` | 497 | 506 | 960 + 442 body | 513 (1 ambiguous, 508 outside, 4 unexplained) | 0 |
-| C# | [Serilog](docs/e2e/csharp/serilog.md) `src/Serilog` | 113 | 119 | 566 + 363 body | 23 (23 outside) | 0 |
-| Kotlin | [nowinandroid](docs/e2e/kotlin/nowinandroid.md) | 226 | 237 | 416 + 110 body | 4 (3 outside, 1 unexplained) | 0 |
-| Kotlin | [Ktor](docs/e2e/kotlin/ktor.md) | 1578 | 2137 | 6897 + 2970 body | 586 (49 ambiguous, 537 outside) | 0 |
-| TypeScript | [nest](docs/e2e/typescript/nest.md) `packages/` | 730 | 738 | 2307 + 1117 body | 0 | 0 |
-| TypeScript | [TypeORM](docs/e2e/typescript/typeorm.md) `packages/typeorm/src` | 496 | 694 | 3968 + 2076 body | 1 (1 unexplained) | 0 |
+| Java | [spring-petclinic](docs/e2e/java/spring-petclinic.md) | 30 | 25 | 78 + 27 body | 0 | 0 |
+| Java | [jsoup](docs/e2e/java/jsoup.md) | 105 | 230 | 1326 + 1724 body | 0 | 0 |
+| Java | [Netty](docs/e2e/java/netty.md) | 2076 | 2752 | 18003 + 13818 body | 3 (2 outside, 1 unexplained) | 0 |
+| C# | [eShopOnWeb](docs/e2e/csharp/eshoponweb.md) `src/` | 209 | 208 | 407 + 206 body | 195 (1 ambiguous, 194 outside) | 0 |
+| C# | [eShop](docs/e2e/csharp/eshop.md) `src/` | 497 | 506 | 1025 + 448 body | 455 (2 ambiguous, 449 outside, 4 unexplained) | 0 |
+| C# | [Serilog](docs/e2e/csharp/serilog.md) `src/Serilog` | 113 | 119 | 569 + 363 body | 23 (23 outside) | 0 |
+| Kotlin | [nowinandroid](docs/e2e/kotlin/nowinandroid.md) | 226 | 237 | 420 + 110 body | 4 (3 outside, 1 unexplained) | 0 |
+| Kotlin | [Ktor](docs/e2e/kotlin/ktor.md) | 1578 | 2137 | 7344 + 2970 body | 584 (49 ambiguous, 535 outside) | 0 |
+| TypeScript | [nest](docs/e2e/typescript/nest.md) `packages/` | 730 | 738 | 3211 + 1117 body | 0 | 0 |
+| TypeScript | [TypeORM](docs/e2e/typescript/typeorm.md) `packages/typeorm/src` | 496 | 694 | 4996 + 2076 body | 1 (1 unexplained) | 0 |
 | Python | [httpx](docs/e2e/python/httpx.md) | 23 | 87 | 283 + 152 body | 0 | 0 |
-| Python | [Django](docs/e2e/python/django.md) `django/` | 879 | 1964 | 1865 + 3203 body | 0 | 0 |
-| C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 885 + 597 body | 2 (2 unexplained) | 9 spans in 8 files (5 in function bodies; `extern "C"`, `__has_include`, a gMock macro, a pointer-to-member field) |
-| C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2066 | 9983 + 10885 body | 309 (1 ambiguous, 4 outside, 304 unexplained; system and library headers, POCO's `#define` types) | 333 spans in 121 files (`#if` branches, pointers to members, explicit instantiations, `typeid`) |
+| Python | [Django](docs/e2e/python/django.md) `django/` | 879 | 1964 | 1946 + 3203 body | 4 (4 unexplained) | 0 |
+| C++ | [leveldb](docs/e2e/cpp/leveldb.md) | 102 | 161 | 892 + 596 body | 1 (1 unexplained) | 9 spans in 8 files (5 in function bodies; `extern "C"`, `__has_include`, a gMock macro, a pointer-to-member field) |
+| C++ | [POCO](docs/e2e/cpp/poco.md) | 2317 | 2066 | 10177 + 10890 body | 312 (1 ambiguous, 7 outside, 304 unexplained; system and library headers, POCO's `#define` types) | 333 spans in 121 files (`#if` branches, pointers to members, explicit instantiations, `typeid`) |
 
 The relations are the declared ones, then those read from names in method bodies (`new
 Foo()`, `Foo.bar()`), which match what the compiler resolves at every place on the twelve

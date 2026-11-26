@@ -11,7 +11,7 @@ exception classes.
 | Commit | `2ef5cec8a9` (2026-11-17) |
 | Extracted | the whole repository without tests (`testsuite/`, `Data/DataTest`, `CppUnit/`), `samples/`, `fuzzing/`, `Benchmark/` and the bundled third-party code (`dependencies/`, `Data/SQLParser`) |
 
-Measured on 2026-11-25 with Draftsman 0.10.0 (at `01b2734`; 0.10.0 extracts the same `ir.json`). The declared relations changed in 0.10.0 (#7: a declaration's names are looked up as names in bodies are): 14 added (RemotingNG's `HeaderInterceptor::Ptr`, which Clang resolves), 10 removed (an alias template's own parameter taken for `Poco::Hash` 3, members of `std` templates' aliases taken for their arguments 4, a dependent `typename` alias 1, `VarVisitor`'s two `Details::` types, declared under `#ifndef POCO_DOC` and named outside it); the body relations are the same as 0.9.0's.
+Measured on 2026-11-26 with Draftsman 0.11.0 (at `b631f56`; 0.11.0 extracts the same `ir.json`). In 0.11.0 (#9) declarations name more: 207 declared relations are added (operator member functions and conversion operators, 1000 of them now listed as methods; function and member function pointers; member function templates; constructors in `#if` branches of a class, 16; a member of an alias of a class or of a template's specialisation; `#if` chains whose `#else` is `#error`) and 17 removed: `typename EventFilter<T>::Ptr`, a member of what a template parameter makes, draws `EventFilter` alone, no longer `Poco::AutoPtr` (16 relations of `EventDispatcher` and the three `Logical*Filter`), and `PKCS12Container::_caCertList` (`CAList`, a `std::vector` of `X509Certificate`) is an association of `*`, not a dependency. Body relations: 18 added, 13 removed, where a name through an alias is now the member Clang gives (a function pointer alias's types, `Table::Iterator`-like members). 0.10.0's note: the declared relations changed in 0.10.0 (#7: a declaration's names are looked up as names in bodies are): 14 added, 10 removed.
 
 ## Run
 
@@ -49,32 +49,32 @@ unresolved below.
 `extract.py` prints:
 
 ```text
-draftsman: 2317 files, 2066 types, relations: association 1920, dependency 6993, extends 893, implements 181, body dependency 10885, 311 unresolved (1 ambiguous, 7 outside the sources, 303 unexplained), 333 diagnostics
+draftsman: 2317 files, 2066 types, relations: association 1928, dependency 7175, extends 893, implements 181, body dependency 10890, 312 unresolved (1 ambiguous, 7 outside the sources, 304 unexplained), 333 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 2317 | 2066 | 1920 | 6993 | 893 | 181 | 10885 | 311 (1 ambiguous, 7 outside, 303 unexplained) | 333 |
+| 2317 | 2066 | 1928 | 7175 | 893 | 181 | 10890 | 312 (1 ambiguous, 7 outside, 304 unexplained) | 333 |
 
 Types by kind: 1374 classes, 273 structs, 2 unions, 74 abstract classes, 65 interfaces, 278 enums.
 
-The Mermaid and SVG renders of the view draw 50 boxes and 126 relations (`Poco::Logger` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2066 types, as 1626 boxes with 440 nested types folded into their outer types, and 7426 relations (body relations among them) and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 50 boxes and 126 relations (`Poco::Logger` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2066 types, as 1626 boxes with 440 nested types folded into their outer types, and 7478 relations (body relations among them) and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
-311 references to 159 names. C++ has no wildcard import that could explain a name outside
+312 references to 160 names. C++ has no wildcard import that could explain a name outside
 the sources, so most are unexplained; the groups below cover all of them. (zlib's three
 names are "outside" now: their classes' base is an alias of a class template whose own base
 is `std::basic_streambuf`, which may nest them.)
 
 Outside the sources (267):
 
-- Platform APIs, from system headers: Windows (71: `HANDLE` 17, `DWORD` 14,
-  `SecurityFunctionTableW`, `CredHandle`, `HKEY`, ...) and POSIX and other systems (55:
+- Platform APIs, from system headers: Windows (72: `HANDLE` 17, `DWORD` 14,
+  `SecurityFunctionTableW`, `CredHandle`, `HKEY`, ...) and POSIX and other systems (56:
   `sockaddr` 9, `pthread_mutex_t`, `timeval`, `sem_t`, `semid_ds`, `epoll_event`, `pid_t`; VxWorks'
   `SEM_ID` and `MODULE_ID`, HP-UX's `shl_t`, Solaris' `fp_except`).
 - Libraries the connectors and wrappers bind to: ODBC (36: `SQLINTEGER`, `SQLSMALLINT`,
-  `SQLHDBC`, ...), OpenSSL (35: `EVP_PKEY` 9, `X509`, `SSL_CTX`, `BIO`), DNS-SD and Avahi
+  `SQLHDBC`, ...), OpenSSL (33: `EVP_PKEY` 9, `X509`, `SSL_CTX`, `BIO`), DNS-SD and Avahi
   (24), MySQL (17), PostgreSQL (7), expat (5), the 7-Zip SDK (5), zlib (3), PCRE2 (3),
   SQLite (2; one *may come from wildcard import Poco::Data::Keywords::\**), Apache's
   `request_rec`.
@@ -93,7 +93,7 @@ macros that mention it, the file named after it first: *mentioned by
 POCO_DECLARE_EXCEPTION(...) at XML/include/Poco/XML/XMLException.h:28, ...; one of them may
 declare it*.
 
-Never defined (1): `XMLStreamSerializer`, only forward-declared in `ValueTraits.h`.
+Never defined (2): `XMLStreamSerializer`, only forward-declared in `ValueTraits.h`; `Compose` in `Util/Units.h`, a class template only declared (`template <...> struct Compose;`), named by the return type of `Value`'s `operator *`.
 
 Declared in an `#if` branch the declaration is outside of (2): `Details::TypeInfoHash` and
 `Details::EqualRef` in `Dynamic::Visitor`, declared under `#ifndef POCO_DOC` only (#7).
@@ -131,7 +131,7 @@ extracted; what is lost is members near a span. By cause:
 
 ## What it covers
 
-- Names in bodies (`evidence: "body"`): 21908 names are drawn as 10885 body dependencies, and each matches what Clang resolves there (`bench/clang_oracle`: 960 translation units configured by CMake with every optional component the image has the libraries of, and 43 headers no unit includes compiled each on its own; a header's answer only where every unit that compiles the line agrees; 0 mismatches). Counted apart: 1179 names in files and `#if` branches no Linux unit compiles (Windows' `NetSSL_Win`, the `*_WIN32`, `*_VX` files), 17 dependent names in templates, one in DNSSD/Bonjour (Avahi's `dns_sd.h` lacks newer calls). Member functions defined out of their class are their class's (most of POCO's body names: 78%); code outside every type (990 names) and template specialisations' bodies (1671) draw nothing (#8).
+- Names in bodies (`evidence: "body"`): 21912 names are drawn as 10890 body dependencies, and each matches what Clang resolves there (`bench/clang_oracle`: 960 translation units configured by CMake with every optional component the image has the libraries of, and 43 headers no unit includes compiled each on its own; a header's answer only where every unit that compiles the line agrees; 0 mismatches). Counted apart: 1179 names in files and `#if` branches no Linux unit compiles (Windows' `NetSSL_Win`, the `*_WIN32`, `*_VX` files), 17 dependent names in templates, one in DNSSD/Bonjour (Avahi's `dns_sd.h` lacks newer calls). Member functions defined out of their class are their class's (most of POCO's body names: 78%); code outside every type (990 names) and template specialisations' bodies (1671) draw nothing (#8).
 - Export macros in mixed case between `class` and the name: more than 1100 header lines
   start with `class Foundation_API Logger: public Channel` and the like (`Net_API`,
   `NetSSL_Win_API`, `DNSSD_Bonjour_API`); also before functions (`Net_API std::ostream&
@@ -147,6 +147,6 @@ extracted; what is lost is members near a span. By cause:
   specialisations such as `AbstractEvent<void, TStrategy, ...>` are skipped with what is
   inside them, so no nested type of theirs comes out as a type of `Poco`.
 - Scale: 2066 types in nested namespaces (`Poco::Data::ODBC`, `Poco::Net::Impl`), 440
-  nested types; of 1920 associations, 1494 are `owned` and 426 `shared`. 129 `extends` relations
+  nested types; of 1928 associations, 1502 are `owned` and 426 `shared`. 129 `extends` relations
   reach 13 external classes, 12 of them in `std` (`std::ios` 43, `std::istream` 37,
   `std::ostream` 32) and quill's `Sink`.

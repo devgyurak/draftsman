@@ -8,7 +8,7 @@ Google's Android sample: Compose, Hilt, Room, DataStore, many Gradle modules.
 | Commit | `2982e63cb6` (2026-10-20) |
 | Extracted | the whole repository without tests, test fixtures and generated `build/` output; `*.gradle.kts` build scripts are never extracted |
 
-Measured on 2026-11-24 with Draftsman 0.8.0 (at `c90a7d4`; 0.8.0 extracts the same `ir.json`); the declared relations are the same as 0.3.0's.
+Measured on 2026-11-26 with Draftsman 0.11.0 (at `b631f56`; 0.11.0 extracts the same `ir.json`). In 0.11.0 (#9) a supertype's type arguments are dependencies (4 declared relations added); the rest of `ir.json` is the same as 0.8.0's.
 
 ## Run
 
@@ -39,12 +39,12 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 226 files, 237 types, relations: association 106, dependency 200, extends 27, implements 83, body dependency 110, 4 unresolved (3 outside the sources, 1 unexplained), 0 diagnostics
+draftsman: 226 files, 237 types, relations: association 106, dependency 204, extends 27, implements 83, body dependency 110, 4 unresolved (3 outside the sources, 1 unexplained), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 226 | 237 | 106 | 200 | 27 | 83 | 110 | 4 (3 outside, 1 unexplained) | 0 |
+| 226 | 237 | 106 | 204 | 27 | 83 | 110 | 4 (3 outside, 1 unexplained) | 0 |
 
 Types by kind: 131 classes, 14 abstract classes, 38 interfaces, 41 objects, 9 enums, 4 annotation classes.
 

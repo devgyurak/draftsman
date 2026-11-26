@@ -8,7 +8,7 @@ Google's key-value store: plain C++ with a C API, ports and benchmarks.
 | Commit | `29465588d3` (2026-11-12) |
 | Extracted | the whole repository without `*_test.cc` and `third_party/` |
 
-Measured on 2026-11-24 with Draftsman 0.9.0 (at `81ecfac`; 0.9.0 extracts the same `ir.json`); the declared relations are the same as 0.3.0's.
+Measured on 2026-11-26 with Draftsman 0.11.0 (at `b631f56`; 0.11.0 extracts the same `ir.json`). In 0.11.0 (#9) declarations name more: 7 declared relations are added (the typedef of a function pointer `BlockFunction` and a constructor's parameter in `TwoLevelIterator`, the pointer to a member function `method` in `Benchmark::ThreadArg`, an `operator()`'s parameters, `MemTable::Table::Iterator` through the typedef of a template's specialisation), and one body name, `Table::Iterator` in `MemTable::Get`, is the `SkipList::Iterator` Clang gives (1 body relation added, 2 removed).
 
 ## Run
 
@@ -39,12 +39,12 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 102 files, 161 types, relations: association 227, dependency 616, extends 17, implements 25, body dependency 597, 2 unresolved (2 unexplained), 9 diagnostics
+draftsman: 102 files, 161 types, relations: association 228, dependency 622, extends 17, implements 25, body dependency 596, 1 unresolved (1 unexplained), 9 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 102 | 161 | 227 | 616 | 17 | 25 | 597 | 2 (2 unexplained) | 9 |
+| 102 | 161 | 228 | 622 | 17 | 25 | 596 | 1 (1 unexplained) | 9 |
 
 Types by kind: 90 classes, 48 structs, 4 abstract classes, 8 interfaces, 11 enums.
 
@@ -52,10 +52,9 @@ The Mermaid and SVG renders of the view draw 42 boxes and 179 relations (`DBImpl
 
 ## Unresolved
 
-Both unexplained, with no hint: C++ has no wildcard import that could explain them.
+Unexplained, with no hint: C++ has no wildcard import that could explain it.
 
 - `HANDLE` in `leveldb::ScopedHandle` (`util/env_windows.cc`): the Windows API type from `<windows.h>`, which is not in the sources.
-- `BlockFunction` in `leveldb::TwoLevelIterator` (`table/two_level_iterator.cc`): a typedef of a function pointer, `typedef Iterator* (*BlockFunction)(...)`. Such typedefs are not read as aliases yet; the name stays unresolved rather than being dropped.
 
 ## Parse diagnostics
 
@@ -72,7 +71,7 @@ an expression and blanked.)
 
 ## What it covers
 
-- Names in bodies (`evidence: "body"`): 877 names are drawn as 597 body dependencies, and each matches what Clang resolves there (`bench/clang_oracle`: 45 translation units configured by CMake, `db_bench_log.cc` with `db_bench.cc`'s flags; a header's answer only where every unit that compiles the line agrees; 0 mismatches). Not checked: 60 names in `util/env_windows.cc` and in lines no unit compiles, which the extractor reads as any other. Member functions defined out of their class (`void DBImpl::CompactRange(...)`) are their class's; code outside every type draws nothing (220 of the 1027 project type names Clang finds in bodies; #8). The ids several programs' classes share (`Benchmark`, `RandomGenerator` of the three `db_bench*.cc`) are one type, as in the declared relations (#7).
-- Ownership: of 227 associations, 105 are `owned` (values, `unique_ptr`; drawn as composition) and 122 `shared` (pointers, references).
+- Names in bodies (`evidence: "body"`): 876 names are drawn as 596 body dependencies, and each matches what Clang resolves there (`bench/clang_oracle`: 45 translation units configured by CMake, `db_bench_log.cc` with `db_bench.cc`'s flags; a header's answer only where every unit that compiles the line agrees; 0 mismatches). Not checked: 60 names in `util/env_windows.cc` and in lines no unit compiles, which the extractor reads as any other. Member functions defined out of their class (`void DBImpl::CompactRange(...)`) are their class's; code outside every type draws nothing (220 of the 1027 project type names Clang finds in bodies; #8). The ids several programs' classes share (`Benchmark`, `RandomGenerator` of the three `db_bench*.cc`) are one type, as in the declared relations (#7).
+- Ownership: of 228 associations, 106 are `owned` (values, `unique_ptr`; drawn as composition) and 122 `shared` (pointers, references).
 - Namespaces (`leveldb::`, `leveldb::port::`), 30 nested types, typedefs drawn through (`typedef SkipList<const char*, KeyComparator> Table;`), `std::pair` elements.
 - Pure virtual classes: 8 are interfaces (only pure virtual methods, no data), 4 abstract classes.

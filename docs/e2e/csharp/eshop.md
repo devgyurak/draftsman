@@ -8,7 +8,7 @@ The successor of eShopOnWeb: a .NET Aspire solution of microservices (catalog, b
 | Commit | `5e526931f7` (2026-11-16) |
 | Extracted | `src/`: 19 projects and the shared `src/Shared` files (tests are under `tests/`) |
 
-Measured on 2026-11-25 with Draftsman 0.10.0 (at `01b2734`; 0.10.0 extracts the same `ir.json`). In 0.10.0 (#7), a file's `using X = ...` alias is that file's alone: 19 declared relations and 6 body ones that went to Ordering.API's query types `Order` and `CardType` (an alias of `OrdersApi.cs`) go to the domain's and the client's types, as Roslyn has them, and `Store.Location` (Roslyn: MAUI's) is unresolved.
+Measured on 2026-11-26 with Draftsman 0.11.0 (at `b631f56`; 0.11.0 extracts the same `ir.json`). In 0.11.0 (#9), a supertype's type arguments are dependencies (`IIntegrationEventHandler<OrderStatusChangedToPaidIntegrationEvent>`: 66 declared relations added), and a name through a `using` alias of a namespace is read (the 56 alias-qualified names of `ClientApp`'s committed protobuf code, `pb::CodedInputStream` with `using pb = global::Google.Protobuf;`, are types outside the sources, no longer unresolved). 0.10.0's note: a file's `using X = ...` alias is that file's alone: 19 declared relations and 6 body ones that went to Ordering.API's query types `Order` and `CardType` (an alias of `OrdersApi.cs`) go to the domain's and the client's types, as Roslyn has them, and `Store.Location` (Roslyn: MAUI's) is unresolved.
 
 ## Run
 
@@ -38,24 +38,23 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 497 files, 506 types, relations: association 220, dependency 590, extends 75, implements 74, body dependency 448, 511 unresolved (2 ambiguous, 505 outside the sources, 4 unexplained), 0 diagnostics
+draftsman: 497 files, 506 types, relations: association 220, dependency 656, extends 75, implements 74, body dependency 448, 455 unresolved (2 ambiguous, 449 outside the sources, 4 unexplained), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 497 | 506 | 220 | 590 | 75 | 74 | 448 | 511 (2 ambiguous, 505 outside, 4 unexplained) | 0 |
+| 497 | 506 | 220 | 656 | 75 | 74 | 448 | 455 (2 ambiguous, 449 outside, 4 unexplained) | 0 |
 
 Types by kind: 367 classes, 6 abstract classes, 42 interfaces, 81 records, 10 enums.
 
-The Mermaid and SVG renders of the view draw 27 types and 39 relations (`OrderingContext` and its neighbours one hop away; 5 of them are EF migrations that name it in `[DbContext(typeof(OrderingContext))]`, 7 come only through body relations: the six `*EntityTypeConfiguration` classes `OnModelCreating` applies and `Extensions`, the four global `Extensions` classes of four projects that ir.json merges into one id), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 506 types, as 491 boxes with 15 nested types folded into their outer types, and 933 relations (287 from bodies, shown around the class in focus) and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 27 types and 42 relations (`OrderingContext` and its neighbours one hop away; 5 of them are EF migrations that name it in `[DbContext(typeof(OrderingContext))]`, 7 come only through body relations: the six `*EntityTypeConfiguration` classes `OnModelCreating` applies and `Extensions`, the four global `Extensions` classes of four projects that ir.json merges into one id), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 506 types, as 491 boxes with 15 nested types folded into their outer types, and 944 relations (290 from bodies, shown around the class in focus) and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
-511 references to 205 names: 505 outside the sources, 2 ambiguous (a build-time gRPC type below, and `Location` in `MapViewModel.cs`, MAUI's through the SDK's implicit usings or a type of the project's namespaces), 4 unexplained (the `HybridApp` names below without a hint).
+455 references to 186 names: 449 outside the sources, 2 ambiguous (a build-time gRPC type below, and `Location` in `MapViewModel.cs`, MAUI's through the SDK's implicit usings or a type of the project's namespaces), 4 unexplained (the `HybridApp` names below without a hint).
 
 - 328 are library and framework types of the services, reached through `using` directives: EF Core (`ModelBuilder` 18, `EntityTypeBuilder`, `Migration`), MediatR (`IMediator` 17, `IRequest`, `INotification`), ASP.NET Core and Identity (`Controller`, `IActionResult`, `UserManager`), Duende IdentityServer (`IEventService`, `IIdentityServerInteractionService`), Aspire hosting and RabbitMQ. Each hint names the namespaces it may come from; a wildcard import cannot tell which of them declares the name.
-- 180 are in the two MAUI apps (`ClientApp` 162, `HybridApp` 18): MAUI and CommunityToolkit types (`ContentPage`, `BindableProperty`, `MauiApp`). Two gaps show here:
-  - 56 are alias-qualified names in the committed protobuf code of `ClientApp` (`pb::CodedInputStream`, `pbr::MessageDescriptor`, with `using pb = global::Google.Protobuf;`). Draftsman does not read a name through its `using` alias yet.
+- 124 are in the two MAUI apps (`ClientApp` 106, `HybridApp` 18): MAUI and CommunityToolkit types (`ContentPage`, `BindableProperty`, `MauiApp`). One gap shows here:
   - 4 in `HybridApp` (`Application`, `Window`, `IActivationState`, `ContentPage`) have no hint: the project uses `Microsoft.NET.Sdk.Razor` with `<UseMaui>`, whose implicit usings Draftsman does not know.
 - 1 is an attribute argument: `[JsonConverter(typeof(JsonStringEnumConverter<OrderStatus>))]` on `OrderStatus`, from `System.Text.Json.Serialization`, which the file imports with `using`.
 - gRPC types generated at build time from `Basket.API/Proto/basket.proto` (`Basket.BasketBase`, `GetBasketRequest`, `CustomerBasketResponse`, ...) are not in the sources. Draftsman reads the `<Protobuf Include>` items and the .proto, so in `Basket.API`'s `eShop.Basket.API.Grpc`, the namespace around `BasketService`, they are external types (`BasketService` extends `eShop.Basket.API.Grpc.Basket.BasketBase`). `WebApp` reaches them through `using eShop.Basket.API.Grpc;`, which they are not looked up in: its 1 `CustomerBasketResponse` is ambiguous, with `ClientApp`'s committed copy (`eShop.ClientApp.BasketGrpcClient`) as a candidate, not picked.

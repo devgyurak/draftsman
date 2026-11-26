@@ -8,7 +8,7 @@ An asynchronous network framework: buffers, channels, pipelines, codecs and nati
 | Commit | `e3cab70052` (2026-11-16) |
 | Extracted | the whole repository without `src/test`, the `testsuite*` and `*-tests` modules, `microbench/` and `example/` |
 
-Measured on 2026-11-23 with Draftsman 0.4.0.
+Measured on 2026-11-26 with Draftsman 0.11.0 (at `b631f56`; 0.11.0 extracts the same `ir.json`). In 0.11.0 (#9) declarations name more: a supertype's type arguments (`MessageToMessageDecoder<ByteBuf>`, 182 of them), `? super X`, a type annotation inside a qualified name and an annotation on an enum constant, 191 declared relations added; the body relations are the same as 0.4.0's.
 
 ## Run
 
@@ -41,16 +41,16 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 2076 files, 2752 types, relations: association 1752, dependency 13898, extends 1383, implements 779, body dependency 13818, 3 unresolved (2 outside the sources, 1 unexplained), 0 diagnostics
+draftsman: 2076 files, 2752 types, relations: association 1752, dependency 14089, extends 1383, implements 779, body dependency 13818, 3 unresolved (2 outside the sources, 1 unexplained), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 2076 | 2752 | 1752 | 13898 | 1383 | 779 | 13818 | 3 (2 outside, 1 unexplained) | 0 |
+| 2076 | 2752 | 1752 | 14089 | 1383 | 779 | 13818 | 3 (2 outside, 1 unexplained) | 0 |
 
 Types by kind: 1931 classes, 222 abstract classes, 422 interfaces, 161 enums, 16 annotation types.
 
-The Mermaid and SVG renders of the view draw 37 boxes and 158 relations (`DefaultChannelPipeline` and its neighbours one hop away, 15 of the boxes only through the 16 body relations of `DefaultChannelPipeline`), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2752 types, as 1979 boxes with 773 nested types folded into their outer types, and 11234 relations (4414 from bodies, shown around the class in focus) and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 37 boxes and 158 relations (`DefaultChannelPipeline` and its neighbours one hop away, 15 of the boxes only through the 16 body relations of `DefaultChannelPipeline`), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2752 types, as 1979 boxes with 773 nested types folded into their outer types, and 11243 relations (4401 from bodies, shown around the class in focus) and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
@@ -60,8 +60,8 @@ The Mermaid and SVG renders of the view draw 37 boxes and 158 relations (`Defaul
 
 ## What it covers
 
-- Scale: 38 modules in one extraction, the largest Java run. Dependencies outnumber every other kind (13898), which is why the view hides getters and setters and stays at one hop.
+- Scale: 38 modules in one extraction, the largest Java run. Dependencies outnumber every other kind (14089), which is why the view hides getters and setters and stays at one hop.
 - 773 nested types (`ChannelOutboundBuffer.Entry`, ...) and 180 generic types (`Future<V>`, `Promise<V>`, ...).
 - 116 external types with qualified ids: the JDK (`java.lang.Runnable`, `javax.net.ssl.SSLEngine`, ...) and libraries outside the sources (`io.netty.internal.tcnative.*` from netty-tcnative, JCTools).
-- Bodies: 13818 dependencies from names in method bodies, between 7922 pairs of types; no declaration relates 5491 of those pairs in that direction. They match what javac resolves at every place (`bench/javac_oracle`); four names javac resolves are not drawn, Netty's stubs of `java.lang.Module` and `ProcessHandle`.
-- Annotations: 212 dependencies, on `@UnstableApi` (133 types), `@ChannelHandler.Sharable` (41, most written `@Sharable` with an import of the nested annotation) and the `jfr-stub` annotations (`@Label`, `@Description`) of the allocator events.
+- Bodies: 13818 dependencies from names in method bodies, between 7922 pairs of types; no declaration relates 5462 of those pairs in that direction. They match what javac resolves at every place (`bench/javac_oracle`); four names javac resolves are not drawn, Netty's stubs of `java.lang.Module` and `ProcessHandle`.
+- Annotations: 213 dependencies, on `@UnstableApi` (134 types, one of them through an enum constant's annotation), `@ChannelHandler.Sharable` (41, most written `@Sharable` with an import of the nested annotation) and the `jfr-stub` annotations (`@Label`, `@Description`) of the allocator events.

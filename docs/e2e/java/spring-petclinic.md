@@ -8,7 +8,7 @@ Spring's sample application: JPA entities, Spring Data repositories, MVC control
 | Commit | `500158f732` (2026-09-29) |
 | Extracted | `src/main` (tests are under `src/test`) |
 
-Measured on 2026-11-23 with Draftsman 0.4.0.
+Measured on 2026-11-26 with Draftsman 0.11.0 (at `b631f56`; 0.11.0 extracts the same `ir.json`). In 0.11.0 (#9) a supertype's type arguments are dependencies (`JpaRepository<Owner, Integer>`, `Repository<Vet, Integer>`, `Formatter<PetType>`: 4 declared relations added); the body relations are the same as 0.4.0's.
 
 ## Run
 
@@ -39,12 +39,12 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 30 files, 25 types, relations: association 11, dependency 47, extends 11, implements 5, body dependency 27, 0 unresolved, 0 diagnostics
+draftsman: 30 files, 25 types, relations: association 11, dependency 51, extends 11, implements 5, body dependency 27, 0 unresolved, 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 30 | 25 | 11 | 47 | 11 | 5 | 27 | 0 | 0 |
+| 30 | 25 | 11 | 51 | 11 | 5 | 27 | 0 | 0 |
 
 Types by kind: 22 classes, 3 interfaces.
 

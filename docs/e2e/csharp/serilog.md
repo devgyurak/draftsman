@@ -8,7 +8,7 @@ A structured logging library: the logger pipeline, enrichers, sinks, formatting 
 | Commit | `43105b3509` (2026-10-24) |
 | Extracted | `src/Serilog` (tests are under `test/`) |
 
-Measured on 2026-11-23 with Draftsman 0.7.0 (at `3e14b4d`; 0.7.0 extracts the same `ir.json`).
+Measured on 2026-11-26 with Draftsman 0.11.0 (at `b631f56`; 0.11.0 extracts the same `ir.json`). In 0.11.0 (#9), a supertype's type arguments are dependencies (`IEnumerable<ILogEventEnricher>`, `LogEventPropertyValueVisitor<TState, LogEventPropertyValue>`: 3 declared relations added); the rest of `ir.json` is the same as 0.7.0's.
 
 ## Run
 
@@ -38,12 +38,12 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 113 files, 119 types, relations: association 94, dependency 399, extends 14, implements 59, body dependency 363, 23 unresolved (23 outside the sources), 0 diagnostics
+draftsman: 113 files, 119 types, relations: association 94, dependency 402, extends 14, implements 59, body dependency 363, 23 unresolved (23 outside the sources), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 113 | 119 | 94 | 399 | 14 | 59 | 363 | 23 (23 outside) | 0 |
+| 113 | 119 | 94 | 402 | 14 | 59 | 363 | 23 (23 outside) | 0 |
 
 Types by kind: 91 classes, 5 abstract classes, 14 interfaces, 5 structs, 4 enums.
 

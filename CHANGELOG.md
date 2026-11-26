@@ -7,6 +7,24 @@ Notes for anyone with `view.json` files written against a development build:
 - **0.3.0**: the entries below on nested types and annotations change the default
   focus diagram and the relations in `ir.json`; results measured with 0.2.0 (the
   benchmark's runs among them) are not comparable with 0.3.0 ones.
+- **0.11.0**: declarations name more in every language (#9, below): a supertype's type
+  arguments, TypeScript types the type parser read no name from, and each language's
+  forms that drew nothing. Results measured with 0.10.0 are not comparable with 0.11.0
+  ones on what declarations relate: the 14 e2e repositories' declared relations go from
+  47,687 to 50,677 (nest and TypeORM about 1,930 of the 2,990), none lost but a few
+  retargeted or retyped (POCO's `typename EventFilter<T>::Ptr` draws `EventFilter`
+  alone; a field naming a type and an array of it is one association of `*`; a
+  TypeScript field of an indexed access type is a dependency). C++'s bodies change too
+  (leveldb 1 added, 2 removed; POCO 18 added, 13 removed: a name through an alias is the
+  member Clang gives). `ir.json`'s members change: a TypeScript member's type carries a
+  type predicate (`x is T`) and a destructured parameter is named by its pattern (nest 21
+  types, TypeORM 14); C++ operators are methods (POCO 1000, leveldb 6), as are
+  constructors in `#if` branches (POCO 16) and member function templates; Kotlin reads
+  properties of a function type in parentheses and the parameters of such types, and an
+  extension property's receiver (Ktor 39 members). Against the answer keys the 14
+  repositories have no mismatch of declared or body relations; what declarations still
+  miss is #10's (types of one id in different build units) and #11's forms. httpx's
+  `ir.json` is the same as 0.10.0's.
 - **0.10.0**: the declared relations of C++, C#, Kotlin, Python and Java look names up as
   their compilers and checkers do (#7, below); results measured with 0.9.0 are not
   comparable with 0.10.0 ones on what declarations relate, and for C#, Kotlin and Java
@@ -48,7 +66,18 @@ Notes for anyone with `view.json` files written against a development build:
   focus diagram draws those that touch the focus; results measured with 0.3.0 (the
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
-- **Declarations read in every language: #9's remaining forms** (#9, after 0.10.0). Java:
+- **C#: the name before `::` is a using alias** (#9, 0.11.0). `L::Order` reads only the
+  file's aliases before the alias qualifier, `L.Order` a type `L` of a namespace around
+  first (in `namespace Shop.Inner` beside a class `Shop.L`: Lib.Order and Shop.L.Order, as
+  Roslyn has them); without an alias of the name it is unresolved. Type texts keep `::` as
+  written (eShop's gRPC `pb::MessageParser<...>`). Review sets `py5`, `jv6`, `ts5`, `kt19`,
+  `cpp17`, `cs23`; the e2e pages of the 13 repositories whose numbers moved are measured at
+  b631f56.
+- **Mermaid: braces in a parameter's name are escaped** (#9, 0.11.0). A TypeScript
+  destructured parameter is named by its pattern (`{ a, b }`), whose brace closed the
+  class body: nest's and TypeORM's focus diagrams failed `validate.sh` since 421c401. Names
+  write `{` and `}` as `#123;` and `#125;`.
+- **Declarations read in every language: #9's remaining forms** (#9, 0.11.0). Java:
   `? super X`, `Connection.@Nullable Response`, annotations on enum constants, and a
   superclass's package-private member inherited step by step through a chain (also a
   field, which hid a name in a body). Python: a decorator that is a class's attribute
@@ -72,7 +101,7 @@ Notes for anyone with `view.json` files written against a development build:
   parameters on; `declared.py --pairs` checks each declared relation against the key's
   records of its type.
 - **A field naming a type twice keeps the largest multiplicity; a dependent member is
-  its template** (#9, after 0.10.0). `transformer?: ValueTransformer | ValueTransformer[]`
+  its template** (#9, 0.11.0). `transformer?: ValueTransformer | ValueTransformer[]`
   was an association `1` (of two relations of one field to one type the first was kept),
   and is `*` (TypeORM: 14 fields). A C++ name written `typename X<T>::List`, a member of a
   template only an instantiation tells (Clang: dependent), stands for `X` alone where the
@@ -83,7 +112,7 @@ Notes for anyone with `view.json` files written against a development build:
   predicate as written (`x is Logger`), and a destructured parameter's name its pattern
   (`{ a, b }`), since the entries below.
 - **A supertype's type arguments are dependencies; a project alias named like a
-  container is drawn through** (#9, after 0.10.0). `class NodeList extends
+  container is drawn through** (#9, 0.11.0). `class NodeList extends
   ArrayList<Node>` depends on Node, in every language and whether the supertype is the
   project's or not (also a qualifier's arguments, `Outer<Item>.Inner<Node>`, and a
   TypeScript class's `extends Base<A>`, whose arguments tree-sitter keeps apart); C++
@@ -100,7 +129,7 @@ Notes for anyone with `view.json` files written against a development build:
   spring-petclinic 4 → 0, jsoup 15 → 10, Netty 187 → 10, eShopOnWeb 46 → 1, Serilog 3 → 0,
   eShop 68 → 2, nowinandroid 6 → 2, Ktor 613 → 393, POCO 196 → 151; no mismatch. Review
   sets jv3, py3, ts2, cs21, kt17, cpp14.
-- **TypeScript types the type parser read no name from** (#9, after 0.10.0). A union
+- **TypeScript types the type parser read no name from** (#9, 0.11.0). A union
   written with a leading `|` (prettier's multi-line unions), an intersection, an object
   type literal, a function type with optional parameters, an indexed access
   (`Required<GrpcOptions>['options']`), a conditional type, a type predicate (`x is

@@ -8,7 +8,7 @@ A reference ASP.NET Core application: MVC, Razor Pages, Blazor admin, a public A
 | Commit | `4da8212117` (2025-01-13) |
 | Extracted | `src/` (tests are under `tests/`) |
 
-Measured on 2026-11-25 with Draftsman 0.10.0 (at `01b2734`; 0.10.0 extracts the same `ir.json`). In 0.10.0 (#7) the arity written chooses the type: the `List<T>` fields of the Blazor page class `List` no longer associate it with itself (3 relations); and `BasketGuards`, written in the package's namespace `Ardalis.GuardClauses`, no longer draws `BasketItem` (unresolved, below).
+Measured on 2026-11-26 with Draftsman 0.11.0 (at `b631f56`; 0.11.0 extracts the same `ir.json`). In 0.11.0 (#9), a supertype's type arguments are dependencies (`Specification<CatalogItem>`, `ILookupDataResponse<CatalogBrand>`: 45 declared relations added). 0.10.0's note: the arity written chooses the type: the `List<T>` fields of the Blazor page class `List` no longer associate it with itself (3 relations); and `BasketGuards`, written in the package's namespace `Ardalis.GuardClauses`, no longer draws `BasketItem` (unresolved, below).
 
 ## Run
 
@@ -39,16 +39,16 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 209 files, 208 types, relations: association 93, dependency 208, extends 34, implements 27, body dependency 206, 195 unresolved (1 ambiguous, 194 outside the sources), 0 diagnostics
+draftsman: 209 files, 208 types, relations: association 93, dependency 253, extends 34, implements 27, body dependency 206, 195 unresolved (1 ambiguous, 194 outside the sources), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 209 | 208 | 93 | 208 | 34 | 27 | 206 | 195 (1 ambiguous, 194 outside) | 0 |
+| 209 | 208 | 93 | 253 | 34 | 27 | 206 | 195 (1 ambiguous, 194 outside) | 0 |
 
 Types by kind: 185 classes, 5 abstract classes, 16 interfaces, 1 record, 1 enum.
 
-The Mermaid and SVG renders of the view draw 7 types and 7 relations (`BasketService` and its neighbours one hop away, `BasketWithItemsSpecification` and `ConfigureCoreServices` only through body relations), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 208 types, as 204 boxes with 4 nested types folded into their outer types, and 371 relations (112 from bodies, shown around the class in focus) and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 7 types and 8 relations (`BasketService` and its neighbours one hop away, `BasketWithItemsSpecification` and `ConfigureCoreServices` only through body relations), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 208 types, as 204 boxes with 4 nested types folded into their outer types, and 378 relations (112 from bodies, shown around the class in focus) and opens on the same focus. No inferred edges.
 
 ## Unresolved
 

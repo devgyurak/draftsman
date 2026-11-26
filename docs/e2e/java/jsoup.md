@@ -8,7 +8,7 @@ An HTML parser: a deep node and evaluator hierarchy with many nested types.
 | Commit | `d90d57521d` (2026-11-04) |
 | Extracted | `src/main` (language detected) |
 
-Measured on 2026-11-23 with Draftsman 0.4.0.
+Measured on 2026-11-26 with Draftsman 0.11.0 (at `b631f56`; 0.11.0 extracts the same `ir.json`). In 0.11.0 (#9) declarations name more: a supertype's type arguments (`Elements extends Nodes<Element>`), `? super X` and a type annotation inside a qualified name (`Connection.@Nullable Response`), 16 declared relations added; the body relations are the same as 0.4.0's.
 
 ## Run
 
@@ -39,16 +39,16 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 105 files, 230 types, relations: association 147, dependency 1014, extends 118, implements 31, body dependency 1724, 0 unresolved, 0 diagnostics
+draftsman: 105 files, 230 types, relations: association 148, dependency 1029, extends 118, implements 31, body dependency 1724, 0 unresolved, 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 105 | 230 | 147 | 1014 | 118 | 31 | 1724 | 0 | 0 |
+| 105 | 230 | 148 | 1029 | 118 | 31 | 1724 | 0 | 0 |
 
 Types by kind: 187 classes, 17 abstract classes, 13 interfaces, 13 enums.
 
-The Mermaid and SVG renders of the view draw 52 boxes and 233 relations (`Element` and its neighbours one hop away, 13 of the boxes only through the 21 body relations of `Element`), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 230 types, as 96 boxes with 134 nested types folded into their outer types, and 667 relations (318 from bodies, shown around the class in focus) and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 52 boxes and 233 relations (`Element` and its neighbours one hop away, 13 of the boxes only through the 21 body relations of `Element`), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 230 types, as 96 boxes with 134 nested types folded into their outer types, and 669 relations (318 from bodies, shown around the class in focus) and opens on the same focus. No inferred edges.
 
 ## Unresolved
 

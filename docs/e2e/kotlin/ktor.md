@@ -8,7 +8,7 @@ An asynchronous client and server framework, Kotlin Multiplatform: common code w
 | Commit | `cc3d345bc2` (2026-11-16) |
 | Extracted | the whole repository without test source sets (`<module>/<platform>/test`), test-support modules (`ktor-server-test-host`, `ktor-client-tests`, ...), the compiler plugin's test data and the Gradle build logic |
 
-Measured on 2026-11-25 with Draftsman 0.10.0 (at `01b2734`; 0.10.0 extracts the same `ir.json`); the declared relations are the same as 0.3.0's. In 0.10.0 (#7) a star import of a package the tables know comes before the default imports: two `Json` names (`import kotlinx.serialization.json.*`) are no longer unresolved.
+Measured on 2026-11-26 with Draftsman 0.11.0 (at `b631f56`; 0.11.0 extracts the same `ir.json`). In 0.11.0 (#9) declarations name more: a supertype's type arguments, typealiases of suspend function types and function types in parentheses, context parameters, an extension property's receiver, annotations on accessors and enum entries, an `expect class` beside an `actual typealias` of a class outside the sources (`Charset`): 447 declared relations added; the body relations are the same. What is left unread against the compiler is #10's: types several source sets declare at one id. 0.10.0's note: a star import of a package the tables know comes before the default imports: two `Json` names (`import kotlinx.serialization.json.*`) are no longer unresolved.
 
 ## Run
 
@@ -44,16 +44,16 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 1578 files, 2137 types, relations: association 1686, dependency 3775, extends 714, implements 722, body dependency 2970, 584 unresolved (49 ambiguous, 535 outside the sources), 0 diagnostics
+draftsman: 1578 files, 2137 types, relations: association 1713, dependency 4170, extends 719, implements 742, body dependency 2970, 584 unresolved (49 ambiguous, 535 outside the sources), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 1578 | 2137 | 1686 | 3775 | 714 | 722 | 2970 | 584 (49 ambiguous, 535 outside) | 0 |
+| 1578 | 2137 | 1713 | 4170 | 719 | 742 | 2970 | 584 (49 ambiguous, 535 outside) | 0 |
 
 Types by kind: 1406 classes, 73 abstract classes, 277 interfaces, 266 objects, 69 enums, 46 annotation classes.
 
-The Mermaid and SVG renders of the view draw 38 boxes and 104 relations (`HttpClientCall` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2137 types, as 1688 boxes with 449 nested types folded into their outer types, and 5295 relations (body relations among them) and opens on the same focus. No inferred edges.
+The Mermaid and SVG renders of the view draw 39 boxes and 108 relations (`HttpClientCall` and its neighbours one hop away), and the Mermaid file passes `validate.sh`. The HTML viewer carries all 2137 types, as 1688 boxes with 449 nested types folded into their outer types, and 5415 relations (body relations among them) and opens on the same focus. No inferred edges.
 
 ## Unresolved
 
@@ -108,4 +108,4 @@ relation).
   library supertypes (`CoroutineScope`, `AbstractDecoder`, `JsAny`, ...) are drawn as external
   boxes; the numbers above do not count them, as the view leaves externals out.
 - Function types (`suspend (HttpResponse) -> Boolean`, `HttpRequestBuilder.() -> Unit`, also in supertypes such as `ClientHook<suspend (HttpResponse) -> HttpResponse?>`): every project type they name is a dependency.
-- Annotations: 446 dependencies, mostly opt-in and DSL markers (`InternalAPI` named by 203 types, `KtorDsl` by 119); `"annotations": false` leaves them out of a diagram. `@Serializable(with = X.Companion.Serializer::class)` reaches the serializer nested in a plain companion object.
+- Annotations: 448 dependencies, mostly opt-in and DSL markers (`InternalAPI` named by 205 types, `KtorDsl` by 119); `"annotations": false` leaves them out of a diagram. `@Serializable(with = X.Companion.Serializer::class)` reaches the serializer nested in a plain companion object.
