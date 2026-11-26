@@ -473,8 +473,10 @@ def _pick(here: list[dict], r: dict, written: str, starts: list[int]) -> Optiona
                   key=lambda n: n["line"] != r["line"])
     if not pool:
         return None
-    exact = [n for n in pool if n["written"].replace(" ", "") == written
-             or n["written"].replace(" ", "").startswith(written + ".")]
+    # (C#'s alias qualifier `L::Order` is the extractor's `L.Order`)
+    flat = lambda w: w.replace(" ", "").replace("::", ".")   # noqa: E731
+    exact = [n for n in pool if flat(n["written"]) == flat(written)
+             or flat(n["written"]).startswith(flat(written) + ".")]
     if exact:
         return exact[0]
     if "." in written or "::" in written:
