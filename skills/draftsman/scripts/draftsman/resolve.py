@@ -196,6 +196,14 @@ class Resolver:
         sep = LANGUAGES[t.language].separator
         return any(sep.join(names[:k]) in t.scope.rebound for k in range(1, len(names) + 1))
 
+    def _imports_function(self, path: str, sep: str) -> bool:
+        """Whether ``path`` is a function a file of the sources declares at its top in that
+        package (FileScope.top_functions), and no type: an import of it brings in no type."""
+        if sep not in path:
+            return False
+        ns, last = path.rsplit(sep, 1)
+        return any(last in s.top_functions for s in self.scopes_by_ns.get(ns, ()))
+
     def lookup(self, path: str, spec, depth: int = 0, certain: bool = False) -> Optional[str]:
         """Project type or alias id for a fully written path, following re-exports;
         ``certain``: only through wildcard imports known to bring the name in."""
@@ -898,6 +906,8 @@ class Resolver:
                     found = self.lookup(imp.path, spec, certain=strict)
                     if found:
                         return self._found(found)
+                    if self._imports_function(imp.path, sep):
+                        continue   # Kotlin's `import other.Widget` of a `fun Widget`: no type
                     outside = self._reexported_from(imp.path, spec)
                     if outside:
                         return Resolution(EXTERNAL, outside)

@@ -154,3 +154,12 @@ def test_an_expect_class_is_its_name_beside_an_actual_typealias(tmp_path):
                    "class Engine(val c: Charset) : Closeable { override fun close() {} }\n")})
     assert {(r.kind, r.to) for r in ir.relations if r.from_ == "u.Engine"} >= {
         ("association", "cs.Charset"), ("implements", "cs.Closeable")}
+
+
+def test_an_import_of_a_function_brings_in_no_type(tmp_path):
+    # #9, case 55: `import other.Widget` of a `fun Widget`; the type is the package's
+    ir = extract_source(tmp_path, {
+        "other/F.kt": "package other\nfun Widget(x: Int): Int = x\n",
+        "shop/W.kt": ("package shop\nimport other.Widget\nclass Widget(val s: String)\n"
+                      "class S { fun d(w: Widget) = w }\n")})
+    assert ("dependency", "Widget", "d") in _decl(ir, "shop.S")
