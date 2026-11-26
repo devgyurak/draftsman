@@ -748,6 +748,13 @@ class CSharpSpec(LanguageSpec):
     arity_selects = True
     members_hide_annotation_args = True
     rooted_prefix = "global::"
+
+    def normalize_type(self, text):
+        # `L::Order`, the alias qualifier `::` after a using alias of a namespace (`using L =
+        # Lib;`): `L.Order`; `global::` stays, which rooted_prefix reads
+        if text and "::" in text:
+            text = re.sub(r"\b(?!global\b)([A-Za-z_]\w*)\s*::\s*", r"\1.", text)
+        return text
     block_imports = True
     body_aliases = True
     color_color = True

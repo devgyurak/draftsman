@@ -800,6 +800,24 @@ class Resolver:
             if first.status in (EXTERNAL, BUILTIN):
                 return Resolution(EXTERNAL, (first.target or head) + sep + rest)
             if first.status == ALIAS:
+                # C#'s `using L = Lib;` then `L.Order`: an alias of a namespace of the
+                # sources stands for it; the name is read in that namespace
+                entry = self.alias_targets.get(first.target) if first.target else None
+                if entry is not None and spec.body_aliases:
+                    # (the alias's target is read from the namespace it stands in outward)
+                    block = entry[1].alias_blocks.get(first.target, "")
+                    for ns in self._namespace_chain(block, sep, True):
+                        target = f"{ns}{sep}{entry[0].strip()}" if ns else entry[0].strip()
+                        if target in self.namespaces:
+                            return self.resolve(target + sep + rest, rtype, member,
+                                                arity=arity, at_namespace="")
+                    written = re.sub(r"^\s*global::", "", entry[0]).strip()
+                    if not any(f"{ns}{sep}{written}" in self.index if ns else written in self.index
+                               for ns in self._namespace_chain(block, sep, True)) \
+                            and written not in self.aliases and "<" not in written:
+                        # `using pb = global::Google.Protobuf;` then `pb::CodedInputStream`:
+                        # a namespace (or type) outside the sources
+                        return Resolution(EXTERNAL, written + sep + rest)
                 return Resolution(ALIAS)
             if first.status == TPARAM:   # `typename R::Ptr`: a member of whatever R is
                 return Resolution(TPARAM)

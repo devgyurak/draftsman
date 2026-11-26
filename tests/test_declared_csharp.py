@@ -150,3 +150,22 @@ def test_a_member_named_like_its_type_is_the_type_before_a_dot(tmp_path):
         "    [Tag(nameof(Order))] public void O() {}\n  }\n}\n")})
     assert _rels(ir, "Shop.OnClass") >= {("Shop.Kind", "@Tag")}
     assert ("Shop.Order", "@Tag") not in _rels(ir, "Shop.OnClass")
+
+
+def test_a_type_through_an_alias_of_a_namespace(tmp_path):
+    # #9, case 57: `using L = Lib;` then `L.Order`, `L::Order`; the alias's target is read
+    # from the namespace it stands in outward (in `namespace Shop`, `Lib.Sub` is Shop.Lib.Sub)
+    ir = extract_source(tmp_path, {"P/T.cs": (
+        "namespace Lib { public class Order {} }\n"
+        "namespace Lib.Sub { public class Item {} }\n"
+        "namespace Shop { public class Order {} }\n"
+        "namespace Shop.Lib.Sub { public class Item {} }\n"),
+        "P/U.cs": ("using L = Lib;\nusing pb = global::Google.Protobuf;\n"
+                   "namespace Shop.Uses { public class A { public L.Order O; public L::Order P;\n"
+                   "  public pb::CodedInputStream S; } }\n"
+                   "namespace Shop { using B = Lib.Sub; public class C { public B.Item I; } }\n")})
+    rels = {(r.from_, r.to, r.via) for r in ir.relations if r.evidence is None}
+    assert {("Shop.Uses.A", "Lib.Order", "O"), ("Shop.Uses.A", "Lib.Order", "P"),
+            ("Shop.C", "Shop.Lib.Sub.Item", "I")} <= rels
+    # an alias of a namespace outside the sources: a type outside them, not unresolved
+    assert not ir.unresolved
