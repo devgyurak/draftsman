@@ -378,6 +378,7 @@ class Extractor:
                           implicit_types=spec.implicit_types(tree.root_node),
                           build_types=spec.build_types(path, root))
         scope.branches = [(first, last, cond) for _, _, first, last, cond in branch_ranges]
+        scope.error_branches = spec.error_branches(original, scope.branches)
         raw = RawFile(path=rel, scope=scope)
         unseen: list[tuple[str, Unseen]] = [
             (name, Unseen(rel, line, line, macro))
@@ -879,8 +880,12 @@ class Extractor:
                     fwd = self.spec.separator.join(p for p in [scope.namespace, *parts] if p)
                     scope.forward_types.add(fwd)
                     line = n.start_point[0] + 1
-                    if not any(first <= line <= last for first, last, _ in scope.branches):
+                    around = [br for br in scope.branches if br[0] <= line <= br[1]]
+                    if not around:
                         scope.plain_forwards.add(fwd)
+                    else:   # (the innermost branch)
+                        scope.branch_forwards.setdefault(fwd, []).append(
+                            min(around, key=lambda br: br[1] - br[0]))
                 elif cap == "body.guarded":
                     blind.add(n.id)
                     guarded.add(n.id)

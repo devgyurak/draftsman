@@ -363,6 +363,16 @@ class CppSpec(LanguageSpec):
         known = _std_names(super_id, nested_only) if super_id else None
         return known is not None and name in known
 
+    def error_branches(self, src, branches):
+        lines = src.split(b"\n")
+        out = []
+        for first, last, cond in branches:
+            body = [ln.strip() for ln in lines[first:last - 1]]   # (between the directives)
+            body = [ln for ln in body if ln and not ln.startswith(b"//")]
+            if body and all(re.match(rb"#\s*error\b", ln) for ln in body):
+                out.append((first, last, cond))
+        return out
+
     def branch_ranges(self, src):
         # every branch of an `#if` group but an include guard (`#ifndef X` / `#define X`
         # around the file) and `#ifdef __cplusplus`, innermost first

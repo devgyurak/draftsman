@@ -311,6 +311,24 @@ def test_a_constructor_in_an_if_branch_of_a_class(tmp_path):
     assert _deps(ir, "A") == {("Item", "A"), ("Order", "f")}
 
 
+def test_if_chains_every_build_declares(tmp_path):
+    # #9, case 54: an `#else` holding only `#error`, a branch that only forward-declares;
+    # and a namespace's qualified name beside a base whose members are not known
+    ir = extract_source(tmp_path, {"lib/lib.h": "#pragma once\nnamespace lib { struct Base {}; }\n",
+                                   "h.h": (
+        "#pragma once\n#include \"lib/lib.h\"\n"
+        "#if defined(_WIN32)\nstruct Impl { void* h; };\n#elif defined(__linux__)\n"
+        "struct Impl { int fd; };\n#else\n#error \"unsupported\"\n#endif\n"
+        "struct Api { Impl* p_; };\n"
+        "#ifdef _WIN32\nstruct Fwd;\n#else\nstruct Fwd { int x; };\n#endif\n"
+        "struct UsesFwd { Fwd* f_; };\n"
+        "#ifndef DOC\nstruct PB { int y; };\n#endif\n"
+        "struct F : PB { lib::Base b_; };\n")})
+    assert _deps(ir, "Api") == {("Impl", "p_")}
+    assert _deps(ir, "UsesFwd") == {("Fwd", "f_")}
+    assert ("lib::Base", "b_") in _deps(ir, "F")
+
+
 def test_conversion_operators_and_abstract_function_pointers(tmp_path):
     # #9, cases 43 and 44: `operator const Item&()`, `using G = void (*)(const Order*)`, a
     # typedef returning a pointer; an assignment operator leaves an interface one

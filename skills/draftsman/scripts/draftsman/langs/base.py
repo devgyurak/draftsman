@@ -136,6 +136,11 @@ class FileScope:
     # of those, the ones declared outside every `#if` branch of the file (`class
     # PollSetImpl;`): the file sees a type of the id in every build
     plain_forwards: set[str] = field(default_factory=set)
+    # forward declarations inside `#if` branches: id -> the branches (first line, last line,
+    # condition) declaring it, innermost; and the branches that hold only an `#error` (no
+    # build compiles them): with these a chain of branches may declare an id in every build
+    branch_forwards: dict[str, list[tuple[int, int, str]]] = field(default_factory=dict)
+    error_branches: list[tuple[int, int, str]] = field(default_factory=list)
     # whether the file includes a path a macro makes (C++'s `#include APP_UTIL`,
     # `@body.include_unknown`): what it sees is not known
     unknown_include: bool = False
@@ -336,6 +341,11 @@ class LanguageSpec:
     def preprocess(self, src: bytes) -> bytes:
         """Source cleanup before parsing; must keep byte offsets (C++ macros)."""
         return src
+
+    def error_branches(self, src: bytes, branches: list[tuple[int, int, str]]
+                       ) -> list[tuple[int, int, str]]:
+        """The branches (FileScope.branches) whose only content is an `#error` directive."""
+        return []
 
     def conditional_ranges(self, src: bytes) -> list[tuple[int, int]]:
         """Byte ranges of the code preprocess keeps that a build may leave out (C#'s first

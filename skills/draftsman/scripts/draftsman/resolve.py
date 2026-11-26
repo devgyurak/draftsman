@@ -1106,6 +1106,8 @@ class Resolver:
             return None
         sep = LANGUAGES[rtype.language].separator
         head = name.split(sep, 1)[0]
+        if sep in name and self._namespace_around(head, rtype):
+            return None   # `lib::Base`: a namespace's name, which no base has as a member
         found = self._in_body(head, rtype, ref, 0)
         target = found.target if found.status in (PROJECT, ALIAS) else None
         owner = None
@@ -2112,6 +2114,8 @@ class _Builder:
         self.file_includes = {f.path: f.scope.includes for f in files}
         self.file_forwards = {f.path: f.scope.forward_types for f in files}
         self.file_plain_forwards = {f.path: f.scope.plain_forwards for f in files}
+        self.file_branch_forwards = {f.path: f.scope.branch_forwards for f in files}
+        self.file_error_branches = {f.path: f.scope.error_branches for f in files}
         self.resolver.base_lookup = self._base_like_body
         self.resolver.visible = lambda q, scope: self._visible(
             q, scope.project, LANGUAGES[spec_for_path(scope.file).name])
@@ -2424,12 +2428,23 @@ class _Builder:
             if not any(f == scope.file and first <= line <= last or cond in around
                        for f, first, last, cond in branches) and not any(
                     target in self.file_plain_forwards.get(f, ())
-                    for f in self._included(scope.file)) and not _every_branch(branches):
+                    for f in self._included(scope.file)) and not _every_branch(
+                    self._chain_parts(target, branches)):
                 # (a declaration of the id outside every branch, `class PollSetImpl;` in
                 # the file or one it includes: the name is that type in every build)
                 return (f"{target} is declared in an #if branch this declaration is outside "
                         "of: another type of the name may be meant")
         return self._unseen_why(target, scope.file)
+
+    def _chain_parts(self, target: str, branches: list) -> list:
+        """The branches that declare ``target`` in a build (Type.branches), with those that
+        forward-declare it (`#ifdef _WIN32 / struct Fwd; / #else / struct Fwd {...}`) and
+        those of the same files no build compiles (`#else / #error "unsupported"`)."""
+        files = {f for f, _, _, _ in branches}
+        return list(branches) + [
+            (f, first, last, cond) for f in files
+            for first, last, cond in [*self.file_branch_forwards.get(f, {}).get(target, ()),
+                                      *self.file_error_branches.get(f, ())]]
 
     def _unseen_why(self, target: str, file: str) -> Optional[str]:
         if target in self.types and self._unseen_from(target, file) == "skip":
