@@ -309,6 +309,16 @@ class Resolver:
             chain.append(ns)
         return chain
 
+    def expect_class(self, res: Resolution) -> Resolution:
+        """Kotlin's `actual typealias Charset = java.nio.charset.Charset` beside `expect
+        class Charset` of the same id: in a declaration the name is the expect class, the
+        compiler's answer in every compilation's terms (in a body's value position the
+        alias's object is meant: `Charsets.UTF_8`)."""
+        if res.status == ALIAS and res.target in self.index \
+                and "expect" in self.index[res.target].modifiers:
+            return Resolution(PROJECT, res.target)
+        return res
+
     def supertypes(self, rtype: RawType) -> list[Resolution]:
         """Resolutions of the supertype clauses of ``rtype`` (cached)."""
         qname = rtype.qualified_name
@@ -325,8 +335,8 @@ class Resolver:
                 if isinstance(ref, Named):
                     # a supertype clause cannot see the type's *own* inherited member
                     # types, but it does see those of its enclosing types
-                    res = self.rooted(ref.name, sup.text, rtype) or self.resolve(
-                        ref.name, rtype, inherit=False, scope=sup.scope, arity=len(ref.args))
+                    res = self.expect_class(self.rooted(ref.name, sup.text, rtype) or self.resolve(
+                        ref.name, rtype, inherit=False, scope=sup.scope, arity=len(ref.args)))
                     if res.status == PROJECT and self.rebinding(
                             ref.name, res.target, sup.scope or rtype.scope,
                             LANGUAGES[rtype.language], stars=False):
@@ -2260,8 +2270,8 @@ class _Builder:
                              arity: Optional[int], text: Optional[str] = None) -> Resolution:
         """What a name of a member's declaration (its type, a parameter's or the return
         type, ``text`` as written) stands for."""
-        res = self.resolver.rooted(name, text, rtype) or self.resolver.resolve(
-            name, rtype, rm, arity=arity)
+        res = self.resolver.expect_class(self.resolver.rooted(name, text, rtype)
+                                         or self.resolver.resolve(name, rtype, rm, arity=arity))
         spec = LANGUAGES[rtype.language]
         scope = (rm.scope if rm is not None and rm.scope else None) or rtype.scope
         head = name.split(spec.separator, 1)[0]
@@ -2486,8 +2496,9 @@ class _Builder:
         type's own inherited member types are not in scope."""
         spec = LANGUAGES[rtype.language]
         scope = sup.scope or rtype.scope
-        res = self.resolver.rooted(name, sup.text, rtype) or self.resolver.resolve(
-            name, rtype, inherit=False, scope=scope, arity=arity)
+        res = self.resolver.expect_class(self.resolver.rooted(name, sup.text, rtype)
+                                         or self.resolver.resolve(name, rtype, inherit=False,
+                                                                  scope=scope, arity=arity))
         if res.status == PROJECT and self.resolver.rebinding(name, res.target, scope, spec,
                                                              stars=False):
             return Resolution(UNRESOLVED, hint=_REBOUND.format(name, res.target))

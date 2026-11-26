@@ -142,3 +142,15 @@ def test_annotations_on_accessors_and_enum_entries_are_the_classs(tmp_path):
         "enum class Mode { A, @Api B }\n")})
     assert ("dependency", "Api", "@Api") in _decl(ir, "shop.Engine")
     assert ("dependency", "Api", "@Api") in _decl(ir, "shop.Mode")
+
+
+def test_an_expect_class_is_its_name_beside_an_actual_typealias(tmp_path):
+    # #9, case 37: `actual typealias Charset = java.nio.charset.Charset`
+    ir = extract_source(tmp_path, {
+        "common/C.kt": "package cs\nexpect abstract class Charset\nexpect interface Closeable\n",
+        "jvm/C.kt": ("package cs\nactual typealias Charset = java.nio.charset.Charset\n"
+                     "actual typealias Closeable = java.io.Closeable\n"),
+        "u/U.kt": ("package u\nimport cs.Charset\nimport cs.Closeable\n"
+                   "class Engine(val c: Charset) : Closeable { override fun close() {} }\n")})
+    assert {(r.kind, r.to) for r in ir.relations if r.from_ == "u.Engine"} >= {
+        ("association", "cs.Charset"), ("implements", "cs.Closeable")}
