@@ -8,7 +8,7 @@ The successor of eShopOnWeb: a .NET Aspire solution of microservices (catalog, b
 | Commit | `5e526931f7` (2026-11-16) |
 | Extracted | `src/`: 19 projects and the shared `src/Shared` files (tests are under `tests/`) |
 
-Measured on 2026-11-26 with Draftsman 0.11.0 (at `b631f56`; 0.11.0 extracts the same `ir.json`). In 0.11.0 (#9), a supertype's type arguments are dependencies (`IIntegrationEventHandler<OrderStatusChangedToPaidIntegrationEvent>`: 66 declared relations added), and a name through a `using` alias of a namespace is read (the 56 alias-qualified names of `ClientApp`'s committed protobuf code, `pb::CodedInputStream` with `using pb = global::Google.Protobuf;`, are types outside the sources, no longer unresolved). 0.10.0's note: a file's `using X = ...` alias is that file's alone: 19 declared relations and 6 body ones that went to Ordering.API's query types `Order` and `CardType` (an alias of `OrdersApi.cs`) go to the domain's and the client's types, as Roslyn has them, and `Store.Location` (Roslyn: MAUI's) is unresolved.
+Measured on 2026-11-26 at `5a389f4`, after 0.11.0 (#11): a base written with the alias qualifier is read, so the 7 gRPC classes of `ClientApp`'s committed protobuf code (`: pb::IMessage<BasketItem>, pb::IBufferMessage`, `: grpc::ClientBase<BasketClient>`) extend or implement Google.Protobuf's and Grpc.Core's types (13 relations to types outside the sources). In 0.11.0 (#9), a supertype's type arguments are dependencies (`IIntegrationEventHandler<OrderStatusChangedToPaidIntegrationEvent>`: 66 declared relations added), and a name through a `using` alias of a namespace is read (the 56 alias-qualified names of `ClientApp`'s committed protobuf code, `pb::CodedInputStream` with `using pb = global::Google.Protobuf;`, are types outside the sources, no longer unresolved). 0.10.0's note: a file's `using X = ...` alias is that file's alone: 19 declared relations and 6 body ones that went to Ordering.API's query types `Order` and `CardType` (an alias of `OrdersApi.cs`) go to the domain's and the client's types, as Roslyn has them, and `Store.Location` (Roslyn: MAUI's) is unresolved.
 
 ## Run
 
@@ -38,12 +38,12 @@ python3 "$DRAFTSMAN"/render.py ir.json view.json --format html -o viewer.html
 `extract.py` prints:
 
 ```text
-draftsman: 497 files, 506 types, relations: association 220, dependency 656, extends 75, implements 74, body dependency 448, 455 unresolved (2 ambiguous, 449 outside the sources, 4 unexplained), 0 diagnostics
+draftsman: 497 files, 506 types, relations: association 220, dependency 656, extends 76, implements 86, body dependency 448, 455 unresolved (2 ambiguous, 449 outside the sources, 4 unexplained), 0 diagnostics
 ```
 
 | Files | Types | association | dependency | extends | implements | body dependency | Unresolved | Diagnostics |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 497 | 506 | 220 | 656 | 75 | 74 | 448 | 455 (2 ambiguous, 449 outside, 4 unexplained) | 0 |
+| 497 | 506 | 220 | 656 | 76 | 86 | 448 | 455 (2 ambiguous, 449 outside, 4 unexplained) | 0 |
 
 Types by kind: 367 classes, 6 abstract classes, 42 interfaces, 81 records, 10 enums.
 

@@ -247,7 +247,11 @@ is that type. Aliases of aliases are followed.
   `global using X = ...` is every file's of its project, at the global namespace; an alias
   of a namespace is read as it (`using L = Lib;` then `L.Order` or `L::Order`; its target
   from the namespace it stands in outward; one outside the sources gives a type outside
-  them, `pb::CodedInputStream`, #9); a type the file's project does not see (another
+  them, `pb::CodedInputStream`, #9). The name before `::` is a using alias alone, never a
+  type of its name (`L::Order` beside a class `Shop.L` is Lib.Order, `L.Order` Shop.L's),
+  in declarations, bases (`class C : pb::IMessage<C>`) and bodies (`new L::Order()`,
+  `L::Order.Make()`, `o is L::Order`), and in an alias's target (`using LS = L::Sub;`,
+  where an alias beside it in the same block is not seen; #11); a type the file's project does not see (another
   project's `internal` one, an unreferenced project's) or one the arity written does not
   fit (`Repo<int>` beside a `Repo` around the code) is passed over, the lookup going on to
   a using's (bodies drew nothing there, now that type); below a package's namespace around

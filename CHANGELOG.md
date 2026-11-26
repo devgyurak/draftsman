@@ -66,6 +66,19 @@ Notes for anyone with `view.json` files written against a development build:
   focus diagram draws those that touch the focus; results measured with 0.3.0 (the
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
+- **C#: `::` in bodies, bases and alias targets** (#11, after 0.11.0). The name before the
+  alias qualifier is a using alias in a body too (`new L::Order()`, `typeof(L::Sub.Deep)`,
+  `(G::Order)o` beside a class `Shop.L` or `Shop.G` drew Shop's; `L::Order.Make()` and
+  `o is M::Deep` are read now), a base written with it is read (`class C : L::Order`;
+  eShop's 7 gRPC classes in ClientApp now extend or implement Google.Protobuf's and
+  Grpc.Core's types, 13 relations), and so is an alias whose target is written with it
+  (`using LS = L::Sub;`). `global::Shop.Status.Open` is read as a receiver too. eShop's
+  page and the tables change (extends 75 -> 76, implements 74 -> 86); every other
+  repository's `ir.json` is the same. Review set `cs24`. `bench/e2e_pages.py` checks the
+  numbers of the e2e pages and tables against their `ir.json`; leveldb's and POCO's counts
+  of the Clang key's body names (its maximal names of project types: 220 of 1027, and
+  1671 in template specialisations, written at 0.9.0) are 1073 and 1778 counted so with
+  the key at hand, whose outside-every-type counts (220, 990) are the pages'.
 - **C#: the name before `::` is a using alias** (#9, 0.11.0). `L::Order` reads only the
   file's aliases before the alias qualifier, `L.Order` a type `L` of a namespace around
   first (in `namespace Shop.Inner` beside a class `Shop.L`: Lib.Order and Shop.L.Order, as
