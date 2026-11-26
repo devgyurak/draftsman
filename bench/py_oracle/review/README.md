@@ -14,6 +14,7 @@ checkers disagree ("disputed") nothing may be drawn; such a place is counted apa
 | `py2` | 0 | 12 | a review's probe of the fix: names bound twice through imports and `TYPE_CHECKING`, a class body's bindings of several kinds, forward references, aliases of imports |
 | `py3` | 0 | 10 | a base's type arguments (#9, case 24): `List[Node]` beside another package's `Node`, `Generic[T]` with a `TypeVar` beside a class `T`, nested arguments, a module-qualified `b.models.Node`, the class itself as a string; an alias named like a container (`type Vector = list[Item]`, case 25). Before the fix: 5 agreed, 4 misses |
 | `py4` | 0 | 7 | #9 cases 33, 34: a class's attribute as a decorator (`@Field.register`, with arguments), bases made by calls (`BaseManager.from_queryset(QuerySet, Item=1)`, a function's `make_base(QuerySet, "Item", kind=None)`), each beside a class named like a keyword or a string there; a property's `@content.setter` beside a module class `content`. Before the fix (d11e7cc): 2 agreed, 5 misses |
+| `py5` | 0 | 13 | a review's probe of #9 cases 33, 34: a class's attribute as a decorator, also through a module alias (`@m.Field.register`) and on a method, a value's attribute (`@registry.bound`: no class), a call decorator with keyword arguments, bases made by calls with a keyword argument whose string names a class (`name="Other"`) and a string argument (`make("Field", 1)`), a property's setter, `@Resp.content.setter` beside a base's property. The extractor at 973abe2: the same |
 
 Known limits (mismatches that stay):
 

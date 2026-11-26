@@ -26,6 +26,7 @@ has a real rival, so that a wrong draw is a mismatch.
 | `cpp14` | 0 | 14 | a base's template arguments (#9, case 24): `std::vector<Node>` beside another namespace's `Node`, a template parameter `T` beside a struct `T`, nested arguments (`std::map<int, std::vector<Item>>`, `Base<std::vector<T>>`); member aliases named like containers (`typedef std::vector<Item> Vector;`, `using Map = ...`, case 25). Before the fix: 6 agreed, 6 misses |
 | `cpp15` | 0 | 15 | #9 stage 3 (cases 43, 44, 46, 47, 48, 54): operator member functions, function and member function pointers (a parameter named like a class), `std::function<Session*(const Order&)>`, member function templates (a template parameter named like a class), a member of an alias of a class beside a global `Ptr`, constructors in `#ifdef/#else` branches, a chain whose `#else` is `#error`, a chain one branch of which forward-declares. Before the fix (d11e7cc): 2 agreed, 11 misses |
 | `cpp16` | 0 | 9 | #9 stage 3, the forms found while measuring: conversion operators (43), an alias of an abstract function pointer `void (*)(A)`, a typedef returning a pointer, a member pointer in an alias (no class named, as Clang's key reads aliases) and written directly (its class named) (44), a member of an alias of a template specialisation, also through the class (`T2::Table::Iterator`, beside a global `Iterator`) (47), an assignment operator beside pure virtual methods (still an interface). Before the fix (d11e7cc): 1 agreed, 8 misses |
+| `cpp17` | 0 | 28 | a review's probe of #9 stage 3: operators (call, `+`, `=`, `->`, `[]`, `new`, a friend one), conversion operators (also `explicit operator bool`), function and member function pointers in typedefs, aliases, fields and parameters, with parameters named like classes (`Item Order`, `Session Session`), `std::function` with a named parameter, member function templates, members of an alias of a class, constructors in `#if 1 ... #else` and `#ifdef NEVER` branches, `typename Tm<S>::Vec` (dependent) beside `Tm<int>::Vec`. The extractor at 973abe2: the same |
 
 Known limits (mismatches that stay):
 
@@ -98,7 +99,12 @@ Declared names Clang finds that are not drawn (misses, no failure):
 - `cpp13/opaque.h:8:12`, `:24:3` a base declared only under `#ifndef DOC`, used outside it
   (#18's rule), and so, a base whose members are not known: `:10:3`, `:13:3`, `:17:5` names
   found past it (a name qualified by a namespace, `:15:8` `lib::Base`, is no longer hidden)
+- `cpp17/ops.h:17:46` a friend operator declared in a class (`friend bool operator==(const
+  Cmp& a, const Order& b);`): not read
 
 Known limits of declared relations (mismatches that stay):
 
-- none
+- `cpp17/ops.h:10:42` `Item` and `::Item` in one declaration (`operator()(const Item& a,
+  const ::Item& b)`): the extractor draws both right (shop::Item, ::Item), the comparison
+  pairs Clang's answer at `::Item` (the global `Item`) with the relation the first `Item`
+  draws (shop::Item)

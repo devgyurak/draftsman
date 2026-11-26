@@ -13,6 +13,7 @@ limit, and on fewer body names drawn or declared names agreed than the table say
 | `ts2` | 0 | 18 | a supertype's type arguments (#9, case 24): a class's `extends Array<Node>` (whose arguments tree-sitter keeps apart from the name) beside another module's `Node`, a type parameter `T` beside a class `T`, an interface's `extends Map<string, Item[]>`, `implements Cmp<Sub>` naming the class itself, an object type over several lines; project aliases named like containers (`Provider`, `Vector`, `Iterator`, case 25). Before the fix: 8 agreed, 9 misses |
 | `ts3` | 1 | 79 | a review's probe of the TypeScript parser (#9): comments and strings inside types, quoted property names, accessors, constructor parameter properties, overloads, tuple rest elements, mixin supertypes, `typeof`, each beside a project type of the name. At f5e007a: 79 agreed, no mismatch |
 | `ts4` | 0 | 5 | #9 case 59: `this` parameters of methods, method and abstract signatures and a function type, and one naming the class itself. Before the fix (d11e7cc): 2 agreed, 3 misses |
+| `ts5` | 1 | 9 | a review's probe of #9 case 59: `this` parameters of a method, of one naming the class itself, of a function type in an optional field, of a static method (`this: typeof Item`), `this: void`, an interface's method. The extractor at 973abe2: the same |
 
 Known limits (mismatches that stay):
 

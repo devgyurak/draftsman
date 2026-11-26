@@ -35,6 +35,7 @@ names drawn or declared names agreed than the table gives.
 | `cs20` | 1 | 16 | a review's probe of the fix: a global using's alias of a generic (`Safe`), aliases in nested namespace blocks, `Kind.A` and `nameof(Kind)` beside `public Kind Kind`, `typeof` beside nested types |
 | `cs21` | 0 | 15 | a supertype's type arguments (#9, case 24): `List<Node>` beside another namespace's `Node`, a type parameter `T` beside a class `T`, nested arguments, `IComparable<Nested>` naming the class itself, a qualifier's arguments (`Outer<Item>.Inner<Node>`); aliases named like containers (`using Vector = ...List<A.Item>;`, `using Provider = A.Node;`, case 25). Before the fix: 7 agreed, 7 misses |
 | `cs22` | 0 | 9 | #9 case 57: types through aliases of namespaces (`L2.Order`, `L2::Order`, `S2.Item`, `L2.Sub.Item`), in fields and parameters; an alias in a namespace block whose target is read from that namespace outward (`using B2 = Lib.Sub;` in `namespace Shop` is Shop.Lib.Sub), beside Shop.Order, Shop.Lib.Order and a class `L`. Before the fix (d11e7cc): 1 agreed, 8 misses |
+| `cs23` | 2 | 13 | a review's probe of #9 case 57: aliases of a namespace and of a nested namespace, `L.Order` and `L::Order` in fields, a return type, a parameter's type arguments, a base and a body, in a namespace of their own and in `namespace Shop.Inner` beside a class `Shop.L` with a nested `Order` (`L.Order` is Shop.L.Order there, `L::Order` the alias's Lib.Order). The extractor at 973abe2: 12 agreed, 1 mismatch (`L::Order` drawn as Shop.L.Order) |
 
 ## Known limits
 
