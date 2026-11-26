@@ -65,18 +65,20 @@ def test_names_are_matched_within_their_declaration(tmp_path):
     names = builder.declared_names
     assert {(n["line"], n["written"], tuple(n["targets"])) for n in names
             if n["from"] == "p.A" and n["targets"]} == {(2, "B", ("p.B",)), (3, "B", ("p.B",)),
-                                                        (5, "B", ("p.B",))}
+                                                        (5, "B", ("p.B",)), (7, "B", ("p.B",))}
     recs = [_use("B", 2, 23, "p.B"), _use("B", 3, 4, "p.B"),
             _use("B", 6, 11, "p.B"),
             # a key that disagrees: the field's B is another type
             _use("B", 3, 4, "q.B"),
             # a type outside the sources, which the extractor reads no name of
             _use("Future", 4, 25, "java.util.concurrent.Future", project=False),
-            # not read: `? super B`
-            _use("B", 7, 34, "p.B")]
+            # `? super B` (read since #9, case 26)
+            _use("B", 7, 34, "p.B"),
+            # a name of the type the extractor reads no name of
+            _use("C", 4, 4, "p.C")]
     out = declared.compare(builder, recs[:3] + recs[4:], tmp_path)
-    assert (out["counts"]["agreed"], out["counts"]["unread"]) == (3, 1)
-    assert [r["line"] for r in out["rows"]] == [7]
+    assert (out["counts"]["agreed"], out["counts"]["unread"]) == (4, 1)
+    assert [r["line"] for r in out["rows"]] == [4]
     assert out["rows"][0]["verdict"] == "miss" and out["rows"][0]["status"] == "not read"
     out = declared.compare(builder, [recs[3]], tmp_path)
     assert [(r["verdict"], r["drawn"]) for r in out["rows"]] == [("mismatch", ["p.B"])]

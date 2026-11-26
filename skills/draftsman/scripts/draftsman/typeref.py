@@ -235,12 +235,11 @@ class _Parser:
             if len(params) >= 2:   # C# tuple: (Person a, Point b)
                 return TypeTuple(params)
             raise _ParseError("parameter list without an arrow")
-        if tok == "?":  # Java wildcard
+        if tok == "?":  # Java wildcard: `? extends T` and `? super T` both name T
             self.take()
             if self.peek() in ("extends", "super"):
-                kw = self.take()
-                bound = self.union()
-                return bound if kw == "extends" else None
+                self.take()
+                return self.union()
             return None
         if tok == "*" and self.peek(1) in (">", ",", "]"):  # Kotlin star projection
             self.take()

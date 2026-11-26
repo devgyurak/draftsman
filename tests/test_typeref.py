@@ -15,7 +15,7 @@ from draftsman.typeref import (Array, FunctionType, Named, Nullable, Pointer, Ty
     ("Order | None", TypeUnion((Named("Order"), Named("None")))),
     ("list[Order]", Named("list", (Named("Order"),))),
     ("Optional<? extends Shape>", Named("Optional", (Named("Shape"),))),
-    ("Optional<? super Shape>", Named("Optional", (None,))),
+    ("Optional<? super Shape>", Named("Optional", (Named("Shape"),))),   # #9, case 26
     ("@NonNull Order", Named("Order")),
     ("const std::vector<Node>&", Pointer(Named("std::vector", (Named("Node"),)), "&")),
     ("Node const*", Pointer(Named("Node"), "*")),
