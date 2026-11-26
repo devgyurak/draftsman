@@ -256,3 +256,50 @@ def test_an_alias_written_with_the_alias_qualifier(tmp_path):
     rels = {(r.from_, r.to, r.via) for r in ir.relations if r.evidence is None}
     assert {("Shop.Other.E", "Lib.Sub.Deep", "F1"), ("Shop.Other.E", "Lib.Sub.Deep", "F2")} <= rels
     assert not any(f == "Shop.Third.F" for f, _, _ in rels)
+
+
+_ROOTED = ("namespace Lib { public class Order { public static Order Make() => null;\n"
+           "  public class Line {} } public class Box<T> { public class Inner {} }\n"
+           "  namespace Sub { public class Deep {} } }\n"
+           "namespace Shop { public class Lib { public class Order { public static Order Make() => null;\n"
+           "  public class Line {} } public class Box<T> { public class Inner {} }\n"
+           "  public class Sub { public class Deep {} } }\n"
+           "  public class Google { public class Protobuf { public class IMessage {} } } }\n")
+
+
+def test_an_alias_of_a_namespace_written_from_the_global_namespace(tmp_path):
+    # #11, case 67: `using M = global::Lib.Sub;` is the global namespace's Lib.Sub, not the
+    # class Shop.Lib's member beside it, nor a namespace outside the sources (which made
+    # `externals` carry the project's own ids)
+    ir = extract_source(tmp_path, {"P/T.cs": _ROOTED, "P/U.cs": (
+        "using N = global::Lib;\n"
+        "namespace Shop.Inner { using M = global::Lib.Sub;\n"
+        "  public class A { public M::Deep F1; public M.Deep F2; public N::Order F3;\n"
+        "    public object B() => new M::Deep(); }\n"
+        "  public class C : N::Box<M::Deep> { } }\n")})
+    rels = {(r.from_, r.kind, r.to, r.via) for r in ir.relations}
+    assert {("Shop.Inner.A", "association", "Lib.Sub.Deep", "F1"),
+            ("Shop.Inner.A", "association", "Lib.Sub.Deep", "F2"),
+            ("Shop.Inner.A", "association", "Lib.Order", "F3"),
+            ("Shop.Inner.A", "dependency", "Lib.Sub.Deep", "B"),
+            ("Shop.Inner.C", "extends", "Lib.Box", None),
+            ("Shop.Inner.C", "dependency", "Lib.Sub.Deep", None)} <= rels
+    assert not any(t.startswith("Shop.Lib") for _, _, t, _ in rels)
+    ids = {t.id for t in ir.types}
+    assert not [e.id for e in ir.externals if e.id in ids]
+    assert not ir.unresolved
+
+
+def test_an_alias_of_a_class_written_from_the_global_namespace(tmp_path):
+    # the same for an alias of a class, in a namespace block (beside Shop.Lib.Order)
+    ir = extract_source(tmp_path, {"P/T.cs": _ROOTED, "P/U.cs": (
+        "namespace Shop.Inner { using P = global::Lib.Order; using Q = global::Lib.Box<int>;\n"
+        "  using pb = global::Google.Protobuf;\n"
+        "  public class A { public P F1; public P.Line F2; public object B() => new P.Line();\n"
+        "    public object C() => P.Make(); public Q.Inner F3; }\n"
+        "  public class E : pb::IMessage { } }\n")})
+    rels = {(r.to, r.via) for r in ir.relations if r.from_ == "Shop.Inner.A"}
+    assert rels == {("Lib.Order", "F1"), ("Lib.Order.Line", "F2"), ("Lib.Order.Line", "B"),
+                    ("Lib.Order", "C"), ("Lib.Box.Inner", "F3")}
+    # a namespace outside the sources beside a class `Shop.Google.Protobuf`: a type outside
+    assert {r.to for r in ir.relations if r.from_ == "Shop.Inner.E"} == {"Google.Protobuf.IMessage"}

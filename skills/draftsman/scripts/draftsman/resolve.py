@@ -719,9 +719,12 @@ class Resolver:
                 return self.resolve(target + sep + rest, rtype, member,
                                     arity=arity, at_namespace="")
             written = re.sub(r"^\s*global::", "", entry[0]).strip()
+            # a target after `global::` is the global namespace's alone
+            rooted = self._rooted_text(entry[0], spec) is not None
             if not any(f"{ns}{sep}{written}" in self.index if ns else written in self.index
-                       for ns in self._namespace_chain(block, sep, True)) \
-                    and written not in self.aliases and "<" not in written:
+                       for ns in (self._namespace_chain(block, sep, True) if not rooted
+                                  else [""])) \
+                    and written not in self.aliases and "<" not in written :
                 # `using pb = global::Google.Protobuf;` then `pb::CodedInputStream`:
                 # a namespace (or type) outside the sources
                 return Resolution(EXTERNAL, written + sep + rest)
@@ -745,7 +748,11 @@ class Resolver:
         sep, q = spec.separator, spec.alias_qualifier
         text, scope = entry[0].strip(), entry[1]
         block = scope.alias_blocks.get(alias, "")
-        if q and q in text and not text.startswith("global" + q):
+        if (written := self._rooted_text(text, spec)) is not None:
+            # `using M = global::Lib.Sub;`: the global namespace's Lib.Sub, never a type or
+            # namespace of a namespace around it (Shop.Lib)
+            return written if written in self.namespaces else None
+        if q and q in text:
             head, rest = (p.strip() for p in text.split(q, 1))
             # the aliases of the namespaces around it: one beside it is not seen there
             for ns in self._namespace_chain(block, sep, True):
@@ -762,6 +769,14 @@ class Resolver:
             if target in self.namespaces:
                 return target
         return None
+
+    @staticmethod
+    def _rooted_text(text: str, spec: LanguageSpec) -> Optional[str]:
+        """``text`` without the prefix that roots it at the global namespace (C#'s
+        `global::Lib`: Lib), or None where it is not written so."""
+        prefix = spec.rooted_prefix
+        t = text.strip()
+        return t[len(prefix):].strip() if prefix and t.startswith(prefix) else None
 
     def _alias_qualified(self, name: str, rtype: RawType, member: Optional[RawMember],
                          inherit: bool, scope: FileScope, arity: Optional[int],
@@ -1691,8 +1706,9 @@ class Resolver:
         # top of the file, also before `namespace A.C;`: from the global namespace, not from
         # the namespace of the use; in a namespace block or after a file-scoped namespace,
         # from that namespace)
-        res = self.resolve(written.name, rtype, None, scope=entry[1], strict=True,
-                           at_namespace=entry[1].alias_blocks.get(alias, ""))
+        res = self.rooted(written.name, entry[0], rtype) or self.resolve(
+            written.name, rtype, None, scope=entry[1], strict=True,
+            at_namespace=entry[1].alias_blocks.get(alias, ""))
         return res.target if res.status == PROJECT else None
 
     def _alias_head_class(self, alias: str, spec, depth: int = 0) -> Optional[str]:
@@ -1716,7 +1732,8 @@ class Resolver:
         tparams = self._type_params(ctx, None) | self.alias_tparams.get(alias, set())
         if any(n.split(sep, 1)[0] in tparams for arg in written.args for n, _ in named_refs(arg)):
             return None   # `ParallelSocketReactor<SR>`: known once the template is instantiated
-        res = self.resolve(written.name, ctx, None, strict=True)
+        res = self.rooted(written.name, entry[0], ctx) \
+            or self.resolve(written.name, ctx, None, strict=True)
         if res.status == ALIAS and res.target and res.target != alias:
             return self._alias_head_class(res.target, spec, depth + 1)
         return res.target if res.status == PROJECT else None
@@ -1746,7 +1763,8 @@ class Resolver:
                       spec.name, namespace=self.index[owner].namespace if owner in self.index
                       else owner or scope.namespace,
                       outer=owner if owner in self.index else None)
-        res = self.resolve(written.name, ctx, None, strict=True)
+        res = self.rooted(written.name, text, ctx) \
+            or self.resolve(written.name, ctx, None, strict=True)
         if res.status == ALIAS and res.target and res.target != alias:
             return self._alias_resolution(res.target, spec, depth + 1)
         return res if res.status in (PROJECT, EXTERNAL, BUILTIN) else None
@@ -3050,8 +3068,8 @@ class _Builder:
                                          track_ownership=spec.name == "cpp"):
             if leaf.name.split(sep, 1)[0] in own:
                 continue
-            res = self.resolver.resolve(leaf.name, ctx, None, arity=len(leaf.args),
-                                        body_file=scope.file if body else None)
+            res = self.resolver.rooted(leaf.name, text, ctx) or self.resolver.resolve(
+                leaf.name, ctx, None, arity=len(leaf.args), body_file=scope.file if body else None)
             if leaf.value and not self._value_type(res):
                 continue
             if res.status == PROJECT:
@@ -3064,8 +3082,8 @@ class _Builder:
         for name, arity in named_refs(ref, self._is_project(ctx, None)):
             if name.split(sep, 1)[0] in own:
                 continue
-            res = self.resolver.resolve(name, ctx, None, arity=arity,
-                                        body_file=scope.file if body else None)
+            res = self.resolver.rooted(name, text, ctx) or self.resolver.resolve(
+                name, ctx, None, arity=arity, body_file=scope.file if body else None)
             if name in values and not self._value_type(res):
                 continue
             if res.status == PROJECT:
