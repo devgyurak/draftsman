@@ -33,11 +33,10 @@
 (annotation (user_type) @annotation.ref.name) @annotation.ref
 (annotation (constructor_invocation (user_type) @annotation.ref.name
                                     (value_arguments) @annotation.ref.args)) @annotation.ref
-
 ; ---------------------------------------------------------------- members
 (property_declaration
   (modifiers)? @modifiers
-  (variable_declaration (simple_identifier) @name [(user_type) (nullable_type) (function_type)] @type))
+  (variable_declaration (simple_identifier) @name [(user_type) (nullable_type) (function_type) (parenthesized_type)] @type))
   @member.property
 (property_declaration
   (modifiers)? @modifiers
@@ -49,7 +48,7 @@
     (modifiers)? @modifiers
     (binding_pattern_kind)
     (simple_identifier) @name
-    [(user_type) (nullable_type) (function_type)] @type) @member.property)
+    [(user_type) (nullable_type) (function_type) (parenthesized_type)] @type) @member.property)
 
 (function_declaration
   (modifiers)? @modifiers
@@ -57,7 +56,7 @@
   (simple_identifier) @name
   (function_value_parameters)
   .
-  [(user_type) (nullable_type) (function_type)] @type) @member.method
+  [(user_type) (nullable_type) (function_type) (parenthesized_type)] @type) @member.method
 (function_declaration
   (modifiers)? @modifiers
   (receiver_type)? @receiver
@@ -78,14 +77,14 @@
 (function_declaration
   (function_value_parameters
     (parameter (simple_identifier) @param.name
-               [(user_type) (nullable_type) (function_type)] @param.type) @param))
+               [(user_type) (nullable_type) (function_type) (parenthesized_type)] @param.type) @param))
 (primary_constructor
   (class_parameter (simple_identifier) @param.name
-                   [(user_type) (nullable_type) (function_type)] @param.type) @param)
+                   [(user_type) (nullable_type) (function_type) (parenthesized_type)] @param.type) @param)
 (secondary_constructor
   (function_value_parameters
     (parameter (simple_identifier) @param.name
-               [(user_type) (nullable_type) (function_type)] @param.type) @param))
+               [(user_type) (nullable_type) (function_type) (parenthesized_type)] @param.type) @param))
 
 ; ---------------------------------------------------------------- aliases
 (type_alias (type_identifier) @alias "=" . (_) @alias.type)

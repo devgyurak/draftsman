@@ -93,3 +93,24 @@ def test_a_library_interfaces_nested_type_is_not_inherited(tmp_path):
     assert ("shop.Entry", "x") in _rels(ir, "shop.JMap")
     assert ("shop.SimpleEntry", "e") not in _rels(ir, "shop.JMap")
     assert _body(ir, "shop.JMap") == {"shop.Entry"}   # the table no longer hides it
+
+
+def _decl(ir, src: str) -> set[tuple[str, str, str]]:
+    return {(r.kind, r.to.rsplit(".", 1)[-1], r.via) for r in ir.relations
+            if r.from_ == src and r.evidence is None}
+
+
+KT_TYPES = ("package shop\nclass Req\nclass Cfg\nclass Ctx\nclass Job\nclass Box<T>\n"
+            "annotation class Api\n")
+
+
+def _pipe(tmp_path, body: str, extra: str = ""):
+    return extract_source(tmp_path, {"shop/T.kt": KT_TYPES, "shop/P.kt": (
+        "package shop\n" + extra + "class Pipe {\n" + body + "\n}\n")})
+
+
+def test_a_function_type_in_parentheses(tmp_path):
+    # #9, case 40
+    ir = _pipe(tmp_path, "    var cfg: (Cfg.() -> Unit) = {}\n"
+                         "    fun filter(block: ((Req) -> Boolean)) {}")
+    assert _decl(ir, "shop.Pipe") == {("dependency", "Cfg", "cfg"), ("dependency", "Req", "filter")}
