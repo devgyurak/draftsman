@@ -104,19 +104,19 @@
 ; ---------------------------------------------------------------- parameters
 (method_definition
   parameters: (formal_parameters
-    [(required_parameter pattern: [(identifier) (rest_pattern) (object_pattern) (array_pattern)] @param.name
+    [(required_parameter pattern: [(identifier) (rest_pattern) (object_pattern) (array_pattern) (this)] @param.name
                          type: (type_annotation (_) @param.type)?)
      (optional_parameter pattern: [(identifier) (object_pattern) (array_pattern)] @param.name
                          type: (type_annotation (_) @param.type)?)] @param))
 (method_signature
   parameters: (formal_parameters
-    [(required_parameter pattern: [(identifier) (rest_pattern) (object_pattern) (array_pattern)] @param.name
+    [(required_parameter pattern: [(identifier) (rest_pattern) (object_pattern) (array_pattern) (this)] @param.name
                          type: (type_annotation (_) @param.type)?)
      (optional_parameter pattern: [(identifier) (object_pattern) (array_pattern)] @param.name
                          type: (type_annotation (_) @param.type)?)] @param))
 (abstract_method_signature
   parameters: (formal_parameters
-    [(required_parameter pattern: [(identifier) (rest_pattern) (object_pattern) (array_pattern)] @param.name
+    [(required_parameter pattern: [(identifier) (rest_pattern) (object_pattern) (array_pattern) (this)] @param.name
                          type: (type_annotation (_) @param.type)?)
      (optional_parameter pattern: [(identifier) (object_pattern) (array_pattern)] @param.name
                          type: (type_annotation (_) @param.type)?)] @param))
