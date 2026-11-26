@@ -28,6 +28,12 @@
 ; on a type, a member or a parameter: the annotation type and the types its arguments name
 (marker_annotation name: (_) @annotation.ref.name) @annotation.ref
 (annotation name: (_) @annotation.ref.name arguments: (_) @annotation.ref.args) @annotation.ref
+; on an enum constant (whose body is opaque, as an anonymous class's): the enum's
+(enum_declaration body: (enum_body (enum_constant (modifiers
+  (marker_annotation name: (_) @annotation.ref.name) @annotation.ref)))) @annotation.ref.target
+(enum_declaration body: (enum_body (enum_constant (modifiers
+  (annotation name: (_) @annotation.ref.name arguments: (_) @annotation.ref.args)
+  @annotation.ref)))) @annotation.ref.target
 
 ; ---------------------------------------------------------------- members
 (field_declaration

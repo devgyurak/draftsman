@@ -68,3 +68,24 @@ def test_package_private_members_are_inherited_step_by_step(tmp_path):
     assert not any(to == "a.Base.Pkg" for _, to, _, _ in rels)
     assert ("b.Sub", "b.Item", "f", "body") in rels
 
+
+def test_wildcards_annotated_qualified_names_and_enum_constants(tmp_path):
+    # #9, cases 26, 27, 28: `? super X` names X; `Conn.@Nullable Response` is Conn.Response;
+    # an annotation on an enum constant is the enum's
+    ir = extract_source(tmp_path, {
+        "p/Item.java": "package p; public class Item {}\n",
+        "p/Unstable.java": "package p; public @interface Unstable {}\n",
+        "p/Other.java": "package p; public @interface Other { Class<?> value(); }\n",
+        "p/Nullable.java": ("package p;\nimport java.lang.annotation.*;\n"
+                            "@Target(ElementType.TYPE_USE) public @interface Nullable {}\n"),
+        "p/Conn.java": "package p; public interface Conn { interface Response {} }\n",
+        "p/Http.java": ("package p;\nimport java.util.Collection;\npublic class Http {\n"
+                        "  private Conn.@Nullable Response res;\n"
+                        "  void drain(Collection<? super Item> out) {}\n}\n"),
+        "p/Provider.java": ("package p;\npublic enum Provider {\n  JDK,\n  @Unstable OPENSSL,\n"
+                            "  @Other(Item.class) BORING { void f() {} }\n}\n")})
+    rels = {(r.from_, r.to, r.kind, r.via) for r in ir.relations if r.evidence is None}
+    assert ("p.Http", "p.Conn.Response", "association", "res") in rels
+    assert ("p.Http", "p.Item", "dependency", "drain") in rels
+    assert {(to, via) for f, to, _, via in rels if f == "p.Provider"} >= {
+        ("p.Unstable", "@Unstable"), ("p.Other", "@Other"), ("p.Item", "@Other")}
