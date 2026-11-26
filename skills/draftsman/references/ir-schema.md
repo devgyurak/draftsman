@@ -43,9 +43,9 @@ header/source).
 |---|---|
 | `name`, `kind` | kind: `field` `method` `property` `constructor` `enum_constant` |
 | `visibility` | `public` `protected` `package` `internal` `private`, with the language's default applied |
-| `type_ref` | the type as written (field type / return type), or `null` |
+| `type_ref` | the type as written (field type / return type), or `null`; a TypeScript type predicate is the return type as written (`x is Logger`, `asserts x is Logger`) |
 | `static`, `abstract` | language rules applied (interface methods without body are abstract, interface fields static, ...) |
-| `params` | methods and constructors: `[{name, type_ref}]` |
+| `params` | methods and constructors: `[{name, type_ref}]`; a destructured TypeScript parameter's `name` is its pattern (`{ a, b }`) |
 | `modifiers`, `annotations` | omitted when empty (Python decorators and C# attributes are annotations) |
 | `file` | only when the member is declared in another file than the type (C# partial classes, Kotlin expect/actual) |
 | `receiver` | Kotlin member extensions only: the receiver type of `fun Grammar.unaryPlus()` |
@@ -76,7 +76,8 @@ How each kind is derived:
   No `via`.
 - **association** — an instance field (or property) whose type, after unwrapping
   containers from `config/wrappers.yaml` and `T[]`/`T?`/`T | None`, names a project type.
-  One relation per field; `multiplicity` comes from the unwrapping. When that type is a
+  One relation per field and type; `multiplicity` comes from the unwrapping, the largest
+  where the field names the type twice (`Item | Item[]`: `*`). When that type is a
   generic that is not a container (`Repository<User>`, `Type<Factory>`), the field also
   gets a **dependency** on each project type among its arguments, and so do the container
   arguments a wrapper rule does not follow (the key of `Map<K, V>`). A function type

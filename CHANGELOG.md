@@ -48,6 +48,17 @@ Notes for anyone with `view.json` files written against a development build:
   focus diagram draws those that touch the focus; results measured with 0.3.0 (the
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
+- **A field naming a type twice keeps the largest multiplicity; a dependent member is
+  its template** (#9, after 0.10.0). `transformer?: ValueTransformer | ValueTransformer[]`
+  was an association `1` (of two relations of one field to one type the first was kept),
+  and is `*` (TypeORM: 14 fields). A C++ name written `typename X<T>::List`, a member of a
+  template only an instantiation tells (Clang: dependent), stands for `X` alone where the
+  member draws something: what `List` names (`std::vector<AutoPtr<X>>`) is not expanded,
+  as an alias of it names nothing (POCO: the 4 `UDPHandlerImpl<S>::List` constructors no
+  longer depend on `AutoPtr`; the 3 `typename EventFilter<T>::Ptr` filters hold an
+  `EventFilter` where they held an `AutoPtr`). A TypeScript member's `type_ref` is a type
+  predicate as written (`x is Logger`), and a destructured parameter's name its pattern
+  (`{ a, b }`), since the entries below.
 - **A supertype's type arguments are dependencies; a project alias named like a
   container is drawn through** (#9, after 0.10.0). `class NodeList extends
   ArrayList<Node>` depends on Node, in every language and whether the supertype is the
