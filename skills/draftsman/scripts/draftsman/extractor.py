@@ -112,6 +112,9 @@ class RawType:
     arities: set[int] = field(default_factory=set)
     members: list[RawMember] = field(default_factory=list)
     supers: list[RawSuper] = field(default_factory=list)
+    # bases written as a call (Python's `class M(Base.from_queryset(QuerySet))`): no
+    # supertype, the classes they name are dependencies (`@super.call`)
+    base_calls: list[RawSuper] = field(default_factory=list)
     annotation_refs: list[RawAnnotation] = field(default_factory=list)
     body_refs: list[RawBodyRef] = field(default_factory=list)
     # variables in scope in every body of the type, and of its subtypes, that are no
@@ -693,8 +696,8 @@ class Extractor:
                 kind, n = sup
                 owner, _ = self._owner(n, types_by_node)
                 if owner is not None:
-                    owner.supers.append(RawSuper(kind, spec.super_text(n, _text(n, src), src),
-                                                 _line(n), scope))
+                    sup = RawSuper(kind, spec.super_text(n, _text(n, src), src), _line(n), scope)
+                    (owner.base_calls if kind == "call" else owner.supers).append(sup)
 
         for nid in sorted(annotation_refs, key=lambda i: annotation_refs[i]["annotation.ref"][0].start_byte):
             self._annotation_ref(annotation_refs[nid], src, scope, types_by_node,

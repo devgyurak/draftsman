@@ -190,6 +190,16 @@ def watch(builder) -> None:
 
     builder._super_arg_resolution = _super_arg_resolution
 
+    base_call = builder._base_call_resolution
+
+    def _base_call_resolution(name, rtype, call):
+        res = base_call(name, rtype, call)
+        note(rtype, call.scope.file if call.scope else rtype.location.file, call.line, name,
+             "super", res)
+        return res
+
+    builder._base_call_resolution = _base_call_resolution
+
     annotations = builder._annotations
 
     def _annotations(rtype):

@@ -71,3 +71,15 @@ def test_a_decorator_that_is_a_classs_attribute_is_the_class(tmp_path):
     assert _rels(ir, "q.u.Lookup") == {("q.f.Field", "@Field.register")}
     assert not _rels(ir, "q.u.S")
 
+
+def test_a_base_made_by_a_call_depends_on_the_classes_it_names(tmp_path):
+    # #9, case 34: no supertype (the class the call makes is not known); a keyword's name
+    # and a string name no class
+    ir = extract_source(tmp_path, {
+        "q/__init__.py": "",
+        "q/f.py": ("class QuerySet: ...\nclass Item: ...\n\n\nclass BaseManager:\n"
+                   "    @classmethod\n    def from_queryset(cls, qs, **kw): return cls\n"),
+        "q/u.py": ("from q.f import BaseManager, Item, QuerySet\n\n\n"
+                   "class Manager(BaseManager.from_queryset(QuerySet, Item=1, n='Item')): ...\n")})
+    rels = {(r.to, r.kind) for r in ir.relations if r.from_ == "q.u.Manager"}
+    assert rels == {("q.f.BaseManager", "dependency"), ("q.f.QuerySet", "dependency")}

@@ -554,6 +554,11 @@ class LanguageSpec:
         the type node (Kotlin `suspend`, `context(A)`)."""
         return text
 
+    def call_names(self, text: str) -> list[str]:
+        """The names a base written as a call (`@super.call`) writes, which may be classes
+        it depends on."""
+        return []
+
     def super_text(self, node, text: str, src: bytes) -> str:
         """The text of a supertype a `@super.*` capture is, ``text`` as written there
         (TypeScript's `extends Base<A>` keeps `<A>` beside the class's name)."""

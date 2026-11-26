@@ -34,6 +34,8 @@
 
 (class_definition
   superclasses: (argument_list [(identifier) (attribute) (subscript)] @super.inherits))
+; a base made by a call (`Manager(BaseManager.from_queryset(QuerySet))`): no supertype
+(class_definition superclasses: (argument_list (call) @super.call))
 
 (decorated_definition
   (decorator [(identifier) (attribute) (call function: (_) @annotation)] @annotation)

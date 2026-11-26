@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import builtins
 from typing import Optional
 
@@ -128,6 +130,15 @@ class PythonSpec(LanguageSpec):
         # is the longest part that is one (the checkers name it there)
         parts = name.split(".")
         return [".".join(parts[:k]) for k in range(len(parts), 0, -1)]
+
+    def call_names(self, text):
+        # the dotted names a base made by a call writes: `BaseManager.from_queryset` and
+        # `QuerySet` of `BaseManager.from_queryset(QuerySet)`; a keyword's name is none,
+        # and nothing inside a string
+        text = re.sub(r"(['\"]).*?\1", "", text)
+        return [m.group(1) for m in re.finditer(r"([A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)(?!\s*=)",
+                                                text)
+                if not m.group(1)[0].isdigit()]
 
     def finalize_type(self, raw):
         kept = []

@@ -2095,6 +2095,7 @@ class _Builder:
                     continue
             existing.members.append(rm)
         existing.supers.extend(t.supers)
+        existing.base_calls.extend(t.base_calls)
         existing.annotation_refs.extend(t.annotation_refs)
         existing.body_refs.extend(t.body_refs)
         existing.body_fields |= t.body_fields
@@ -2130,6 +2131,7 @@ class _Builder:
     def build(self) -> IR:
         for rtype in self.types.values():
             self._supers(rtype)
+            self._base_calls(rtype)
             self._annotations(rtype)
             self._body(rtype)
             for rm in rtype.members:
@@ -2408,6 +2410,32 @@ class _Builder:
                 self._unresolved(rtype, ref.name, res, loc, via=None)
             self._super_args(rtype, sup, ref, loc)
 
+    def _base_calls(self, rtype: RawType) -> None:
+        """A dependency on each project class a base written as a call names (Python's
+        `class Manager(BaseManager.from_queryset(QuerySet))`: BaseManager, QuerySet), the
+        longest part of a dotted name that is one; the class the call makes is not known,
+        so no supertype."""
+        spec = LANGUAGES[rtype.language]
+        for call in rtype.base_calls:
+            loc = Location(call.scope.file if call.scope else rtype.location.file, call.line)
+            for written in spec.call_names(call.text):
+                name = re.sub(r"\s+", "", written)
+                res = self._base_call_resolution(name, rtype, call)
+                if res.status == PROJECT and res.target != rtype.qualified_name:
+                    self.relations.append(Relation(rtype.qualified_name, res.target,
+                                                   "dependency", loc))
+
+    def _base_call_resolution(self, name: str, rtype: RawType, call: Any) -> Resolution:
+        """The project class a name in a base's call is, its longest part that is one."""
+        sep = LANGUAGES[rtype.language].separator
+        parts = name.split(sep)
+        res = Resolution(UNRESOLVED)
+        for k in range(len(parts), 0, -1):
+            res = self._super_lookup(sep.join(parts[:k]), rtype, call, None)
+            if res.status == PROJECT:
+                return res
+        return res
+
     def _super_args(self, rtype: RawType, sup: Any, ref: Named, loc: Location) -> None:
         """A dependency on every project type a supertype's type arguments name
         (`class NodeList extends ArrayList<Node>`), the supertype in the sources or not;
@@ -2430,9 +2458,14 @@ class _Builder:
 
     def _super_arg_resolution(self, name: str, rtype: RawType, sup: Any,
                               arity: Optional[int]) -> Resolution:
-        """What a name in a supertype's type arguments stands for: looked up as the
-        supertype itself is (Resolver.supertypes; C++ as a base clause of a body,
-        _base_like_body), where the type's own inherited member types are not in scope."""
+        """What a name in a supertype's type arguments stands for (_super_lookup)."""
+        return self._super_lookup(name, rtype, sup, arity)
+
+    def _super_lookup(self, name: str, rtype: RawType, sup: Any,
+                      arity: Optional[int]) -> Resolution:
+        """A name written in a supertype clause looked up as the supertype itself is
+        (Resolver.supertypes; C++ as a base clause of a body, _base_like_body), where the
+        type's own inherited member types are not in scope."""
         spec = LANGUAGES[rtype.language]
         scope = sup.scope or rtype.scope
         res = self.resolver.rooted(name, sup.text, rtype) or self.resolver.resolve(
