@@ -332,10 +332,10 @@ def compare(builder, recs: list[dict], root: Optional[Path] = None,
             [r["target"]] if r["kind"] == "type" and r["project"] else [])
         if r.get("targets") and r["from"] in wanted:
             # an alias naming the type it is written in (`WithTransactionCallback` =
-            # `(session: ClientSession) => ...` in ClientSession): as the type naming itself
+            # `(session: ClientSession) => ...` in ClientSession): the type itself draws
+            # nothing; an alias naming no other type is no project type's name, where a type
+            # the extractor draws is a mismatch
             wanted = [t for t in wanted if t != r["from"]]
-            if not wanted:
-                continue
         project = bool(wanted)
         skipped = uncompiled.get(r["file"], ()) if isinstance(uncompiled, dict) else \
             ("all" if r["file"] in uncompiled else ())
@@ -472,17 +472,68 @@ def _pick(here: list[dict], r: dict, written: str, starts: list[int]) -> Optiona
     return pool[0]
 
 
+def pairs(builder, recs: list[dict], verbose: bool = False, key: str = "the answer key",
+          uncompiled=frozenset(), show: int = 30) -> dict:
+    """A check of the declared relations that leans on no pairing of names: each declared
+    relation of ir.json between two types of the sources must have a record of the key in
+    the same type naming the same target (a type, or one an alias names). The relations
+    without one are counted: in a file or at a line no compilation compiles, at a line
+    where the key has no answer for some name ("error", "disputed", "split",
+    "dependent"), and the rest."""
+    support: dict[str, set] = defaultdict(set)
+    open_lines: set[tuple] = set()
+    for r in declared_records(recs):
+        if not r["from"]:
+            continue
+        if r["kind"] == "type" and r.get("target"):
+            support[r["from"]].add(r["target"])
+        support[r["from"]].update(r.get("targets") or ())
+        if r["kind"] in ("error", "disputed", "split", "dependent"):
+            open_lines.add((r["file"], r["line"]))
+    relations = {(r.from_, r.to, r.source_location.file, r.source_location.line, r.kind, r.via)
+                 for r in builder.relations
+                 if r.evidence is None and r.from_ in builder.types and r.to in builder.types}
+    counts: Counter = Counter()
+    rows = []
+    for from_, to, file, line, kind, via in sorted(relations):
+        counts["relations"] += 1
+        if to in support.get(from_, ()):
+            continue
+        skipped = uncompiled.get(file, ()) if isinstance(uncompiled, dict) else \
+            ("all" if file in uncompiled else ())
+        why = "not compiled" if skipped == "all" or line in skipped else \
+            "the key has no answer there" if (file, line) in open_lines else "no record"
+        counts[why] += 1
+        rows.append((why, file, line, from_, kind, to, via))
+    unsupported = len(rows)
+    print(f"pairs: {counts['relations']} declared relations between types of the sources; "
+          f"{unsupported} with no record of {key} in the type naming the target"
+          + (" (" + ", ".join(f"{k} {counts[k]}" for k in
+                              ("not compiled", "the key has no answer there", "no record")
+                              if counts[k]) + ")" if unsupported else ""))
+    for why, file, line, from_, kind, to, via in rows[:None if verbose else show]:
+        print(f"  {why}: {file}:{line} {from_} {kind} {to}" + (f" via {via}" if via else ""))
+    return {"counts": dict(counts), "rows": rows}
+
+
 def arguments(parser) -> None:
     """The options of a key's comparison for declared names."""
     parser.add_argument("--declared", action="store_true",
                         help="compare the names declared relations are drawn from (issue #7)")
     parser.add_argument("--save", type=Path, help="with --declared: write the result as JSON")
+    parser.add_argument("--pairs", action="store_true",
+                        help="with --declared: also check each declared relation against "
+                             "the key's records of its type (declared.pairs)")
 
 
 def report(builder, recs: list[dict], root: Path, args, **kw) -> int:
     """compare(), its result written to ``args.save``; 0 (a measurement, not a check)."""
     import json
     result = compare(builder, recs, root, getattr(args, "verbose", False), **kw)
+    if getattr(args, "pairs", False):
+        result["pairs"] = pairs(builder, recs, getattr(args, "verbose", False),
+                                key=kw.get("key", "the answer key"),
+                                uncompiled=kw.get("uncompiled", frozenset()))
     if getattr(args, "save", None):
         args.save.write_text(json.dumps(result, indent=1) + "\n")
     return 0

@@ -454,6 +454,7 @@ def main(argv=None) -> int:
     kd.add_argument("--compare", action="store_true")
     kd.add_argument("--declared", action="store_true")
     kd.add_argument("--save", type=Path)
+    kd.add_argument("--pairs", action="store_true")
     kd.add_argument("-v", "--verbose", action="store_true")
     kd.set_defaults(fn=key)
     rv = sub.add_parser("review")

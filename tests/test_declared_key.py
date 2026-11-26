@@ -109,3 +109,31 @@ def test_a_type_defined_only_in_lines_not_compiled_is_counted_apart(tmp_path):
     assert out["counts"]["mismatch (not compiled)"] == 1
     out = declared.compare(builder, [rec], tmp_path, uncompiled={})
     assert out["counts"]["mismatch"] == 1
+
+
+def test_an_alias_naming_only_its_own_type_is_compared(tmp_path):
+    # `type Cb = (s: A) => void` written in A names A alone: no project type to agree with,
+    # so another type drawn there is a mismatch, not passed over
+    builder = _names(tmp_path, {"a.ts": (
+        "export class B {}\n"
+        "export type Cb = (s: A) => void;\n"
+        "export class A { cb?: Cb; b?: B; }\n")})
+    rec = {"use": "Cb", "file": "a.ts", "line": 3, "col": 22, "pos": "declared",
+           "kind": "alias", "target": None, "project": False, "maximal": True,
+           "from": "a.A", "targets": ["a.A"]}
+    out = declared.compare(builder, [rec], tmp_path)
+    assert out["counts"]["agreed"] == 1 and not out["rows"]
+    wrong = dict(rec, use="B", col=34, kind="alias", targets=["a.A"])
+    out = declared.compare(builder, [wrong], tmp_path)
+    assert [r["verdict"] for r in out["rows"]] == ["mismatch"]
+
+
+def test_each_declared_relation_needs_a_key_record_of_its_target(tmp_path):
+    builder = _names(tmp_path, {
+        "p/B.java": "package p;\npublic class B {}\n",
+        "p/C.java": "package p;\npublic class C {}\n",
+        "p/A.java": "package p;\npublic class A {\n    B b;\n    C c;\n}\n"})
+    out = declared.pairs(builder, [_use("B", 3, 4, "p.B")])
+    assert out["counts"]["no record"] == 1 and out["rows"][0][5] == "p.C"
+    out = declared.pairs(builder, [_use("B", 3, 4, "p.B"), _use("X", 4, 4, None, kind="error")])
+    assert out["counts"]["the key has no answer there"] == 1
