@@ -114,3 +114,10 @@ def test_a_function_type_in_parentheses(tmp_path):
     ir = _pipe(tmp_path, "    var cfg: (Cfg.() -> Unit) = {}\n"
                          "    fun filter(block: ((Req) -> Boolean)) {}")
     assert _decl(ir, "shop.Pipe") == {("dependency", "Cfg", "cfg"), ("dependency", "Req", "filter")}
+
+
+def test_an_alias_of_a_suspend_function_type(tmp_path):
+    # #9, case 36: a function type's parameter named like a class names none
+    ir = _pipe(tmp_path, "    fun add(h: Handler) {}",
+               extra="typealias Handler = suspend (Job: Req) -> Unit\n")
+    assert _decl(ir, "shop.Pipe") == {("dependency", "Req", "add")}

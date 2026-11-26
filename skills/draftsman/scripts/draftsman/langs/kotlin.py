@@ -431,6 +431,14 @@ class KotlinSpec(LanguageSpec):
             any(m.type == "parameter_modifier" and m.child_count and m.children[0].type == "vararg"
                 for m in prev.children)
 
+    def alias_target(self, alias_node, type_node, text):
+        # `typealias H = suspend (Req) -> Unit`: the modifiers are a sibling of the type
+        if type_node.type == "type_modifiers":
+            nxt = type_node.next_named_sibling
+            if nxt is not None:
+                return " ".join(text.split()) + " " + nxt.text.decode("utf-8", "replace")
+        return text
+
     def type_text(self, type_node, text, src):
         # `suspend Ctx.() -> Unit`, `context(Log) () -> Unit`: the modifiers are a sibling
         # of the function type
