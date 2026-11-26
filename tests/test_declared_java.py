@@ -48,3 +48,23 @@ def test_a_package_private_nested_type_is_not_inherited_in_another_package(tmp_p
     assert ("b.Third", "b.Pkg", "p", None) in rels
     assert ("b.SubB", "a.Base.Prot", "q", None) in rels
     assert ("b.Imp", "a.Face.Fn", "f", None) in rels
+
+
+def test_package_private_members_are_inherited_step_by_step(tmp_path):
+    # #7's forms found after 0.10.0 (bench/javac_oracle/review/jv5): b.Mid does not inherit
+    # a.Base's package-private Pkg, so neither does a.Leaf, though it is in a; nor does a
+    # subclass in another package see a package-private field, which then hides nothing
+    ir = extract_source(tmp_path, {
+        "a/Base.java": ("package a;\npublic class Base {\n  static class Pkg {}\n"
+                        "  static Object Item;\n}\n"),
+        "a/Pkg.java": "package a; public class Pkg {}\n",
+        "b/Mid.java": "package b; public class Mid extends a.Base {}\n",
+        "a/Leaf.java": ("package a;\npublic class Leaf extends b.Mid {\n  Pkg p;\n"
+                        "  Object m() { return new Pkg(); }\n}\n"),
+        "b/Item.java": "package b; public class Item { public static void m() {} }\n",
+        "b/Sub.java": "package b;\npublic class Sub extends a.Base {\n  void f() { Item.m(); }\n}\n"})
+    rels = {(r.from_, r.to, r.via, r.evidence) for r in ir.relations}
+    assert ("a.Leaf", "a.Pkg", "p", None) in rels and ("a.Leaf", "a.Pkg", "m", "body") in rels
+    assert not any(to == "a.Base.Pkg" for _, to, _, _ in rels)
+    assert ("b.Sub", "b.Item", "f", "body") in rels
+

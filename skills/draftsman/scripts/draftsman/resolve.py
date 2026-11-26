@@ -347,8 +347,10 @@ class Resolver:
         """A nested type or member type alias ``name`` declared in ``owner`` or inherited from
         its supertypes (`using CharacterMap = int[256];` in a base class). ``body``: for a
         name in a body, where C++ looks into no dependent base (`TBase<T>`) of ``owner``.
-        ``from_ns``: the namespace of the type that inherits (``owner``'s at the first call),
-        which sees a base's package-private nested type in its own package only (Java)."""
+        ``from_ns``: the namespace of the type that inherits from ``owner``'s supertypes
+        (``owner``'s own), which sees a base's package-private nested type in its own package
+        only (Java); each step of a chain is its own (`a.Leaf extends b.Mid extends a.Base`:
+        b.Mid does not inherit a.Base's, so neither does a.Leaf)."""
         if from_ns is None:
             from_ns = owner.namespace
         if owner.qualified_name in seen:
@@ -365,8 +367,7 @@ class Resolver:
                         continue   # Kotlin: an interface passes on no nested type
                     # (a base's own bases are known once the base is: `ViaPtr<int>`'s
                     # `TBase<T*>` is `TBase<int*>`)
-                    found = self._member_type(self.index[sup.target], name, sep, inherit, seen,
-                                              from_ns=from_ns)
+                    found = self._member_type(self.index[sup.target], name, sep, inherit, seen)
                     # C#'s and Java's private nested type is no member of a subclass, nor
                     # Java's package-private one in another package, nor Kotlin's type
                     # nested in a superclass's companion object (folded into the class)
@@ -1919,19 +1920,22 @@ class Resolver:
             self._field_cache[key] = found
         return self._field_cache[key]
 
-    def _has_field(self, rtype: RawType, name: str, inherited: bool = False) -> bool:
+    def _has_field(self, rtype: RawType, name: str, inherited: bool = False,
+                   heir_ns: Optional[str] = None) -> bool:
         """Whether the project type has a field ``name``, also an enum constant, a record
         component or one of its RawType.body_fields, its own or inherited (through the JDK
-        table for JDK supertypes)."""
-        key = (rtype.qualified_name, name, inherited)
+        table for JDK supertypes). ``inherited``: asked for a subtype in namespace
+        ``heir_ns``, which sees a Java package-private field in its own package only."""
+        key = (rtype.qualified_name, name, inherited, heir_ns)
         if key not in self._field_cache:
             self._field_cache[key] = False   # a cycle of supertypes has no field
             spec = LANGUAGES[rtype.language]
             self._field_cache[key] = any(
                 rm.member.name == name and rm.member.kind in ("field", "enum_constant", "property")
-                and (not inherited or spec.subtype_sees([rm.member.visibility, *rm.member.modifiers]))
+                and (not inherited or spec.subtype_sees([rm.member.visibility, *rm.member.modifiers],
+                                                        rtype.namespace == heir_ns))
                 for rm in rtype.members) or name in rtype.body_fields or any(
-                self._has_field(self.index[s.target], name, True)
+                self._has_field(self.index[s.target], name, True, rtype.namespace)
                 for s in self._project_supers(rtype, not inherited) if s.status == PROJECT) or any(
                 spec.inherited_field(o, name)
                 for o in self._external_ancestors(rtype, starred=True))
