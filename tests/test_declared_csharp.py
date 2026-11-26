@@ -303,3 +303,21 @@ def test_an_alias_of_a_class_written_from_the_global_namespace(tmp_path):
                     ("Lib.Order", "C"), ("Lib.Box.Inner", "F3")}
     # a namespace outside the sources beside a class `Shop.Google.Protobuf`: a type outside
     assert {r.to for r in ir.relations if r.from_ == "Shop.Inner.E"} == {"Google.Protobuf.IMessage"}
+
+
+def test_a_body_name_after_global_is_the_global_namespaces(tmp_path):
+    # `global::Shop.Order` in a body beside a nearer namespace `App.Shop` (Roslyn:
+    # Shop.Order, where `Shop.Order` alone is App.Shop.Order)
+    ir = extract_source(tmp_path, {"P/T.cs": (
+        "namespace Shop { public enum Status { Open } public class Order {\n"
+        "  public static Order Make() => null; } }\n"
+        "namespace App.Shop { public enum Status { Open } public class Order {\n"
+        "  public static Order Make() => null; } }\n"
+        "namespace App { public class A {\n"
+        "  public object B1() => global::Shop.Status.Open;\n"
+        "  public object B2() => global::Shop.Order.Make();\n"
+        "  public object B3() => new global::Shop.Order();\n"
+        "  public object B4() => Shop.Status.Open; } }\n")})
+    body = {(r.to, r.via) for r in ir.relations if r.from_ == "App.A" and r.evidence}
+    assert body == {("Shop.Status", "B1"), ("Shop.Order", "B2"), ("Shop.Order", "B3"),
+                    ("App.Shop.Status", "B4")}

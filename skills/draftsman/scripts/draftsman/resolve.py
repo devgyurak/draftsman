@@ -789,6 +789,14 @@ class Resolver:
             return None
         head, rest = name.split(q, 1)
         head, rest = head.strip(), rest.strip()
+        if spec.rooted_prefix and name.startswith(spec.rooted_prefix):
+            # `global::Shop.Order` in a body: the global namespace's alone, not App.Shop's
+            if rest in self.index:
+                return Resolution(PROJECT, rest)
+            first = rest.split(spec.separator, 1)[0]
+            if any(n == first or n.startswith(first + spec.separator) for n in self.namespaces):
+                return Resolution(UNRESOLVED, hint=f"no type {rest} in the sources")
+            return Resolution(EXTERNAL, rest)
         for ns in self._namespace_chain(rtype.namespace, spec.separator,
                                         spec.parent_namespace_lookup, scope.namespace):
             alias = self.file_aliases.get((scope.file, ns), {}).get(head)

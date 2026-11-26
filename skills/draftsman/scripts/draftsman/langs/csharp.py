@@ -692,14 +692,14 @@ class CSharpSpec(LanguageSpec):
 
     def ref_text(self, node, text):
         # `L::Order`, `L::Sub.Deep`, `L::Order.Make()`: the alias qualifier stays, the name
-        # before it read as a using alias alone (alias_qualifier); `global::` is the global
-        # namespace's, as before
+        # before it read as a using alias alone (alias_qualifier); after `global::`, the
+        # global namespace's alone
         cur = node
         while cur.type in ("qualified_name", "member_access_expression") and cur.named_children:
             cur = cur.named_children[0]
         if cur.type == "alias_qualified_name" and cur.named_children:
             alias = (cur.named_children[0].text or b"").decode()
-            if alias != "global" and text.startswith(alias + "."):
+            if text.startswith(alias + "."):   # `global::Shop.Order` too (rooted_prefix)
                 return alias + "::" + text[len(alias) + 1:]
         return text
 
