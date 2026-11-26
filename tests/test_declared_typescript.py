@@ -124,3 +124,11 @@ def test_a_supertype_alias_of_several_types_extends_each(tmp_path):
     assert _rels(ir, "a.I2") == {("dependency", "Item", None)}
     assert _rels(ir, "a.I3") == {("dependency", "Options", None), ("dependency", "Item", None)}
     assert not ir.unresolved
+
+
+def test_a_field_naming_a_type_twice_keeps_the_largest_multiplicity(tmp_path):
+    ir = _ir(tmp_path, "  t?: Item | Item[];\n  u?: Ref | Item[];",
+             extra="export type Ref = { r: number } & Item;\n")
+    assoc = {(r.to.rsplit(".", 1)[-1], r.via, r.multiplicity) for r in ir.relations
+             if r.from_ == "a.A" and r.kind == "association"}
+    assert assoc == {("Item", "t", "*"), ("Item", "u", "*")}

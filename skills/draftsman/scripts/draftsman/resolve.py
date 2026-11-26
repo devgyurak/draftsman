@@ -18,7 +18,7 @@ from .extractor import BodyNames, RawBodyRef, RawFile, RawMember, RawType
 from .langs import LANGUAGES, FileScope, Import, Unseen, spec_for_path
 from .model import IR, External, Location, Member, Relation, Type, Unresolved
 from .typeref import Named, Nullable, function_types, named_refs, parse_type, value_names
-from .wrappers import Wrappers, combine
+from .wrappers import _RANK, Wrappers, combine
 
 PROJECT, EXTERNAL, BUILTIN, TPARAM, ALIAS, UNRESOLVED = (
     "project", "external", "builtin", "tparam", "alias", "unresolved")
@@ -2728,6 +2728,21 @@ class _Builder:
                     rtype.qualified_name, target, "dependency", loc, via=via))
 
     def _association(self, rtype: RawType, rm: RawMember) -> None:
+        start = len(self.relations)
+        self._field_relations(rtype, rm)
+        # one field naming a type twice (`UpdateFilter<T> | Document[]`, whose alias names
+        # Document too): one association, of the largest multiplicity
+        best: dict[str, Relation] = {}
+        for r in self.relations[start:]:
+            if r.kind == "association":
+                kept = best.get(r.to)
+                if kept is None or _RANK[r.multiplicity] > _RANK[kept.multiplicity]:
+                    best[r.to] = r
+        if best:
+            self.relations[start:] = [r for r in self.relations[start:]
+                                      if r.kind != "association" or best[r.to] is r]
+
+    def _field_relations(self, rtype: RawType, rm: RawMember) -> None:
         m = rm.member
         ref = _parse(m.type_ref, rtype.language)
         loc = Location(m.file or rtype.location.file, m.line)
