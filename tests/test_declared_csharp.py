@@ -243,3 +243,16 @@ def test_a_base_written_with_the_alias_qualifier(tmp_path):
             ("Shop.Inner.D", "implements", "Google.Protobuf.IBufferMessage")} <= rels
     assert not ir.unresolved
 
+
+def test_an_alias_written_with_the_alias_qualifier(tmp_path):
+    # #11, case 66: `using LS = L::Sub;` is Lib.Sub (beside a class `Shop.LS`); an alias
+    # beside it in the same block is not seen there (a compile error: nothing drawn)
+    ir = extract_source(tmp_path, {"P/T.cs": _LIB, "P/U.cs": (
+        "using L = Lib;\n"
+        "namespace Shop.Other { using LS = L::Sub;\n"
+        "  public class E { public LS::Deep F1; public LS.Deep F2; } }\n"
+        "namespace Shop.Third { using K = Lib; using KS = K::Sub;\n"
+        "  public class F { public KS::Deep F1; } }\n")})
+    rels = {(r.from_, r.to, r.via) for r in ir.relations if r.evidence is None}
+    assert {("Shop.Other.E", "Lib.Sub.Deep", "F1"), ("Shop.Other.E", "Lib.Sub.Deep", "F2")} <= rels
+    assert not any(f == "Shop.Third.F" for f, _, _ in rels)

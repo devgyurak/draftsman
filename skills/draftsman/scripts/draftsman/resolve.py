@@ -714,11 +714,10 @@ class Resolver:
         if entry is not None and spec.body_aliases:
             # (the alias's target is read from the namespace it stands in outward)
             block = entry[1].alias_blocks.get(alias, "")
-            for ns in self._namespace_chain(block, sep, True):
-                target = f"{ns}{sep}{entry[0].strip()}" if ns else entry[0].strip()
-                if target in self.namespaces:
-                    return self.resolve(target + sep + rest, rtype, member,
-                                        arity=arity, at_namespace="")
+            target = self._alias_namespace(alias, spec)
+            if target is not None:
+                return self.resolve(target + sep + rest, rtype, member,
+                                    arity=arity, at_namespace="")
             written = re.sub(r"^\s*global::", "", entry[0]).strip()
             if not any(f"{ns}{sep}{written}" in self.index if ns else written in self.index
                        for ns in self._namespace_chain(block, sep, True)) \
@@ -734,6 +733,35 @@ class Resolver:
             if found:
                 return found
         return Resolution(ALIAS)
+
+    def _alias_namespace(self, alias: str, spec: LanguageSpec, depth: int = 0) -> Optional[str]:
+        """The namespace of the sources a using alias names (`using L = Lib;`: Lib), its
+        target read from the namespace it stands in outward; one written with the alias
+        qualifier (`using LS = L::Sub;`) is read in what that alias names. None where it
+        names none of them."""
+        entry = self.alias_targets.get(alias)
+        if entry is None or depth > 8:
+            return None
+        sep, q = spec.separator, spec.alias_qualifier
+        text, scope = entry[0].strip(), entry[1]
+        block = scope.alias_blocks.get(alias, "")
+        if q and q in text and not text.startswith("global" + q):
+            head, rest = (p.strip() for p in text.split(q, 1))
+            # the aliases of the namespaces around it: one beside it is not seen there
+            for ns in self._namespace_chain(block, sep, True):
+                if ns == block and block:
+                    continue
+                other = self.file_aliases.get((scope.file, ns), {}).get(head)
+                if other is not None and other != alias:
+                    base = self._alias_namespace(other, spec, depth + 1)
+                    found = f"{base}{sep}{rest}" if base is not None else None
+                    return found if found in self.namespaces else None
+            return None
+        for ns in self._namespace_chain(block, sep, True):
+            target = f"{ns}{sep}{text}" if ns else text
+            if target in self.namespaces:
+                return target
+        return None
 
     def _alias_qualified(self, name: str, rtype: RawType, member: Optional[RawMember],
                          inherit: bool, scope: FileScope, arity: Optional[int],
