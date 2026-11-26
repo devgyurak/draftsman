@@ -121,3 +121,9 @@ def test_an_alias_of_a_suspend_function_type(tmp_path):
     ir = _pipe(tmp_path, "    fun add(h: Handler) {}",
                extra="typealias Handler = suspend (Job: Req) -> Unit\n")
     assert _decl(ir, "shop.Pipe") == {("dependency", "Req", "add")}
+
+
+def test_context_parameters(tmp_path):
+    # #9, case 39: `context(c: Ctx)`, and the older `context(Ctx)`
+    ir = _pipe(tmp_path, "    context(c: Ctx)\n    fun run() {}\n    context(Job)\n    fun old() {}")
+    assert _decl(ir, "shop.Pipe") == {("dependency", "Ctx", "run"), ("dependency", "Job", "old")}

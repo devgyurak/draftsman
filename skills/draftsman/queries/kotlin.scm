@@ -86,6 +86,15 @@
     (parameter (simple_identifier) @param.name
                [(user_type) (nullable_type) (function_type) (parenthesized_type)] @param.type) @param))
 
+; context parameters (`context(c: Ctx) fun run()`, and the older `context(Ctx)`)
+(function_declaration
+  (modifiers (context_receiver
+    (parameter (simple_identifier) @param.name
+               [(user_type) (nullable_type) (function_type) (parenthesized_type)] @param.type) @param)))
+(function_declaration
+  (modifiers (context_receiver
+    [(user_type) (nullable_type) (function_type) (parenthesized_type)] @param.type) @param))
+
 ; ---------------------------------------------------------------- aliases
 (type_alias (type_identifier) @alias "=" . (_) @alias.type)
 
