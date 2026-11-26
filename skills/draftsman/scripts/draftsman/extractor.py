@@ -1116,12 +1116,15 @@ class Extractor:
             if implicit := self.spec.implicit_variables(node):   # C#'s `value` in a setter
                 ref_names = BodyNames(ref_names.variables | implicit, ref_names.types)
             after = node.parent.child_by_field_name("name") if position == "receiver" else None
+            text = self.spec.ref_text(node, self.spec.separator.join(
+                self.spec.body_name_text(_text(n, src)) for n in parts))
+            # a part ref_text joins to the next (C#'s alias `L` of `L::Order`) has no place
+            # of its own: the name's place is the type's
+            places = parts[max(0, len(parts) - len(text.split(self.spec.separator))):]
             ref = RawBodyRef(
-                self.spec.ref_text(node, self.spec.separator.join(
-                    self.spec.body_name_text(_text(n, src)) for n in parts)),
-                position,
-                [(_line(n), _utf16_col(n, src)) for n in parts], via, ref_scope, rm,
-                ref_names, list(around), [self.spec.arity(n) for n in parts],
+                text, position,
+                [(_line(n), _utf16_col(n, src)) for n in places], via, ref_scope, rm,
+                ref_names, list(around), [self.spec.arity(n) for n in places],
                 _text(self._parts(after)[0], src) if after is not None and after.id != node.id
                 else None)
             if owner.id in detached:

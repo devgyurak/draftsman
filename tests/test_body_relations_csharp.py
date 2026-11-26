@@ -45,12 +45,12 @@ def test_body_names_stand_where_the_hand_written_answers_say():
                 elif position != r.position:
                     problems.append(f"{where}: {r.position}, the marker says {position}")
     assert problems == []
-    # top-level statements belong to no type the extractor sees, `global::A.B.C` is read
-    # as a type, not as an expression's head, and a property pattern's path is not read
+    # top-level statements belong to no type the extractor sees, and a property pattern's
+    # path is not read (`global::Shop.Status.Open` is read as a receiver since #11's 64)
     missed = sorted((rel, line, answer) for (rel, line, col), (answer, _) in want.items()
                     if answer != "-" and (rel, line, col) not in recorded)
     assert missed == [("Program.cs", 4, "Shop.Order"), ("Program.cs", 5, "Shop.Customer"),
-                      ("Program.cs", 5, "Shop.Order"), ("Shop/Positions.cs", 47, "Shop.Status"),
+                      ("Program.cs", 5, "Shop.Order"),
                       ("Shop/Review/Parse.cs", 31, "var"), ("Shop/Review/Parse.cs", 32, "var")]
 
 

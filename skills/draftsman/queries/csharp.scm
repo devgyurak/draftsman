@@ -108,8 +108,8 @@
 ; `T?`, `T[]`), `as` and `is` with a type, type arguments, and `is Foo` alone, which
 ; Roslyn reads as a type before it reads a constant
 (_ type: [(identifier) (generic_name) (qualified_name) (alias_qualified_name)] @body.ref.type)
-(as_expression right: [(identifier) (generic_name) (qualified_name)] @body.ref.type)
-(is_expression right: [(identifier) (generic_name) (qualified_name)] @body.ref.type)
+(as_expression right: [(identifier) (generic_name) (qualified_name) (alias_qualified_name)] @body.ref.type)
+(is_expression right: [(identifier) (generic_name) (qualified_name) (alias_qualified_name)] @body.ref.type)
 (type_argument_list [(identifier) (generic_name) (qualified_name) (alias_qualified_name)] @body.ref.type)
 (is_pattern_expression pattern: (constant_pattern . [(identifier) (generic_name)] .) @body.ref.type)
 ; `a * b` read as a pointer type in a declaration: no type
@@ -136,7 +136,7 @@
 ; (`Foo.Create()`, `Foo.Line.Make()`, `Repo<int>.Make()`), `nameof(Foo)`, a constant
 ; pattern (`case Status.Open:`, a switch arm's `Foo =>`, `is not Foo`, `is A.B`)
 (member_access_expression
-  expression: [(identifier) (generic_name) (member_access_expression)] @body.ref.receiver)
+  expression: [(identifier) (generic_name) (member_access_expression) (alias_qualified_name)] @body.ref.receiver)
 (invocation_expression
   function: (identifier) @_nameof (#eq? @_nameof "nameof")
   arguments: (argument_list

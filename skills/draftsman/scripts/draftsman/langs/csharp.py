@@ -620,7 +620,7 @@ class CSharpSpec(LanguageSpec):
     annotation_nodes = frozenset({"attribute"})
     type_argument_nodes = frozenset({"type_argument_list"})
     receiver_part_nodes = frozenset({"identifier", "generic_name", "member_access_expression",
-                                     "qualified_name"})
+                                     "qualified_name", "alias_qualified_name"})
     # `E.V`, and a bare name, which in `nameof(Order)` is a type
     annotation_value_args = frozenset({"member_access_expression", "identifier"})
 
@@ -689,6 +689,19 @@ class CSharpSpec(LanguageSpec):
 
     def internals_visible(self, owner_project, project):
         return _assembly_name(Path(project)) in _friends(Path(owner_project))
+
+    def ref_text(self, node, text):
+        # `L::Order`, `L::Sub.Deep`, `L::Order.Make()`: the alias qualifier stays, the name
+        # before it read as a using alias alone (alias_qualifier); `global::` is the global
+        # namespace's, as before
+        cur = node
+        while cur.type in ("qualified_name", "member_access_expression") and cur.named_children:
+            cur = cur.named_children[0]
+        if cur.type == "alias_qualified_name" and cur.named_children:
+            alias = (cur.named_children[0].text or b"").decode()
+            if alias != "global" and text.startswith(alias + "."):
+                return alias + "::" + text[len(alias) + 1:]
+        return text
 
     def body_name_text(self, text):
         return text.removeprefix("@")   # a verbatim identifier

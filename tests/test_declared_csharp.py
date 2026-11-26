@@ -193,3 +193,40 @@ def test_an_alias_qualifier_without_an_alias_draws_nothing(tmp_path):
         "  public class B { public X::Order R; } }\n")})
     assert not [r for r in ir.relations if r.from_ == "Shop.B" and r.evidence is None]
     assert [u.raw_type for u in ir.unresolved] == ["X::Order"]
+
+
+_LIB = ("namespace Lib { public class Order { public static Order Make() => null; }\n"
+        "  public static class Util { public static void Run() {} }\n"
+        "  namespace Sub { public class Deep {} } }\n"
+        "namespace Shop { public class L { public class Order {} public static class Util {}\n"
+        "  public class Sub { public class Deep {} } }\n"
+        "  public class M { public class Deep {} } public class LS { public class Deep {} } }\n")
+
+
+def test_body_names_after_the_alias_qualifier_are_the_aliases(tmp_path):
+    # #11, case 64: in a body too, the name before `::` is a using alias alone, beside
+    # classes `Shop.L` and `Shop.M` a namespace around has (Roslyn: Lib's)
+    ir = extract_source(tmp_path, {"P/T.cs": _LIB, "P/U.cs": (
+        "using L = Lib;\nnamespace Shop.Inner { using M = Lib.Sub;\n"
+        "public class A {\n"
+        "  public object B1() => new L::Order();\n"
+        "  public object B2() => L::Order.Make();\n"
+        "  public void B3() { L::Util.Run(); }\n"
+        "  public object B4() => typeof(L::Sub.Deep);\n"
+        "  public object B5(object o) => o is M::Deep ? 1 : 0;\n} }\n")})
+    body = {(r.to, r.via) for r in ir.relations if r.from_ == "Shop.Inner.A" and r.evidence}
+    assert body == {("Lib.Order", "B1"), ("Lib.Order", "B2"), ("Lib.Util", "B3"),
+                    ("Lib.Sub.Deep", "B4"), ("Lib.Sub.Deep", "B5")}
+
+
+def test_a_receiver_after_the_alias_qualifier_stands_at_the_type(tmp_path):
+    # the alias `L` has no place of its own in `L::Order.Make()`: the name's place is
+    # `Order`'s, where Roslyn records it
+    from draftsman.extractor import Extractor
+    from draftsman.langs import spec_for_path
+    src = tmp_path / "U.cs"
+    src.write_text("using L = Lib;\nclass A { object B() => L::Order.Make(); }\n")
+    raw = Extractor(spec_for_path("U.cs")).extract(src, "U.cs", tmp_path)
+    refs = [(r.text, r.places) for t in raw.types for r in t.body_refs]
+    assert ("L::Order", [(2, 27)]) in refs
+
