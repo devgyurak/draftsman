@@ -25,7 +25,7 @@
   @annotation.ref
 
 ; ---------------------------------------------------------------- supertypes
-(base_list [(identifier) (generic_name) (qualified_name)] @super.inherits)
+(base_list [(identifier) (generic_name) (qualified_name) (alias_qualified_name)] @super.inherits)
 (base_list (primary_constructor_base_type type: (_) @super.extends))
 
 ; ---------------------------------------------------------------- members

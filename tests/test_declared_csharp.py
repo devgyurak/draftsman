@@ -230,3 +230,16 @@ def test_a_receiver_after_the_alias_qualifier_stands_at_the_type(tmp_path):
     refs = [(r.text, r.places) for t in raw.types for r in t.body_refs]
     assert ("L::Order", [(2, 27)]) in refs
 
+
+def test_a_base_written_with_the_alias_qualifier(tmp_path):
+    # #11, case 65: `class C : L::Order`, eShop's gRPC `: pb::IMessage<X>`
+    ir = extract_source(tmp_path, {"P/T.cs": _LIB, "P/U.cs": (
+        "using L = Lib;\nusing pb = global::Google.Protobuf;\n"
+        "namespace Shop.Inner { public class C : L::Order { }\n"
+        "  public class D : pb::IMessage<D>, pb::IBufferMessage { } }\n")})
+    rels = {(r.from_, r.kind, r.to) for r in ir.relations if r.evidence is None}
+    assert ("Shop.Inner.C", "extends", "Lib.Order") in rels
+    assert {("Shop.Inner.D", "implements", "Google.Protobuf.IMessage"),
+            ("Shop.Inner.D", "implements", "Google.Protobuf.IBufferMessage")} <= rels
+    assert not ir.unresolved
+
