@@ -36,10 +36,12 @@
 ; ---------------------------------------------------------------- members
 (property_declaration
   (modifiers)? @modifiers
+  (receiver_type)? @receiver
   (variable_declaration (simple_identifier) @name [(user_type) (nullable_type) (function_type) (parenthesized_type)] @type))
   @member.property
 (property_declaration
   (modifiers)? @modifiers
+  (receiver_type)? @receiver
   (variable_declaration (simple_identifier) @name .)) @member.property
 
 ; primary constructor parameters declared with val/var are properties

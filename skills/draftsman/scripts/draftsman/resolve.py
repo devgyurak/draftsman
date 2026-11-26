@@ -2836,6 +2836,8 @@ class _Builder:
         # container arguments that are not its elements
         for other in [*function_types(ref), *others]:
             self._depend_on(rtype, rm, other, loc, m.type_ref)
+        if m.receiver:   # Kotlin's extension property `val Box<Job>.done`: its receiver
+            self._depend_on(rtype, rm, _parse(m.receiver, rtype.language), loc, m.receiver)
 
     def _dependencies(self, rtype: RawType, rm: RawMember) -> None:
         m = rm.member

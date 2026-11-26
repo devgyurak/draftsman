@@ -127,3 +127,9 @@ def test_context_parameters(tmp_path):
     # #9, case 39: `context(c: Ctx)`, and the older `context(Ctx)`
     ir = _pipe(tmp_path, "    context(c: Ctx)\n    fun run() {}\n    context(Job)\n    fun old() {}")
     assert _decl(ir, "shop.Pipe") == {("dependency", "Ctx", "run"), ("dependency", "Job", "old")}
+
+
+def test_an_extension_propertys_receiver(tmp_path):
+    # #9, case 42
+    ir = _pipe(tmp_path, "    private val Box<out Job?>.done: Boolean get() = true")
+    assert _decl(ir, "shop.Pipe") == {("dependency", "Box", "done"), ("dependency", "Job", "done")}
