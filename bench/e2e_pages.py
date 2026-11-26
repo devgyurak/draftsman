@@ -132,7 +132,7 @@ def _common(repo: Repo) -> list[Check]:
     checks: list[Check] = [
         (r"renders of the view draw (\d+) " + unit + r" and (\d+) relations",
          lambda r: (len(r.view.types), len(r.view.relations))),
-        (r"(\d+) of the " + unit + r" only through the (\d+) body relations of",
+        (r"(\d+) (?:of the )?" + unit + r" only through the (\d+) body relations (?:of|that touch)",
          lambda r: _focus_only_body(r.view, focus)),
         (r"carries all (\d+) types, as (\d+) boxes with (\d+) nested types folded",
          lambda r: (len(r.ir.types), len(r.viewer.types),
@@ -150,6 +150,23 @@ def _common(repo: Repo) -> list[Check]:
         (r"Types by kind: ([^.]+)\.", None),   # (checked below, as words)
     ]
     return checks
+
+
+def _required(repo: Repo, common: list[Check]) -> set[str]:
+    """The common sentences every page has (the view's render, the viewer's relations, its
+    nested types where it folds some, its body relations unless it says they are among
+    them, the bodies' count): one a page lacks is listed, not passed over."""
+    p = [pattern for pattern, _ in common]
+    req = {p[0], p[3]}
+    if sum(len(v) for v in repo.viewer.folded.values()):
+        req.add(p[2])
+    if "(body relations among them)" not in repo.md:
+        req.add(p[4])
+    if "only through the" in repo.md:
+        req.add(p[1])
+    if not re.search(p[6], repo.md):   # C++ and Kotlin write "names are drawn as N ..."
+        req.add(p[5])
+    return req
 
 
 def _types_by_kind(repo: Repo) -> str:
@@ -253,12 +270,14 @@ def check(repo: Repo, out: list[str], verbose: bool) -> None:
         if sum(have.values()) != len(repo.raw["types"]):
             out.append(f"{page}: types by kind sum to {sum(have.values())}, ir.json has "
                        f"{len(repo.raw['types'])} ({_types_by_kind(repo)})")
-    for pattern, fn in _common(repo) + SPECIFIC.get(repo.name, []):
+    common = _common(repo)
+    required = _required(repo, common)
+    for pattern, fn in common + SPECIFIC.get(repo.name, []):
         if fn is None:
             continue
         found = re.search(pattern, md, re.S)
         if not found:
-            if repo.name in SPECIFIC and (pattern, fn) in SPECIFIC[repo.name]:
+            if pattern in required or (pattern, fn) in SPECIFIC.get(repo.name, []):
                 out.append(f"{page}: no sentence matches /{pattern}/")
             continue
         expected = fn(repo)
