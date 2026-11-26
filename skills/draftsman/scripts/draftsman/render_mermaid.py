@@ -21,6 +21,12 @@ def _mm_type(text: str | None) -> str:
     return re.sub(r'[{}"`;]', "", text)
 
 
+def _mm_name(text: str) -> str:
+    """A member's or parameter's name in a class body, where a brace would close it: a
+    TypeScript destructured parameter is named by its pattern (`{ a, b }`)."""
+    return text.replace("{", "#123;").replace("}", "#125;")
+
+
 def _quote(text: str) -> str:
     return text.replace('"', "#quot;").replace("\n", "<br>")
 
@@ -36,7 +42,7 @@ def _member_line(m: Member) -> str:
     typ = _mm_type(m.type_ref)
     if m.kind in ("method", "constructor"):
         params = ", ".join(
-            f"{_mm_type(p.type_ref)} {p.name}".strip() for p in m.params)
+            f"{_mm_type(p.type_ref)} {_mm_name(p.name)}".strip() for p in m.params)
         flags = ("*" if m.abstract else "") + ("$" if m.static else "")
         ret = f" {typ}" if typ and m.kind == "method" else ""
         name = f"{_mm_type(m.receiver)}.{m.name}" if m.receiver else m.name

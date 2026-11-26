@@ -301,6 +301,23 @@ def test_mermaid_validates(shop_ir, tmp_path):
         assert res.returncode == 0, res.stderr + path.read_text()
 
 
+def test_mermaid_escapes_braces_in_parameter_names(tmp_path):
+    # a TypeScript destructured parameter is named by its pattern (`{ a, b }`, #9 case
+    # 31): a raw brace would close the class body
+    from conftest import extract_source
+    ir = extract_source(tmp_path / "src", {"m.ts": (
+        "export interface Options { a?: number; b?: number }\n"
+        "export class A { start({ a, b }: Options, [c]: number[]): void {} }\n")})
+    text = render(build_scene(ir, View()))
+    assert "+start(Options #123; a, b #125;, number[] [c]) void" in text.replace("~", "")
+    path = tmp_path / "d.mmd"
+    path.write_text(text)
+    if (SCRIPTS / "node_modules" / "mermaid").exists() or shutil.which("mmdc"):
+        res = subprocess.run([str(SCRIPTS / "validate.sh"), str(path)],
+                             capture_output=True, text=True)
+        assert res.returncode == 0, res.stderr + text
+
+
 # ------------------------------------------------------------------ svg / html
 
 from draftsman.graph import build_graph, find_cycles  # noqa: E402
