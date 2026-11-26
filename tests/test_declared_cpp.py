@@ -262,3 +262,14 @@ def test_a_dependent_member_names_its_template_alone(tmp_path):
 
 def _deps(ir, src: str) -> set[tuple[str, str]]:
     return {(r.to, r.via) for r in ir.relations if r.from_ == src and r.evidence is None}
+
+
+def test_operators_and_member_templates_are_members(tmp_path):
+    # #9, cases 43 and 46; a member template's parameter named like a class names none
+    ir = extract_source(tmp_path, {"h.h": (
+        "struct Item {}; struct Order {};\n"
+        "struct Cmp { bool operator()(const Item& a) const; Item& operator[](int i); };\n"
+        "struct P { template <class C> const Item& pick(const C& c) const;\n"
+        "  template <class Order> Order* make(Order o); };\n")})
+    assert _deps(ir, "Cmp") == {("Item", "operator()"), ("Item", "operator[]")}
+    assert _deps(ir, "P") == {("Item", "pick")}

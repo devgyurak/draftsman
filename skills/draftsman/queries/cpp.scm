@@ -65,9 +65,12 @@
   (declaration declarator: (function_declarator) @declarator) @member.method)
 ; conversion operators (`operator const Item&() const;`): their type is in the declarator
 (field_declaration_list (declaration declarator: (operator_cast) @declarator) @member.method)
+; member function templates, also returning a reference or a pointer
 (field_declaration_list
   (template_declaration
-    (declaration type: (_)? @type declarator: (function_declarator) @declarator) @member.method))
+    (declaration type: (_)? @type
+                 declarator: [(function_declarator) (reference_declarator) (pointer_declarator)]
+                 @declarator) @member.method))
 
 (enumerator name: (identifier) @name) @member.enum_constant
 
