@@ -703,6 +703,57 @@ class Resolver:
                 return "type"   # not a `Lib<T>` the block's using brings in for `Lib.Order`
         return None
 
+    def _through_alias(self, alias: Optional[str], rest: str, rtype: RawType,
+                       member: Optional[RawMember], arity: Optional[int], inherit: bool,
+                       spec: LanguageSpec) -> Resolution:
+        """``rest`` after the alias ``alias`` (`L.Order`, `L::Order`, `ModelAlias::Ptr`)."""
+        sep = spec.separator
+        # C#'s `using L = Lib;` then `L.Order`: an alias of a namespace of the
+        # sources stands for it; the name is read in that namespace
+        entry = self.alias_targets.get(alias) if alias else None
+        if entry is not None and spec.body_aliases:
+            # (the alias's target is read from the namespace it stands in outward)
+            block = entry[1].alias_blocks.get(alias, "")
+            for ns in self._namespace_chain(block, sep, True):
+                target = f"{ns}{sep}{entry[0].strip()}" if ns else entry[0].strip()
+                if target in self.namespaces:
+                    return self.resolve(target + sep + rest, rtype, member,
+                                        arity=arity, at_namespace="")
+            written = re.sub(r"^\s*global::", "", entry[0]).strip()
+            if not any(f"{ns}{sep}{written}" in self.index if ns else written in self.index
+                       for ns in self._namespace_chain(block, sep, True)) \
+                    and written not in self.aliases and "<" not in written:
+                # `using pb = global::Google.Protobuf;` then `pb::CodedInputStream`:
+                # a namespace (or type) outside the sources
+                return Resolution(EXTERNAL, written + sep + rest)
+        # `using ModelAlias = Model;` then `ModelAlias::Ptr`: an alias of one class
+        # is that class, its members looked up there
+        cls = self._alias_head_class(alias, spec) if alias else None
+        if cls is not None:
+            found = self._nested_path(cls, rest, sep, inherit, spec)
+            if found:
+                return found
+        return Resolution(ALIAS)
+
+    def _alias_qualified(self, name: str, rtype: RawType, member: Optional[RawMember],
+                         inherit: bool, scope: FileScope, arity: Optional[int],
+                         spec: LanguageSpec) -> Optional[Resolution]:
+        """C#'s alias qualifier (`L::Order`, LanguageSpec.alias_qualifier): the name before
+        it is a using alias, never a type or namespace of its name (`Shop.L` in `namespace
+        Shop.Inner`); None where ``name`` is not written so."""
+        q = spec.alias_qualifier
+        if not q or q not in name:
+            return None
+        head, rest = name.split(q, 1)
+        head, rest = head.strip(), rest.strip()
+        for ns in self._namespace_chain(rtype.namespace, spec.separator,
+                                        spec.parent_namespace_lookup, scope.namespace):
+            alias = self.file_aliases.get((scope.file, ns), {}).get(head)
+            if alias is not None and self._sees(rtype, alias):
+                return self._through_alias(alias, rest, rtype, member, arity, inherit, spec)
+        return Resolution(UNRESOLVED, hint=f"{head}{q} names a using alias, and the file has "
+                                           f"none of the name")
+
     # ------------------------------------------------------------ resolve
 
     def resolve(self, name: str, rtype: RawType, member: Optional[RawMember] = None,
@@ -754,6 +805,9 @@ class Resolver:
 
         if name in self._type_params(rtype, member) and at_namespace is None:
             return Resolution(TPARAM)
+        if spec.alias_qualifier and (found := self._alias_qualified(
+                name, rtype, member, inherit, scope, arity, spec)) is not None:
+            return found
 
         if sep in name and body_file is not None and spec.values_hide_types and at_namespace is None:
             found = self._class_head(name, rtype, inherit, nested, spec)
@@ -822,32 +876,8 @@ class Resolver:
             if first.status in (EXTERNAL, BUILTIN):
                 return Resolution(EXTERNAL, (first.target or head) + sep + rest)
             if first.status == ALIAS:
-                # C#'s `using L = Lib;` then `L.Order`: an alias of a namespace of the
-                # sources stands for it; the name is read in that namespace
-                entry = self.alias_targets.get(first.target) if first.target else None
-                if entry is not None and spec.body_aliases:
-                    # (the alias's target is read from the namespace it stands in outward)
-                    block = entry[1].alias_blocks.get(first.target, "")
-                    for ns in self._namespace_chain(block, sep, True):
-                        target = f"{ns}{sep}{entry[0].strip()}" if ns else entry[0].strip()
-                        if target in self.namespaces:
-                            return self.resolve(target + sep + rest, rtype, member,
-                                                arity=arity, at_namespace="")
-                    written = re.sub(r"^\s*global::", "", entry[0]).strip()
-                    if not any(f"{ns}{sep}{written}" in self.index if ns else written in self.index
-                               for ns in self._namespace_chain(block, sep, True)) \
-                            and written not in self.aliases and "<" not in written:
-                        # `using pb = global::Google.Protobuf;` then `pb::CodedInputStream`:
-                        # a namespace (or type) outside the sources
-                        return Resolution(EXTERNAL, written + sep + rest)
-                # `using ModelAlias = Model;` then `ModelAlias::Ptr`: an alias of one class
-                # is that class, its members looked up there
-                cls = self._alias_head_class(first.target, spec) if first.target else None
-                if cls is not None:
-                    found = self._nested_path(cls, rest, sep, inherit, spec)
-                    if found:
-                        return found
-                return Resolution(ALIAS)
+                return self._through_alias(first.target, rest, rtype, member, arity,
+                                           inherit, spec)
             if first.status == TPARAM:   # `typename R::Ptr`: a member of whatever R is
                 return Resolution(TPARAM)
             # a fully qualified name outside the project, when its head is a package

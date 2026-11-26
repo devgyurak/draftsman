@@ -320,6 +320,9 @@ class LanguageSpec:
     members_hide_annotation_args: bool = False
     # The prefix that roots a name at the global namespace in a declaration (C#'s `global::`)
     rooted_prefix: Optional[str] = None
+    # The qualifier after which a name is read in what a using alias names, the alias alone
+    # looked up before it (C#'s `L::Order`, never a type `L`)
+    alias_qualifier: Optional[str] = None
     # Whether `import a.b` binds the head `a`, so that `a.b.Foo()` in a body goes through it
     # (Python)
     module_imports_bind_heads: bool = False

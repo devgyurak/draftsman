@@ -169,3 +169,27 @@ def test_a_type_through_an_alias_of_a_namespace(tmp_path):
             ("Shop.C", "Shop.Lib.Sub.Item", "I")} <= rels
     # an alias of a namespace outside the sources: a type outside them, not unresolved
     assert not ir.unresolved
+
+
+def test_the_name_before_the_alias_qualifier_is_always_an_alias(tmp_path):
+    # `L::Order` reads only the file's using aliases before `::`; `L.Order` finds a type
+    # `Shop.L` of a namespace around first (Roslyn: Lib.Order and Shop.L.Order)
+    ir = extract_source(tmp_path, {"P/T.cs": (
+        "namespace Lib { public class Order {} }\n"
+        "namespace Shop { public class Order {} public class L { public class Order {} } }\n"),
+        "P/U.cs": ("using L = Lib;\n"
+                   "namespace Shop.Inner { public class B { public L.Order Q; public L::Order R; } }\n"
+                   "namespace App { public class A { public L::Order R; } }\n")})
+    rels = {(r.from_, r.to, r.via) for r in ir.relations if r.evidence is None}
+    assert {("Shop.Inner.B", "Shop.L.Order", "Q"), ("Shop.Inner.B", "Lib.Order", "R"),
+            ("App.A", "Lib.Order", "R")} <= rels
+    assert ("Shop.Inner.B", "Shop.L.Order", "R") not in rels
+
+
+def test_an_alias_qualifier_without_an_alias_draws_nothing(tmp_path):
+    # `X::Order` with no alias X (a compile error): not the type X's Order
+    ir = extract_source(tmp_path, {"P/T.cs": (
+        "namespace Shop { public class X { public class Order {} }\n"
+        "  public class B { public X::Order R; } }\n")})
+    assert not [r for r in ir.relations if r.from_ == "Shop.B" and r.evidence is None]
+    assert [u.raw_type for u in ir.unresolved] == ["X::Order"]
