@@ -48,6 +48,29 @@ Notes for anyone with `view.json` files written against a development build:
   focus diagram draws those that touch the focus; results measured with 0.3.0 (the
   benchmark's two rounds among them) are not comparable with 0.4.0 ones on what bodies
   relate.
+- **Declarations read in every language: #9's remaining forms** (#9, after 0.10.0). Java:
+  `? super X`, `Connection.@Nullable Response`, annotations on enum constants, and a
+  superclass's package-private member inherited step by step through a chain (also a
+  field, which hid a name in a body). Python: a decorator that is a class's attribute
+  (`@Field.register`) depends on the class; a base made by a call depends on the classes
+  it names, no supertype. C#: a type through an alias of a namespace (`L.Order`,
+  `L::Order`). TypeScript: a `this` parameter. Kotlin: function types in parentheses and
+  aliases of suspend function types, context parameters, an extension property's
+  receiver, annotations on accessors and enum entries, an expect class beside an actual
+  typealias of an outside class (in declarations), an import of a function. C++: operator
+  members and conversion operators, member function templates, function and member
+  function pointers (also `std::function<R*(A)>`), a member of an alias of a class or of
+  a template's specialisation, constructors in `#if` branches of a class, `#if` chains
+  whose `#else` is `#error` or one branch of which forward-declares, a namespace's name
+  beside a base whose members are not known. Declared names missed against the keys:
+  jsoup 10 → 0, Netty 10 → 0, Django 85 → 0, Ktor 393 → 189, leveldb 14 → 8, POCO 151 → 19
+  (what is left: #10's merged ids, bases a macro declares, two older limits), no mismatch.
+  Bodies change where Clang agrees: POCO +18 / −13 body relations (names through aliases
+  now the member Clang gives, function-pointer aliases' types), leveldb +1 / −2; eShop's
+  56 `pb::` names are types outside the sources instead of unresolved. Review sets jv5,
+  py4, cs22, ts4, kt18, cpp15, cpp16; the Kotlin key compiles review sets with context
+  parameters on; `declared.py --pairs` checks each declared relation against the key's
+  records of its type.
 - **A field naming a type twice keeps the largest multiplicity; a dependent member is
   its template** (#9, after 0.10.0). `transformer?: ValueTransformer | ValueTransformer[]`
   was an association `1` (of two relations of one field to one type the first was kept),

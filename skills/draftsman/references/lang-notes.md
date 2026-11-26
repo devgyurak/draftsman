@@ -26,11 +26,11 @@ is that type. Aliases of aliases are followed.
   type or field is not inherited (JLS 8.2: `Hidden` in a subclass of a `Base` with a private
   `Hidden` is the package's), nor its package-private nested type by a subclass in another
   package (an interface's member types are public), in declarations and bodies (#7; review
-  sets `bench/javac_oracle/review/jv1`, `jv2`, `oracle.py review`). Known limits: the
-  package is checked at the inheriting class only, so a class back in the member's package
-  is taken to inherit it through a superclass in another package that does not
-  (`a.Leaf extends b.Mid extends a.Base`: Base's package-private `Pkg`); and a superclass's
-  package-private field in another package is still taken for inherited. A JDK supertype passes on the
+  sets `bench/javac_oracle/review/jv1`, `jv2`, `oracle.py review`); the package is checked
+  at each step of a chain (`a.Leaf extends b.Mid extends a.Base`: b.Mid does not inherit
+  Base's package-private `Pkg`, so neither does a.Leaf), for fields too (#9, `jv5`).
+  `? super X` names X; `Connection.@Nullable Response` is Connection.Response; an
+  annotation on an enum constant is the enum's (#9). A JDK supertype passes on the
   nested types the JDK declares (`Entry` in a `HashMap` subclass is `java.util.Map.Entry`,
   also over the package's own `Entry`): `langs/java_jdk.json` lists the public and
   protected nested types and fields of the JDK 21 types a class can extend, their
@@ -225,8 +225,7 @@ is that type. Aliases of aliases are followed.
   field of the file's `using static` shares while a namespace of the name comes first, and
   one whose name another member of the type binds as a variable; a name of the table's ASP.NET
   namespaces around the code where the project does not reference ASP.NET (the table is
-  one for every project); a name through a namespace alias or an alias of a generic
-  (`M.Order` with `using M = Shop.Models;`); a `file` type's name, and in another file a name it
+  one for every project); a name through an alias of a generic; a `file` type's name, and in another file a name it
   shares; a Color Color name before a member an extension method shares (`Of`); names in
   top-level statements
   (no type the extractor sees holds them), after `global::`, a parameter or a local of its type's name (Color Color, whose type is
@@ -245,7 +244,10 @@ is that type. Aliases of aliases are followed.
   file's only, at the namespace it stands in (one at the top of the file, also before
   `namespace A;`, after every namespace around the code; one in a namespace block, that
   block's alone), and no member of its namespace for another file's using of it; a
-  `global using X = ...` is every file's of its project, at the global namespace; a type the file's project does not see (another
+  `global using X = ...` is every file's of its project, at the global namespace; an alias
+  of a namespace is read as it (`using L = Lib;` then `L.Order` or `L::Order`; its target
+  from the namespace it stands in outward; one outside the sources gives a type outside
+  them, `pb::CodedInputStream`, #9); a type the file's project does not see (another
   project's `internal` one, an unreferenced project's) or one the arity written does not
   fit (`Repo<int>` beside a `Repo` around the code) is passed over, the lookup going on to
   a using's (bodies drew nothing there, now that type); below a package's namespace around
@@ -278,7 +280,10 @@ is that type. Aliases of aliases are followed.
 - Properties without a written type (`val state = MutableStateFlow(...)`) have no type:
   the initialiser is not evaluated, so no relation.
 - `expect`/`actual`: the expect class and its actuals are one type, located at the expect
-  declaration. A method or constructor declared again in another file with the same
+  declaration. An `actual typealias Charset = java.nio.charset.Charset` beside `expect class
+  Charset` is that expect class in a declaration and a supertype (the compiler's answer in
+  every compilation's terms); in a body's value position the alias's object is meant
+  (`Charsets.UTF_8` is kotlin.text.Charsets), so bodies draw nothing there. A method or constructor declared again in another file with the same
   receiver, name and parameter types is one member (the expect's is kept); look-alikes
   within one file are overloads and all stay.
 - Default imports (kotlinlang.org/docs/packages.html#default-imports: `kotlin.*` and its
@@ -319,8 +324,14 @@ is that type. Aliases of aliases are followed.
 - Gradle build and settings scripts (`*.gradle.kts`) are not extracted; other `.kts`
   scripts are.
 - Function types (`Route.() -> Unit`, `suspend (Call) -> Unit`, `context(Log) () -> Unit`,
-  also inside containers) make a dependency on every project type they name; a field of such a type is no
-  association. Supertypes with a function type among their arguments are read too.
+  also inside containers and in parentheses, `((Req) -> Boolean)`, and aliases of them,
+  `typealias Handler = suspend (Req) -> Unit`) make a dependency on every project type
+  they name; a field of such a type is no association. Supertypes with a function type
+  among their arguments are read too. Context parameters (`context(c: Ctx) fun run()`) and
+  an extension property's receiver (`val Box<Job>.done`) are dependencies; annotations on
+  accessors (`@Api set`) and enum entries are the class's. An import of a function
+  (`import other.Widget` of a `fun Widget`) brings in no type. Known limit: an annotated
+  receiver (`fun @receiver:Suppress("x") Ctx.i()`) is not read.
 - Annotations on the type, its members, constructor properties and parameters are
   dependencies of the type (`via` `@Name`): on the annotation class when it is the
   project's (`@OptIn(InternalAPI::class)` depends on `InternalAPI` twice over: `@OptIn`
@@ -461,8 +472,8 @@ is that type. Aliases of aliases are followed.
   types an object type literal (`{ item: Logger }`, a mapped type), a function or
   constructor type, an indexed access (`Store["key"]`), a conditional type (`A extends B ?
   C : D`) or a type predicate (`x is Logger`, `asserts x is Logger`) names are
-  dependencies, never associations; a destructured parameter (`{ a }: Options`) depends on
-  its type. No name of a type is read from a property's, a parameter's or a tuple
+  dependencies, never associations; a destructured parameter (`{ a }: Options`) and a
+  `this` parameter (`m(this: Ctx)`) depend on their type. No name of a type is read from a property's, a parameter's or a tuple
   element's name, a string or template literal (a template's `${Kind}` is a name), a
   type parameter the type declares (`<T>() => T`, `infer U`, a mapped type's key),
   `this`, or the key of an indexed access. `typeof x` is a class or an enum of the name,
@@ -548,8 +559,12 @@ is that type. Aliases of aliases are followed.
   type. `tuple[P, Q]` relates to `P` and `Q` once each, `tuple[P, ...]` to many `P`.
   `*args: Item` and `**kw: Status` are parameters.
 - Decorators on a class and its methods: a decorator that is a project class
-  (`@classproperty`) and the project classes passed in its arguments (`@admin.register(User)`)
-  are dependencies of the class (`via` `@Name`); other names draw nothing.
+  (`@classproperty`) or a class's attribute (`@Field.register`, `@HttpResponse.content.setter`:
+  the longest part of the name that is a class), and the project classes passed in its
+  arguments (`@admin.register(User)`), are dependencies of the class (`via` `@Name`); other
+  names draw nothing. A base made by a call (`class Manager(BaseManager.from_queryset(QuerySet))`)
+  is no supertype: the class depends on the classes the call names (a keyword's name and a
+  string are none).
 - Names in bodies (`evidence: "body"`; method bodies, the values of assignments directly
   in a class body, and the functions, lambdas and classes inside them): every name is a
   value, in an annotation too, so a variable of the name hides a class wherever it stands:
@@ -652,8 +667,10 @@ is that type. Aliases of aliases are followed.
   to their owner. Ids use `::`; types of enclosing namespaces are visible.
 - Visibility follows `public:`/`protected:`/`private:` sections. Pure virtual methods
   (`= 0`) are abstract; a class with only pure virtual methods and no data members is
-  classified `interface`, otherwise `abstract_class`. Destructors and operators are not
-  listed. Out-of-class method definitions in `.cpp` files add nothing (the declaration in
+  classified `interface`, otherwise `abstract_class` (an assignment operator does not count,
+  as constructors do not). Destructors are not listed; operators are methods named as
+  written (`operator()`, `operator <<`), and a conversion operator's type is its return type
+  (`operator const Item&() const`). Out-of-class method definitions in `.cpp` files add nothing (the declaration in
   the class is the fact).
 - Associations carry `ownership`: value members and `unique_ptr` are `owned`
   (composition, drawn with a diamond); pointers, references, `shared_ptr`/`weak_ptr` are
@@ -746,8 +763,17 @@ is that type. Aliases of aliases are followed.
   int[256];`) are inherited, and so is the base's own name (`CodeGenerator::Properties` in
   a subclass of `Poco::CodeGeneration::CodeGenerator`); a class's own name comes first
   (`Listener` inside `tcp::Listener`, which derives from another `Listener`). A member of
-  what an alias names (`NamespaceMap::const_iterator`, also `NamespaceManager::NamespaceMap::const_iterator`)
-  is not resolved further, as the alias's target is not read. Types in an `inline namespace` are found with or without it
+  an alias of a class or of a template's specialisation is the class's (`ModelAlias::Ptr`,
+  `MemTable::Table::Iterator` with `typedef SkipList<...> Table;`), unless the specialisation
+  names the template's own parameters (`SkipList<S>`: known once instantiated), and so is a
+  member written `typename X<T>::Y` (X alone is drawn); a member of what an alias of a class
+  outside the sources names (`NamespaceMap::const_iterator`) is not resolved further.
+  Pointers to functions name their result and parameters (`typedef void (*Cb)(const Order*);`,
+  `using G = void (*)(A)`, `std::function<Session*(A)>`); a member function pointer written
+  directly names its class too (`void (Order::*m)(int)`), one in an alias does not (as
+  Clang's key reads aliases). Known limits: a member of an alias reached through a namespace
+  qualifier (`Poco::DynamicStruct::Ptr`), and a base a macro declares
+  (`POCO_DECLARE_EXCEPTION(API, LogicException, Exception)`), are not read. Types in an `inline namespace` are found with or without it
   (`acme::Versioned` is `acme::v1::Versioned`).
 - Parameters with a default value (`P p = P()`) are parameters. A function-pointer member
   (`void (*cb)(int)`) is a field of type `void(int)*`. Members of an anonymous union or
