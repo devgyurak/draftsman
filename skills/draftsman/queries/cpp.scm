@@ -60,9 +60,13 @@
   declarator: (_) @declarator
   body: (_) @body) @member.method
 
-; constructor declarations inside a class body
+; constructor declarations inside a class body, also in an `#if` branch of it
 (field_declaration_list
   (declaration declarator: (function_declarator) @declarator) @member.method)
+(preproc_if (declaration declarator: (function_declarator) @declarator) @member.method)
+(preproc_ifdef (declaration declarator: (function_declarator) @declarator) @member.method)
+(preproc_else (declaration declarator: (function_declarator) @declarator) @member.method)
+(preproc_elif (declaration declarator: (function_declarator) @declarator) @member.method)
 ; conversion operators (`operator const Item&() const;`): their type is in the declarator
 (field_declaration_list (declaration declarator: (operator_cast) @declarator) @member.method)
 ; member function templates, also returning a reference or a pointer

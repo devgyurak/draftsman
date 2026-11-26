@@ -303,6 +303,14 @@ def test_a_member_of_an_alias_of_a_class(tmp_path):
     assert _deps(ir, "User") == {("Order", "p_")}
 
 
+def test_a_constructor_in_an_if_branch_of_a_class(tmp_path):
+    # #9, case 48
+    ir = extract_source(tmp_path, {"h.h": (
+        "struct Item {}; struct Order {};\nstruct A {\n#if 1\n  A(Item i);\n#endif\n"
+        "  void f(Order o);\n};\n")})
+    assert _deps(ir, "A") == {("Item", "A"), ("Order", "f")}
+
+
 def test_conversion_operators_and_abstract_function_pointers(tmp_path):
     # #9, cases 43 and 44: `operator const Item&()`, `using G = void (*)(const Order*)`, a
     # typedef returning a pointer; an assignment operator leaves an interface one
